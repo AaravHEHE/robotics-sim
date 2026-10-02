@@ -1,0 +1,6 @@
+﻿node_modules/
+tools/
+dist/
+*.log
+
+prototype/compile-feasibility/out/

@@ -1,0 +1,14 @@
+{
+  "name": "vex-auton-sim",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "proto:bench": "node --experimental-wasm-jspi prototype/compile-feasibility/bench-node.mjs",
+    "proto:sizes": "node prototype/compile-feasibility/sizes.mjs",
+    "proto:serve": "node prototype/compile-feasibility/serve.mjs 5173"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compile Feasibility</title>
+  <style>
+    :root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; --ok: #0a7d32; --bad: #b3261e; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #16181c; --fg: #e8e8e8; --muted: #9a9a9a; --line: #333; --ok: #5cd08a; --bad: #ff8a80; } }
+    body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 900px; padding: 16px; }
+    button { font: inherit; padding: 6px 14px; margin-right: 8px; }
+    pre { background: color-mix(in srgb, var(--fg) 6%, transparent); padding: 10px; overflow-x: auto; font-size: 13px; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Browser compile feasibility</h1>
+  <p class="muted">Downloads the in-browser clang toolchain (cached after first visit), compiles a 3-file PROS + LemLib
+    test project against the simulator shim, links it, and runs 15&nbsp;s of simulated autonomous twice.</p>
+  <p id="jspi"></p>
+  <button id="run">Run benchmark</button>
+  <button id="clear">Clear cache (simulate first visit)</button>
+  <h2>Log</h2>
+  <pre id="log"></pre>
+  <h2>Results (JSON)</h2>
+  <pre id="out"></pre>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const jspi = typeof WebAssembly.Suspending === 'function';
+    $('jspi').innerHTML = jspi ? '<span class="ok">JSPI available</span>' : '<span class="bad">JSPI not available: this browser is too old</span>';
+    let worker;
+    const start = (cmd) => {
+      worker?.terminate();
+      worker = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+      const t0 = performance.now();
+      worker.onmessage = ({ data }) => {
+        if (data.type === 'log') $('log').textContent += data.msg + '\n';
+        if (data.type === 'done' || data.type === 'error') {
+          if (data.type === 'error') $('log').textContent += 'ERROR ' + data.msg + '\n';
+          const res = { ...data.results, pageWallMs: Math.round(performance.now() - t0) };
+          $('out').textContent = JSON.stringify(res, null, 2);
+          window.__results = res;
+        }
+      };
+      worker.postMessage({ cmd });
+    };
+    $('run').onclick = () => { $('log').textContent = ''; $('out').textContent = ''; start('bench'); };
+    $('clear').onclick = () => start('clear-cache');
+
+    // ?auto=<name>: first-visit run, then cached run, then POST both to the dev server.
+    const auto = new URLSearchParams(location.search).get('auto');
+    const runOnce = (cmd) => new Promise((resolve) => {
+      window.__results = null;
+      start(cmd);
+      const iv = setInterval(() => { if (window.__results) { clearInterval(iv); resolve(window.__results); } }, 200);
+    });
+    if (auto) (async () => {
+      const report = {};
+      try {
+        await runOnce('clear-cache');
+        report.firstVisit = await runOnce('bench');
+        report.cached = await runOnce('bench');
+      } catch (e) { report.error = String(e); }
+      report.log = $('log').textContent;
+      await fetch('/report/' + auto, { method: 'POST', body: JSON.stringify(report, null, 2) });
+    })();
+  </script>
+</body>
+</html>
