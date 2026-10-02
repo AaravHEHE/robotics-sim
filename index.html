@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VEX Auton Simulator</title>
+  <meta name="description" content="Run real PROS C++ (LemLib, EZ-Template) autonomous code on a simulated VEX V5 robot in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='6' fill='%23d8343a'/%3E%3Cpath d='M10 22V10h3l3 7 3-7h3v12h-3v-6l-2.4 5h-1.2L13 16v6z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/src/app/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span>VEX Auton Sim</span></div>
+    <div class="group">
+      <button id="btn-samples" class="ghost">Samples</button>
+      <button id="btn-import" class="ghost" title="Import a PROS project (.zip)">Import</button>
+      <button id="btn-export" class="ghost" title="Download this project as a .zip">Export</button>
+    </div>
+    <div class="group">
+      <label class="field-label" for="robot-select">Robot</label>
+      <select id="robot-select"></select>
+      <button id="btn-robot" class="ghost" title="Edit robot profile">Edit</button>
+    </div>
+    <div class="group">
+      <label class="field-label" for="auton-length">Auto-stop</label>
+      <select id="auton-length">
+        <option value="15000">15 s</option>
+        <option value="60000">60 s (skills)</option>
+      </select>
+    </div>
+    <button id="btn-run" class="primary" title="Compile and run (Ctrl+Enter)"><span class="run-icon" aria-hidden="true"></span>Run</button>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+  </header>
+
+  <main class="layout">
+    <section class="code-pane" aria-label="Code">
+      <div class="pane-head">
+        <div id="file-tabs" class="tabs"></div>
+        <button id="btn-new-file" class="icon" title="New file" aria-label="New file">+</button>
+        <button id="btn-file-menu" class="icon" title="Rename or delete this file" aria-label="File actions">⋯</button>
+      </div>
+      <div id="editor" class="editor"></div>
+      <div class="bottom">
+        <div class="pane-head small" role="tablist">
+          <button class="btab active" data-tab="problems" role="tab">Problems <span id="badge-problems" class="badge"></span></button>
+          <button class="btab" data-tab="console" role="tab">Console</button>
+          <button class="btab" data-tab="lcd" role="tab">Brain screen</button>
+          <button class="btab" data-tab="events" role="tab">Notes <span id="badge-events" class="badge"></span></button>
+        </div>
+        <div class="bpanel active" id="panel-problems"><p class="empty">Press Run to compile.</p></div>
+        <div class="bpanel" id="panel-console"><p class="empty">printf / std::cout output appears here.</p></div>
+        <div class="bpanel" id="panel-lcd"><pre id="lcd" class="lcd"></pre></div>
+        <div class="bpanel" id="panel-events"><p class="empty">Warnings about unsupported calls and robot mismatches appear here.</p></div>
+      </div>
+    </section>
+
+    <section class="sim-pane" aria-label="Simulation">
+      <div id="viewer" class="viewer">
+        <div class="hud">
+          <div class="timer" id="timer">0:00.00</div>
+          <div class="hud-sub" id="timer-sub">Autonomous</div>
+        </div>
+        <div class="view-buttons" role="group" aria-label="Camera">
+          <button data-view="orbit" class="active">3D</button>
+          <button data-view="top">Top</button>
+          <button data-view="follow">Follow</button>
+        </div>
+        <div class="start-pose" id="start-pose">
+          <div class="sp-title">Start position</div>
+          <label>x <input id="sp-x" type="number" step="0.5" value="0" /> in</label>
+          <label>y <input id="sp-y" type="number" step="0.5" value="0" /> in</label>
+          <label>θ <input id="sp-t" type="number" step="5" value="0" />°</label>
+          <label class="sp-place" title="LemLib setPose() before the robot moves can also place the robot on the field">
+            setPose()
+            <select id="sp-place">
+              <option value="auto">places robot (unless 0,0)</option>
+              <option value="always">always places robot</option>
+              <option value="never">only sets odometry</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="timeline">
+        <button id="btn-play" class="icon play" title="Play / pause (Space)" aria-label="Play">▶</button>
+        <input id="scrub" type="range" min="0" max="15000" step="10" value="0" aria-label="Time" />
+        <select id="speed" aria-label="Playback speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dlg-samples" class="dialog">
+    <form method="dialog">
+      <h2>Sample projects</h2>
+      <p class="muted">Opening a sample replaces the code in the editor (export first if you want to keep it).</p>
+      <div id="sample-list" class="cards"></div>
+      <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-robot" class="dialog wide">
+    <form method="dialog" id="robot-form">
+      <h2 id="robot-title">Robot profile</h2>
+      <p class="muted">Real measurements in inches. The profile decides size, collisions and speed; a 3D model is only cosmetic. Drive ports are signed the way your code must declare them to drive forward.</p>
+      <div class="robot-grid">
+        <div id="robot-json" class="json-editor"></div>
+        <div class="robot-side">
+          <div id="robot-summary" class="robot-summary"></div>
+          <ul id="robot-errors" class="errors"></ul>
+          <div class="stack">
+            <button type="button" id="rb-save" class="primary">Save as my robot</button>
+            <button type="button" id="rb-model" class="ghost">Attach 3D model (.glb)…</button>
+            <button type="button" id="rb-model-clear" class="ghost">Remove 3D model</button>
+            <button type="button" id="rb-import" class="ghost">Import robot (.json / .zip)…</button>
+            <button type="button" id="rb-export" class="ghost">Export robot</button>
+            <button type="button" id="rb-delete" class="ghost danger">Delete this custom robot</button>
+          </div>
+        </div>
+      </div>
+      <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/app/main.ts"></script>
+</body>
+</html>

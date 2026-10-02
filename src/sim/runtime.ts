@@ -135,9 +135,10 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
         warn('chassis-ports', `The code's drivetrain motors (left ${JSON.stringify(left)}, right ${JSON.stringify(right)}) differ from the robot profile (left ${JSON.stringify(d.left)}, right ${JSON.stringify(d.right)}). Motion commands drive the profile's drivetrain.`);
       }
       const diffs: string[] = [];
-      if (Math.abs(track - d.trackWidth) > 0.25) diffs.push(`track width ${track}" vs ${d.trackWidth}"`);
-      if (Math.abs(wheel - d.wheelDiameter) > 0.05) diffs.push(`wheel ${wheel}" vs ${d.wheelDiameter}"`);
-      if (Math.abs(rpm - d.wheelRpm) > 1) diffs.push(`${rpm} rpm vs ${d.wheelRpm} rpm`);
+      // 0 = the library doesn't know the value (EZ-Template has no track width)
+      if (track > 0 && Math.abs(track - d.trackWidth) > 0.25) diffs.push(`track width ${track}" vs ${d.trackWidth}"`);
+      if (wheel > 0 && Math.abs(wheel - d.wheelDiameter) > 0.05) diffs.push(`wheel ${wheel}" vs ${d.wheelDiameter}"`);
+      if (rpm > 0 && Math.abs(rpm - d.wheelRpm) > 1) diffs.push(`${rpm} rpm vs ${d.wheelRpm} rpm`);
       if (diffs.length) warn('chassis-geom', `Drivetrain settings in code differ from the robot profile (${diffs.join(', ')}). The simulator uses the profile.`, 'info');
     },
     motion_path: (ptr: number, len: number) => {
@@ -344,7 +345,10 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     if (imp.module === 'env') {
       const fn = api.fns[imp.name];
       if (fn) imports.env[imp.name] = api.suspending.has(imp.name) ? new Suspending(guard(fn)) : guard(fn);
-      else {
+      else if (/^(screen_|_ZN4pros6screen)/.test(imp.name)) {
+        // brain-screen drawing (e.g. EZ-Template's auton selector): harmless, not shown yet
+        imports.env[imp.name] = guard(() => 1);
+      } else {
         const name = demangleName(imp.name);
         imports.env[imp.name] = guard(() => {
           warn('unsupported:' + imp.name, `${name}() is not supported by the simulator yet; the call was ignored.`);

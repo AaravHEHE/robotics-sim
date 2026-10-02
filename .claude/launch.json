@@ -1,11 +1,37 @@
-{
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "proto-compile",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["prototype/compile-feasibility/serve.mjs", "5173"],
-      "port": 5173
-    }
-  ]
+﻿{
+    "version":  "0.0.1",
+    "configurations":  [
+                           {
+                               "name":  "app",
+                               "runtimeExecutable":  "npx",
+                               "runtimeArgs":  [
+                                                   "vite",
+                                                   "--port",
+                                                   "5174",
+                                                   "--strictPort"
+                                               ],
+                               "port":  5174
+                           },
+                           {
+                               "name":  "proto-compile",
+                               "runtimeExecutable":  "node",
+                               "runtimeArgs":  [
+                                                   "prototype/compile-feasibility/serve.mjs",
+                                                   "5173"
+                                               ],
+                               "port":  5173
+                           },
+                           {
+                               "name":  "preview",
+                               "runtimeExecutable":  "npx",
+                               "runtimeArgs":  [
+                                                   "vite",
+                                                   "preview",
+                                                   "--port",
+                                                   "4173",
+                                                   "--strictPort"
+                                               ],
+                               "port":  4173
+                           }
+                       ]
 }

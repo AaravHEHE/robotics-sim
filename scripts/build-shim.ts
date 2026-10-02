@@ -3,7 +3,7 @@
 //
 //   node scripts/build-shim.ts   -> public/sim/{manifest.json, headers.*.json.gz, <variant>.*.pch.gz, objects.*.tar.gz}
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { LIBRARY_VERSIONS, type ShimManifest } from '../src/compiler/bundle.ts';
@@ -80,7 +80,8 @@ const t0 = performance.now();
 const pchs = {} as Record<PchVariant, Uint8Array>;
 for (const v of PCH_VARIANTS) {
   const out = pchPath(v);
-  const r = await tc.run(['clang', ...cxxFlags(['-isystem', SIM_INCLUDE]), '-x', 'c++-header', `${SIM_INCLUDE}/sim/pch-${v}.hpp`, '-o', out], {}, [out]);
+  // no timestamps in the PCH, so rebuilding unchanged headers gives an identical (cached) file
+  const r = await tc.run(['clang', ...cxxFlags(['-isystem', SIM_INCLUDE, '-Xclang', '-fno-pch-timestamp']), '-x', 'c++-header', `${SIM_INCLUDE}/sim/pch-${v}.hpp`, '-o', out], {}, [out]);
   if (r.code !== 0) {
     console.error(r.stderr);
     process.exit(1);
@@ -145,5 +146,8 @@ await writeFile(path.join(outDir, manifest.headers), headersGz);
 for (const v of PCH_VARIANTS) await writeFile(path.join(outDir, manifest.pch[v]), pchGz[v]);
 await writeFile(path.join(outDir, manifest.objects), objGz);
 await writeFile(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 1));
+// remove superseded bundle versions so the published site only carries the current one
+const keep = new Set([manifest.headers, manifest.objects, ...Object.values(manifest.pch), 'manifest.json']);
+for (const f of await readdir(outDir)) if (!keep.has(f)) await rm(path.join(outDir, f));
 const mb = (n: number) => (n / 1e6).toFixed(2) + ' MB';
 console.log(`bundle ${version}: headers ${mb(headersGz.length)}, pch ${PCH_VARIANTS.map((v) => v + ' ' + mb(pchGz[v].length)).join(', ')}, objects ${mb(objGz.length)}, ${knownCApi.size} C API names`);

@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ProjectBuilder } from '../src/compiler/build.ts';
+import { simulatedEnvNames } from '../src/sim/pros-api.ts';
 import type { FieldDef } from '../src/sim/field.ts';
 import type { RobotProfile } from '../src/sim/profile.ts';
 import { runProgram } from '../src/sim/runtime.ts';
@@ -16,7 +17,7 @@ const profile = JSON.parse(await readFile(path.join(repoRoot, 'data/robots', rob
 const field = JSON.parse(await readFile(path.join(repoRoot, 'data/fields/generic-12ft.json'), 'utf8')) as FieldDef;
 
 const tc = await loadNodeToolchain();
-const builder = new ProjectBuilder(tc, await loadNodeBundle());
+const builder = new ProjectBuilder(tc, await loadNodeBundle(), simulatedEnvNames());
 const b = await builder.build(await readProjectDir(dir));
 console.log(`build ok=${b.ok} ${b.totalMs.toFixed(0)} ms`);
 for (const d of b.diagnostics.filter((x) => x.severity === 'error').slice(0, 10)) console.log(`  ${d.file}:${d.line} ${d.message}`);

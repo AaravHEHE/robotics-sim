@@ -39,6 +39,7 @@ void autonomous() {
       'tank-6m-450',
     );
     expect(rec.error).toBeNull();
+    expect(rec.events).toEqual([]); // no library side effects (e.g. EZ-Template's selector) in plain PROS
     const p = finalPose(rec);
     // bang-bang control overshoots a little, like a real robot would
     expect(p.theta).toBeGreaterThan(88);

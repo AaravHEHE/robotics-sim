@@ -3,6 +3,7 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { ProjectBuilder } from '../src/compiler/build.ts';
+import { simulatedEnvNames } from '../src/sim/pros-api.ts';
 import { classifyImports } from '../src/compiler/symbols.ts';
 import { loadNodeBundle, readProjectDir } from './node-bundle.ts';
 import { loadNodeToolchain, repoRoot } from './node-toolchain.ts';
@@ -10,7 +11,7 @@ import { loadNodeToolchain, repoRoot } from './node-toolchain.ts';
 const dir = path.resolve(repoRoot, process.argv[2] ?? 'tests/fixtures/lemlib-template');
 const tc = await loadNodeToolchain();
 const bundle = await loadNodeBundle();
-const builder = new ProjectBuilder(tc, bundle);
+const builder = new ProjectBuilder(tc, bundle, simulatedEnvNames());
 const files = await readProjectDir(dir);
 for (let i = 0; i < (process.argv.includes('--twice') ? 2 : 1); i++) {
   const r = await builder.build(files);

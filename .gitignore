@@ -6,3 +6,5 @@ dist/
 prototype/compile-feasibility/out/
 public/toolchain/
 public/sim/
+dist/
+tools/last-build.wasm

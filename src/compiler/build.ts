@@ -131,8 +131,14 @@ export class ProjectBuilder {
     }
 
     opts.onProgress?.('Linking');
+    // Library objects are linked only when the project uses that library, so their
+    // global constructors (e.g. EZ-Template's auton selector) don't run otherwise.
     const shimObjects: Record<string, Uint8Array> = {};
-    for (const [name, data] of Object.entries(this.bundle.objects)) shimObjects['/simobj/' + name] = data;
+    for (const [name, data] of Object.entries(this.bundle.objects)) {
+      if (/^(vendor_ez-template_|src_ez_)/.test(name) && !project.uses.ez) continue;
+      if (/^(vendor_lemlib_|src_lemlib_)/.test(name) && !project.uses.lemlib) continue;
+      shimObjects['/simobj/' + name] = data;
+    }
     const out = '/out/program.wasm';
     const l = await this.tc.run(linkArgs([...Object.keys(objects), ...Object.keys(shimObjects)], out), { ...objects, ...shimObjects }, [out]);
     steps.push({ step: 'link', ms: l.ms.total });

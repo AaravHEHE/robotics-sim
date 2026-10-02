@@ -17,7 +17,8 @@ export const C_STD = '-std=gnu11';
 
 /** Macros the stock PROS template defines before including api.h; baked into the PCH. */
 export const PROS_DEFINES = [
-  '-DPROS_USE_SIMPLE_NAMES', '-DPROS_USE_LITERALS', '-D_PROS_SIM_=1',
+  // defined empty, exactly like the stock main.h, so its own #defines don't warn
+  '-DPROS_USE_SIMPLE_NAMES=', '-DPROS_USE_LITERALS=', '-D_PROS_SIM_=1',
   // The simulator provides LLEMU (pros::lcd) itself, as liblvgl would.
   '-D_PROS_KERNEL_SUPPRESS_LLEMU_WARNING',
   // fmt 10.1 (bundled with LemLib) trips clang 17+'s stricter consteval rules;

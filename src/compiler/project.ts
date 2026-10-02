@@ -12,6 +12,8 @@ export interface PreparedProject {
   /** Generated C source that embeds static/ assets (LemLib ASSET()). */
   assetSource: string | null;
   pch: PchVariant;
+  /** Libraries the project includes; only their objects (and global constructors) are linked. */
+  uses: { lemlib: boolean; ez: boolean };
   notes: ProjectNote[];
 }
 
@@ -113,6 +115,7 @@ export function prepareProject(input: ProjectFiles, libraries: Record<string, st
 
   const allText = Object.values(files).join('\n');
   const usesEz = /#\s*include\s*[<"]EZ-Template\//.test(allText);
+  const usesLemlib = /#\s*include\s*[<"]lemlib\//.test(allText);
   if (/#\s*include\s*[<"]liblvgl\/(?!llemu\.h)/.test(allText)) {
     notes.push({ level: 'warning', message: 'liblvgl (LVGL graphics) is not available in the simulator; code that draws on the brain screen will not compile.' });
   }
@@ -122,6 +125,7 @@ export function prepareProject(input: ProjectFiles, libraries: Record<string, st
     files,
     assetSource: assets.length ? assetSourceFor(assets) : null,
     pch: usesEz ? 'ez' : 'lemlib',
+    uses: { lemlib: usesLemlib, ez: usesEz },
     notes,
   };
 }

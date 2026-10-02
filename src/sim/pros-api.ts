@@ -60,8 +60,16 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const p = Math.abs(port);
     return p >= 1 && p <= 21;
   };
+  // Configuration-only calls (set reversed, data rate, gearing, ...) are made by library
+  // constructors for sensors a robot may not have; they don't warn, real use does.
+  let quiet = false;
   const expectDevice = (port: number, type: string): boolean => {
     const p = Math.abs(port);
+    if (quiet) {
+      const dev = world.deviceAt(p);
+      const have = dev === null ? null : dev === 'drive-motor' ? 'motor' : dev.type;
+      return portOk(port) && have === type;
+    }
     if (!portOk(port)) {
       ctx.warn(`badport:${p}`, `Code uses port ${p}, which is not a valid smart port (1-21).`);
       return false;
@@ -617,6 +625,22 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.adi_analog_read_calibrated = () => 0;
   f.adi_analog_calibrate = () => 0;
 
+  // ADI encoders (3-wire quadrature): not modelled yet; they read 0 without failing.
+  const adiEncoders = new Map<number, number>();
+  let nextEnc = 1;
+  f.ext_adi_encoder_init = () => {
+    const h = nextEnc++;
+    adiEncoders.set(h, 0);
+    return h;
+  };
+  f.adi_encoder_init = f.ext_adi_encoder_init;
+  f.ext_adi_encoder_get = (h: number) => adiEncoders.get(h) ?? PROS_ERR;
+  f.adi_encoder_get = f.ext_adi_encoder_get;
+  f.ext_adi_encoder_reset = () => 1;
+  f.adi_encoder_reset = () => 1;
+  f.ext_adi_encoder_shutdown = () => 1;
+  f.adi_encoder_shutdown = () => 1;
+
   // ======================= Controller / competition / battery =======================
   f.controller_is_connected = () => 1;
   f.controller_get_analog = () => 0;
@@ -644,6 +668,19 @@ export function createProsApi(ctx: ApiContext): ProsApi {
 
   // LLEMU through the C API (pros::lcd::print goes via the shim's lcd_print)
   void ctx.lcdPrint;
+
+  for (const name of Object.keys(f)) {
+    if (!/^(motor_set_|motor_tare|rotation_set_|rotation_init|rotation_reset|rotation_reverse|imu_set_data_rate|motor_get_(gearing|encoder_units|brake_mode)$)/.test(name)) continue;
+    const inner = f[name];
+    f[name] = (...args: never[]) => {
+      quiet = true;
+      try {
+        return inner(...args);
+      } finally {
+        quiet = false;
+      }
+    };
+  }
 
   return {
     fns: f,
