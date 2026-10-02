@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "tank-6m-450",
+  "name": "6-motor tank, 450 rpm, 3.25\" omnis",
+  "description": "Common competition drivetrain: 6 blue motors geared 36:48 to 3.25\" omni wheels, an intake roller on port 10 and a pneumatic clamp on ADI A.",
+  "size": { "width": 14.5, "length": 15, "height": 11 },
+  "mass": 14,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    { "type": "imu", "port": 11, "name": "IMU" },
+    { "type": "motor", "port": 10, "cartridge": "blue", "name": "Intake" },
+    { "type": "adi_digital_out", "port": "A", "name": "Clamp" }
+  ],
+  "mechanisms": [
+    { "kind": "roller", "name": "Intake", "motors": [10], "ratio": 1 },
+    { "kind": "piston", "name": "Clamp", "adi": "A", "travel": 2 }
+  ]
+}

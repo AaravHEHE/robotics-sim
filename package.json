@@ -1,14 +1,31 @@
 {
   "name": "vex-auton-sim",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "setup": "node scripts/fetch-toolchain.ts && node scripts/build-shim.ts",
+    "fetch-toolchain": "node scripts/fetch-toolchain.ts",
+    "build-shim": "node scripts/build-shim.ts",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "proto:bench": "node --experimental-wasm-jspi prototype/compile-feasibility/bench-node.mjs",
     "proto:sizes": "node prototype/compile-feasibility/sizes.mjs",
     "proto:serve": "node prototype/compile-feasibility/serve.mjs 5173"
   },
   "devDependencies": {
-    "vite": "^7.0.0"
+    "@types/node": "^26.6.4",
+    "@types/three": "^0.186.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "monaco-editor": "^0.57.0",
+    "three": "^0.186.1"
   }
 }

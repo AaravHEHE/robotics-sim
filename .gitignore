@@ -4,3 +4,5 @@ dist/
 *.log
 
 prototype/compile-feasibility/out/
+public/toolchain/
+public/sim/

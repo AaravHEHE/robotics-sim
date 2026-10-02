@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "lemlib-template",
+  "name": "LemLib template robot",
+  "description": "Matches the drivetrain in LemLib 0.5's example main.cpp: 6 blue motors at 360 rpm on 4\" omnis, 10\" track width, IMU on 10 and two 2.75\" rotation-sensor tracking wheels.",
+  "size": { "width": 13, "length": 14, "height": 10 },
+  "drivetrain": {
+    "type": "tank",
+    "left": [-5, 4, -3],
+    "right": [6, -9, 7],
+    "cartridge": "blue",
+    "wheelDiameter": 4,
+    "wheelRpm": 360,
+    "trackWidth": 10,
+    "maxAccel": 180
+  },
+  "devices": [
+    { "type": "imu", "port": 10, "name": "IMU" },
+    { "type": "rotation", "port": 20, "name": "Horizontal tracking wheel", "trackingWheel": { "axis": "horizontal", "wheelDiameter": 2.75, "offset": -5.75 } },
+    { "type": "rotation", "port": 11, "name": "Vertical tracking wheel", "trackingWheel": { "axis": "vertical", "wheelDiameter": 2.75, "offset": -2.5 } }
+  ],
+  "mechanisms": []
+}

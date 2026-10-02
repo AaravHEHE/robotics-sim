@@ -1,4 +1,4 @@
-// Node benchmark: build shim + PCH, compile + link the test project, run it twice.
+﻿// Node benchmark: build shim + PCH, compile + link the test project, run it twice.
 // Usage: node --experimental-wasm-jspi bench-node.mjs   (flag only needed on Node < 25)
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -30,7 +30,7 @@ const sysroot = [...parseTar(await readFile(path.join(tools, 'include.tar'))), .
 const tc = new Toolchain({ factory, module, sysroot });
 console.log('toolchain ready', fmt(performance.now() - t0));
 
-const shimFiles = await readTree(path.join(root, 'shim'));
+const shimFiles = await readTree(path.join(here, 'shim-proto'));
 const opt = process.env.OPT ?? '-O1';
 const tS = performance.now();
 const shim = await buildShim(tc, shimFiles, { opt });

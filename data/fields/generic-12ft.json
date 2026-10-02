@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "generic-12ft",
+  "name": "Empty 12 x 12 ft field",
+  "perimeter": {
+    "inside": 140.5,
+    "wallHeight": 12,
+    "wallThickness": 1.5
+  },
+  "tiles": {
+    "count": 6,
+    "color": "#5b5e63",
+    "lineColor": "#e8e8e8"
+  },
+  "objects": [],
+  "game": null,
+  "sources": [
+    "VEX field specification: inside wall-to-wall 140.5 in +/- 0.5 in, wall height 11.5-12.5 in (https://www.vexforum.com/t/field-question/86088)",
+    "Six foam tiles per side, approximately 24 in each (https://kb.vex.com/hc/en-us/articles/15605508860308-Understanding-the-V5RC-Over-Under-Field-Layout)"
+  ]
+}

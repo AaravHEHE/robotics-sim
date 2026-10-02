@@ -1,0 +1,14 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    include: ['tests/**/*.test.ts'],
+    testTimeout: 180_000,
+    hookTimeout: 180_000,
+    pool: 'forks',
+    poolOptions: {
+      // JSPI (WebAssembly.Suspending) is behind a flag in Node 24
+      forks: { execArgv: ['--experimental-wasm-jspi'], singleFork: true },
+    },
+  },
+});

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "ez-example",
+  "name": "EZ-Template example robot",
+  "description": "Matches EZ-Template 3.2's example project: 6 blue motors at 343 rpm on 4.125\" omnis, IMU on port 7.",
+  "size": { "width": 15, "length": 15, "height": 11 },
+  "drivetrain": {
+    "type": "tank",
+    "left": [1, 2, 3],
+    "right": [-4, -5, -6],
+    "cartridge": "blue",
+    "wheelDiameter": 4.125,
+    "wheelRpm": 343,
+    "trackWidth": 12,
+    "maxAccel": 180
+  },
+  "devices": [
+    { "type": "imu", "port": 7, "name": "IMU" }
+  ],
+  "mechanisms": []
+}
