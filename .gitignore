@@ -8,3 +8,4 @@ public/toolchain/
 public/sim/
 dist/
 tools/last-build.wasm
+docs/manual/
