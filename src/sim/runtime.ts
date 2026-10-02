@@ -211,6 +211,15 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
           startMotion(new MoveToPoint(tx, ty, 0, { forwards: !!p[2], maxSpeed: p[3], minSpeed: 0, earlyExitRange: 0 }), { x: tx, y: ty });
           break;
         }
+        case 14: { // pose: localX localY headingError forwards maxSpeed lead
+          const s = dsin(world.pose.theta * RAD);
+          const c = dcos(world.pose.theta * RAD);
+          const tx = world.pose.x + p[0] * c + p[1] * s;
+          const ty = world.pose.y - p[0] * s + p[1] * c;
+          const th = world.pose.theta + p[2];
+          startMotion(new MoveToPose(tx, ty, th, 0, { forwards: !!p[3], maxSpeed: p[4], minSpeed: 0, earlyExitRange: 0, lead: p[5] }), { x: tx, y: ty, theta: th });
+          break;
+        }
         default:
           warn(`motion-kind:${kind}`, `Unknown motion kind ${kind}.`, 'error');
       }

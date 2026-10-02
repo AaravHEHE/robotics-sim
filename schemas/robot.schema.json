@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "robot.schema.json",
+  "title": "VEX auton simulator robot profile",
+  "description": "A robot's hardware in real units (inches, rpm). See docs/robot-profile.md. Validated in the app by src/sim/profile.ts.",
+  "type": "object",
+  "required": ["schema", "id", "name", "size", "drivetrain", "devices", "mechanisms"],
+  "properties": {
+    "schema": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "size": {
+      "type": "object",
+      "required": ["width", "length", "height"],
+      "properties": {
+        "width": { "type": "number", "minimum": 1, "maximum": 36, "description": "Left-right footprint, inches" },
+        "length": { "type": "number", "minimum": 1, "maximum": 36, "description": "Front-back footprint, inches" },
+        "height": { "type": "number", "minimum": 1, "maximum": 36 }
+      }
+    },
+    "mass": { "type": "number", "description": "Pounds (informational)" },
+    "drivetrain": {
+      "type": "object",
+      "required": ["type", "left", "right", "cartridge", "wheelDiameter", "wheelRpm", "trackWidth", "maxAccel"],
+      "properties": {
+        "type": { "const": "tank" },
+        "left": { "$ref": "#/$defs/signedPorts" },
+        "right": { "$ref": "#/$defs/signedPorts" },
+        "cartridge": { "$ref": "#/$defs/cartridge" },
+        "wheelDiameter": { "type": "number", "minimum": 1, "maximum": 10 },
+        "wheelRpm": { "type": "number", "minimum": 1, "maximum": 1200, "description": "Wheel rpm at full motor speed, after gearing" },
+        "trackWidth": { "type": "number", "minimum": 2, "maximum": 30, "description": "Left-to-right wheel center distance, inches" },
+        "maxAccel": { "type": "number", "minimum": 1, "maximum": 1000, "description": "in/s^2" },
+        "speedScale": { "type": "number", "minimum": 0.1, "maximum": 1, "description": "Fraction of free speed reached under load (default 1)" }
+      }
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "port"],
+        "properties": {
+          "type": { "enum": ["motor", "imu", "rotation", "distance", "optical", "gps", "vision", "ai_vision", "adi_digital_out", "adi_digital_in"] },
+          "port": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 21 }, { "type": "string", "pattern": "^[A-Ha-h]$" }] },
+          "name": { "type": "string" },
+          "cartridge": { "$ref": "#/$defs/cartridge" },
+          "trackingWheel": {
+            "type": "object",
+            "required": ["axis", "wheelDiameter", "offset"],
+            "properties": {
+              "axis": { "enum": ["vertical", "horizontal"] },
+              "wheelDiameter": { "type": "number" },
+              "offset": { "type": "number" }
+            }
+          },
+          "mechanism": { "type": "string" },
+          "mount": {
+            "type": "object",
+            "required": ["x", "y", "heading"],
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "heading": { "type": "number" } }
+          }
+        }
+      }
+    },
+    "mechanisms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "name"],
+        "properties": {
+          "kind": { "enum": ["roller", "arm", "flywheel", "piston"] },
+          "name": { "type": "string" },
+          "motors": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 21 } },
+          "ratio": { "type": "number", "exclusiveMinimum": 0 },
+          "range": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+          "adi": { "type": "string", "pattern": "^[A-Ha-h]$" },
+          "travel": { "type": "number" },
+          "node": { "type": "string", "description": "Named node in the GLB model animated by this mechanism" }
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": ["assetId"],
+      "properties": {
+        "assetId": { "type": "string" },
+        "scale": { "type": "number" },
+        "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        "rotationDeg": { "type": "number" }
+      }
+    }
+  },
+  "$defs": {
+    "cartridge": { "enum": ["red", "green", "blue"] },
+    "signedPorts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": -21, "maximum": 21, "not": { "const": 0 } }
+    }
+  }
+}

@@ -168,4 +168,45 @@ describe('EZ-Template 3.2 example (selector + real exit conditions)', () => {
     expect(rec.error).toBeNull();
     expect(rec.console.filter((c) => /XY: Small Exit/.test(c.text)).length).toBeGreaterThanOrEqual(2);
   });
+
+  for (const auton of ['odom_pure_pursuit_example', 'odom_boomerang_example', 'odom_boomerang_injected_pure_pursuit_example', 'motion_chaining', 'combining_movements', 'wait_until_change_speed']) {
+    it(`${auton} finishes every wait without timing out`, async () => {
+      const rec = await run(auton);
+      expect(rec.error).toBeNull();
+      expect(rec.autonEnd).not.toBeNull();
+      // EZ-Template prints how each wait ended; none may be a failsafe/velocity exit
+      const exits = rec.console.filter((c) => /Exit/.test(c.text)).map((c) => c.text);
+      expect(exits.length).toBeGreaterThan(0);
+      // a velocity exit is only acceptable when the robot is already on target (ideal sensors
+      // don't jitter, so a robot sitting exactly on target reads zero velocity)
+      const bad = exits.filter((t) => /mA|Failsafe/.test(t) || [...t.matchAll(/(\w+): Velocity Exit(?:ed early)?, error: (-?[\d.]+)/g)].some((m) => Math.abs(Number(m[2])) > (m[1] === 'Angle' ? 3 : 1.5)));
+      expect(bad).toEqual([]);
+    });
+  }
+});
+
+describe('LemLib motions', () => {
+  const lem = (body: string) =>
+    fixture('lemlib-template', { 'src/main.cpp': (s) => s.replace(/void autonomous\(\) \{[\s\S]*?\r?\n\}\r?\n/, `void autonomous() {\n${body}\n}\n`) });
+
+  it('swings and chained moves end where asked', async () => {
+    const rec = await simulate(
+      await lem(`chassis.setPose(0, 0, 0);
+    chassis.swingToHeading(90, DriveSide::LEFT, 2000);
+    chassis.waitUntilDone();
+    pros::lcd::print(5, "swing %.1f", chassis.getPose().theta);
+    chassis.moveToPoint(24, 24, 3000, {.minSpeed = 60, .earlyExitRange = 4});
+    chassis.moveToPoint(24, 48, 3000);
+    chassis.waitUntilDone();
+    chassis.swingToPoint(0, 48, DriveSide::RIGHT, 2000);
+    chassis.waitUntilDone();`),
+      'lemlib-template',
+    );
+    expect(rec.error).toBeNull();
+    const swing = rec.lcd.find((l) => l.text.startsWith('swing'))!;
+    expect(Math.abs(Number(swing.text.split(' ')[1]) - 90)).toBeLessThan(2);
+    const p = finalPose(rec);
+    expect(Math.abs(((p.theta % 360) + 360) % 360 - 270)).toBeLessThan(3); // facing (0, 48) = west
+    expect(rec.motions.map((m) => m.label)).toEqual(['swingToHeading', 'moveToPoint', 'moveToPoint', 'swingToPoint']);
+  });
 });

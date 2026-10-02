@@ -27,6 +27,9 @@ namespace {
 double g_sig[8];
 int g_sig_mode = -1;
 bool g_configured = false;
+// While true, ptp_task keeps EZ-Template's bookkeeping but doesn't start a point motion
+// (boomerang_task drives the final pose instead of chasing EZ-Template's carrot point).
+bool g_boomerang = false;
 
 bool targetChanged(int mode, std::initializer_list<double> sig) {
   bool changed = mode != g_sig_mode;
@@ -162,7 +165,7 @@ void Drive::ptp_task() {
   leftPID.compute(drive_sensor_left());
   rightPID.compute(drive_sensor_right());
 
-  if (!drive_toggle) return;
+  if (!drive_toggle || g_boomerang) return;
   if (targetChanged(POINT_TO_POINT, {odom_target.x, odom_target.y, (double)dir, (double)max_speed})) {
     // target relative to the robot (x right, y forward), from EZ-Template's odometry
     const pose cur = odom_pose_get();
@@ -196,7 +199,23 @@ void Drive::boomerang_task() {
     raw_pid_odom_ptp_set({temp, pp_movements[target_index].drive_direction, pp_movements[target_index].max_xy_speed}, slew_on);
   }
 
+  // Simulator: drive the final pose directly with an idealized boomerang motion.
+  if (drive_toggle && targetChanged(POINT_TO_POINT + 100, {target.x, target.y, target.theta, (double)dir, (double)pp_movements[target_index].max_xy_speed})) {
+    const pose cur = odom_pose_get();
+    const double th = util::to_rad(odom_theta_get());
+    const double dx = target.x - cur.x, dy = target.y - cur.y;
+    const double localX = dx * std::cos(th) - dy * std::sin(th);
+    const double localY = dx * std::sin(th) + dy * std::cos(th);
+    double headingError = std::fmod(target.theta - odom_theta_get(), 360.0);
+    if (headingError > 180) headingError -= 360;
+    if (headingError < -180) headingError += 360;
+    simStart(SIM_MOTION_EZ_POSE, {localX, localY, headingError, dir > 0 ? 1.0 : 0.0,
+                                  (double)pp_movements[target_index].max_xy_speed, odom_boomerang_dlead_get()});
+  }
+
+  g_boomerang = true;
   ptp_task();
+  g_boomerang = false;
 }
 
 void Drive::pp_task() {

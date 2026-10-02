@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "field.schema.json",
+  "title": "VEX auton simulator field definition",
+  "description": "Inches, origin at the field center, +y away from the near wall, headings clockwise from +y. Validated by src/sim/field.ts.",
+  "type": "object",
+  "required": ["schema", "id", "name", "perimeter", "tiles", "objects", "game"],
+  "properties": {
+    "schema": { "const": 1 },
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "perimeter": {
+      "type": "object",
+      "required": ["inside", "wallHeight", "wallThickness"],
+      "properties": {
+        "inside": { "type": "number", "description": "Inside wall-to-wall distance (VEX spec: 140.5 in +/- 0.5)" },
+        "wallHeight": { "type": "number" },
+        "wallThickness": { "type": "number" }
+      }
+    },
+    "tiles": {
+      "type": "object",
+      "required": ["count", "color", "lineColor"],
+      "properties": { "count": { "type": "integer", "minimum": 1 }, "color": { "type": "string" }, "lineColor": { "type": "string" } }
+    },
+    "objects": {
+      "type": "array",
+      "description": "Static field elements (reserved for game-specific fields)",
+      "items": {
+        "type": "object",
+        "required": ["id", "shape", "height"],
+        "properties": {
+          "id": { "type": "string" },
+          "shape": { "type": "object" },
+          "height": { "type": "number" },
+          "color": { "type": "string" },
+          "movable": { "type": "boolean" }
+        }
+      }
+    },
+    "game": { "oneOf": [{ "type": "null" }, { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } }] },
+    "sources": { "type": "array", "items": { "type": "string" } }
+  }
+}

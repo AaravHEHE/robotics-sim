@@ -27,6 +27,7 @@ enum sim_motion_kind {
   SIM_MOTION_EZ_TURN = 11,        // angleError (deg, signed, unwrapped), maxSpeed
   SIM_MOTION_EZ_SWING = 12,       // angleError, side (0 LEFT_SWING, 1 RIGHT_SWING), maxSpeed, oppositeSpeed
   SIM_MOTION_EZ_POINT = 13,       // localX (right), localY (forward), forwards, maxSpeed
+  SIM_MOTION_EZ_POSE = 14,        // localX, localY, headingError (deg), forwards, maxSpeed, lead
 };
 
 // Describe the drivetrain a motion library controls (ports as written in code).
