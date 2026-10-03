@@ -14,6 +14,7 @@ import { createProsApi } from './pros-api.ts';
 import type { MotionMarker, Recording, SimEvent } from './recording.ts';
 import { Scheduler, StuckError } from './scheduler.ts';
 import { OdomFrame, World, type Pose } from './world.ts';
+import { OverrideGame } from '../games/override/game.ts';
 
 export type PlaceMode = 'auto' | 'always' | 'never';
 
@@ -34,6 +35,8 @@ export interface RunOptions {
   frameEveryMs?: number;
   /** Wall-clock budget for the whole run (runaway arithmetic loops). */
   wallLimitMs?: number;
+  /** Starting layout of a game field ('h2h' or 'skills'); default: 'skills' for 60 s runs, else 'h2h'. */
+  layout?: string;
 }
 
 const STEP_MS = 1;
@@ -49,6 +52,9 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   const place = opts.placeAtSetPose ?? 'auto';
 
   const world = new World(opts.profile, opts.field, opts.start);
+  const game = opts.field.game?.id === 'override'
+    ? await OverrideGame.create(opts.field, opts.layout ?? (opts.autonMs >= 60000 ? 'skills' : 'h2h'), world)
+    : null;
   const sched = new Scheduler();
   const frame = new OdomFrame();
   frame.anchor(world.pose, { x: 0, y: 0, theta: 0 }); // odometry starts at 0,0,0 where the robot sits
@@ -243,6 +249,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
             imu.headingOffset += theta - old;
             imu.yawOffset += theta - old;
           }
+          game?.robotTeleported();
           events.push({ t: sched.now, level: 'info', message: `Robot placed at (${fmt(x)}, ${fmt(y)}) facing ${fmt(theta)}° from setPose().` });
         } else {
           warn('place-oob', `setPose(${fmt(x)}, ${fmt(y)}, ${fmt(theta)}) is outside the field, so the robot stays at its start position.`);
@@ -419,6 +426,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   const pushFrame = () => {
     frames.push(sched.now, world.pose.x, world.pose.y, world.pose.theta, world.vL, world.vR);
     for (const m of mechs) frames.push(world.mechanismState(m));
+    game?.recordFrame(sched.now);
   };
   if (!error) startPhase(0, 'initialize');
   pushFrame();
@@ -435,6 +443,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     }
     world.step(STEP_MS);
     sched.now += STEP_MS;
+    game?.step(STEP_MS);
     if (Math.abs(world.vL) + Math.abs(world.vR) > 1e-6) robotHasMoved = true;
     if (motion && motion.done) {
       if (marker && marker.t1 === null) marker.t1 = sched.now;
@@ -467,6 +476,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     motions,
     error,
     wallMs: performance.now() - wallStart,
+    game: game?.finish() ?? null,
   };
 }
 

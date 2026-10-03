@@ -80,18 +80,26 @@ function pieceMesh(p: Piece): THREE.Group {
   return p.kind === 'pin' ? pinMesh(p.colors) : cupMesh(p.up);
 }
 
-/** All scoring objects of a game state. */
-export function piecesGroup(field: FieldDef, state: OverrideState): THREE.Group {
+/**
+ * All scoring objects of a game state. Returns the group and, for objects that can move
+ * on the floor (stacks and lying pins), their nodes by id so a replay can move them.
+ */
+export function piecesGroup(field: FieldDef, state: OverrideState): { group: THREE.Group; nodes: Map<string, THREE.Object3D> } {
   const group = new THREE.Group();
-  const addStack = (pieces: Piece[], x: number, y: number, base: number, onGoal: boolean) => {
+  const nodes = new Map<string, THREE.Object3D>();
+  const addStack = (pieces: Piece[], x: number, y: number, base: number, onGoal: boolean, id?: string) => {
+    const holder = new THREE.Group();
     for (const slot of layoutStack(pieces, base, onGoal)) {
       const m = pieceMesh(slot.piece);
-      m.position.set(x, slot.bottom, -y);
+      m.position.set(0, slot.bottom, 0);
       m.userData.pieceId = slot.piece.id;
-      group.add(m);
+      holder.add(m);
     }
+    holder.position.set(x, 0, -y);
+    group.add(holder);
+    if (id) nodes.set(id, holder);
   };
-  for (const s of state.floor) addStack(s.pieces, s.x, s.y, 0, false);
+  for (const s of state.floor) addStack(s.pieces, s.x, s.y, 0, false, s.id);
   for (const g of field.goals ?? []) addStack(state.goals[g.id] ?? [], g.x, g.y, g.height, true);
   for (const l of state.lying) {
     const m = pinMesh(l.colors);
@@ -105,8 +113,16 @@ export function piecesGroup(field: FieldDef, state: OverrideState): THREE.Group 
     holder.position.set(l.x, 0, -l.y);
     holder.userData.pieceId = l.id;
     group.add(holder);
+    nodes.set(l.id, holder);
   }
-  return group;
+  return { group, nodes };
+}
+
+/** Pose a lying-pin or stack node from a track sample (field x, y, heading). */
+export function placeNode(node: THREE.Object3D, x: number, y: number, heading: number, lying: boolean) {
+  node.position.x = x;
+  node.position.z = -y;
+  if (lying) node.rotation.y = Math.PI - heading * DEG;
 }
 
 // ---------------- field elements ----------------

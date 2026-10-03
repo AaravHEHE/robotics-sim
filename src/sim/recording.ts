@@ -1,5 +1,7 @@
 // What a simulation run produces: a timeline the viewer replays.
 
+import type { OverrideRecording } from '../games/override/game.ts';
+
 export interface SimEvent {
   t: number;
   level: 'info' | 'warning' | 'error';
@@ -34,6 +36,8 @@ export interface Recording {
   motions: MotionMarker[];
   error: string | null;
   wallMs: number;
+  /** Game-specific replay data (scoring objects, toggles), if the field has a game. */
+  game: OverrideRecording | null;
 }
 
 export function frameAt(rec: Recording, t: number): number {

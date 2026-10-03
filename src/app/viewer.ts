@@ -7,8 +7,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { FieldDef } from '../sim/field.ts';
 import type { MechanismSpec, RobotProfile } from '../sim/profile.ts';
 import type { Recording } from '../sim/recording.ts';
+import type { OverrideRecording } from '../games/override/game.ts';
 import type { OverrideState } from '../games/override/state.ts';
-import { drawTape, goalMesh, loaderMesh, piecesGroup, toggleMesh } from './override-meshes.ts';
+import { drawTape, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
 export type ViewMode = 'top' | 'orbit' | 'follow';
 export interface FieldPose {
@@ -39,6 +40,11 @@ export class FieldViewer {
   private readonly gameGroup = new THREE.Group();
   /** Toggle id -> group to rotate for its roll angle. */
   private readonly toggleRolls = new Map<string, THREE.Group>();
+  /** Movable piece nodes (floor stacks, lying pins) of the shown game state, by id. */
+  private pieceNodes = new Map<string, THREE.Object3D>();
+  private lyingIds = new Set<string>();
+  private gameRec: OverrideRecording | null = null;
+  private shownSnapshot = -1;
   private trail: THREE.Line | null = null;
   private futureTrail: THREE.Line | null = null;
   private rec: Recording | null = null;
@@ -239,8 +245,12 @@ export class FieldViewer {
   /** Show a game state's scoring objects and toggle angles (null hides them). */
   setGameState(state: OverrideState | null) {
     this.gameGroup.clear();
+    this.pieceNodes = new Map();
+    this.lyingIds = new Set(state?.lying.map((l) => l.id) ?? []);
     if (state && this.field) {
-      this.gameGroup.add(piecesGroup(this.field, state));
+      const { group, nodes } = piecesGroup(this.field, state);
+      this.pieceNodes = nodes;
+      this.gameGroup.add(group);
       for (const t of state.toggles) {
         // +angle = top rolls outward = negative rotation about the local x axis
         const roll = this.toggleRolls.get(t.id);
@@ -396,6 +406,8 @@ export class FieldViewer {
 
   setRecording(rec: Recording | null) {
     this.rec = rec;
+    this.gameRec = rec?.game ?? null;
+    this.shownSnapshot = -1;
     this.overlay.clear();
     this.trail = this.futureTrail = null;
     this.ghost.visible = false;
@@ -458,10 +470,42 @@ export class FieldViewer {
         m.object.rotateX(-v * DEG);
       }
     });
+    this.showGameAt(t);
     const count = Math.max(2, i0 + 1);
     this.trail?.geometry.setDrawRange(0, count);
     this.frame = i0;
     this.needsRender = true;
+  }
+
+  /** Replay scoring objects: latest structural snapshot at t, then each object's track. */
+  private showGameAt(t: number) {
+    const g = this.gameRec;
+    if (!g) return;
+    let idx = 0;
+    for (let i = 0; i < g.snapshots.length; i++) if (g.snapshots[i].t <= t) idx = i;
+    if (idx !== this.shownSnapshot) {
+      this.setGameState(g.snapshots[idx].state);
+      this.shownSnapshot = idx;
+    }
+    for (const [id, tr] of Object.entries(g.tracks)) {
+      // last sample at or before t (samples are [t, a, b, c] in time order)
+      let lo = 0;
+      let hi = tr.length / 4 - 1;
+      if (hi < 0 || tr[0] > t) continue;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (tr[mid * 4] <= t) lo = mid;
+        else hi = mid - 1;
+      }
+      const k = lo * 4;
+      const roll = this.toggleRolls.get(id);
+      if (roll) {
+        roll.rotation.x = (-tr[k + 1] * Math.PI) / 180;
+        continue;
+      }
+      const node = this.pieceNodes.get(id);
+      if (node) placeNode(node, tr[k + 1], tr[k + 2], tr[k + 3], this.lyingIds.has(id));
+    }
   }
 
   get currentFrame() {
