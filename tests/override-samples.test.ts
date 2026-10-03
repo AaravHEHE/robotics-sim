@@ -13,9 +13,16 @@ const GOLDEN: Record<string, { red: number; blue: number; toggles?: Record<strin
   'override-workhorse-toggle': { red: 45, blue: 0, toggles: { red1: 'red' } },
   'override-midfield-pusher': { red: 8, blue: 0 },
   'override-dr4b': { red: 45, blue: 0, toggles: { red1: 'red' } },
+  'override-cascade': { red: 45, blue: 0, toggles: { red1: 'red' } },
+  'override-sixbar-wrist': { red: 35, blue: 0, toggles: { red1: 'red' } },
+  'override-skills': { red: 23, blue: 0 },
 };
 
 describe('Override sample autons', () => {
+  it('every Override sample has a golden score', () => {
+    expect(SAMPLES.filter((s) => s.field === 'override').map((s) => s.id).sort()).toEqual(Object.keys(GOLDEN).sort());
+  });
+
   for (const [id, want] of Object.entries(GOLDEN)) {
     it(`${id} scores red ${want.red} / blue ${want.blue}`, async () => {
       const meta = SAMPLES.find((s) => s.id === id)!;

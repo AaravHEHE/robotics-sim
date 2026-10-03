@@ -19,6 +19,16 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
 - **Robot profiles.** Presets, plus your own robots stored in the browser, with an
   optional cosmetic GLB model exported from Onshape. See
   [docs/robot-profile.md](docs/robot-profile.md).
+- **V5RC Override (2026–27).** The field is built from manual v2.0 Appendix A, with
+  Pins, Cups, Goals, Toggles and Loaders.
+  - **Scoring:** live, by the manual's rules, including the Autonomous Bonus, the AWP
+    checklist and Skills scoring.
+  - **Robots:** lifts, claws, intakes, staging trays, wrists and Toggle tools in the
+    profile turn your code's motor and piston commands into picking up, stacking and
+    dropping. There are 8 presets for the common robot designs (see
+    [docs/override-research.md](docs/override-research.md)).
+  - **Samples:** 8 Override samples covering PROS, LemLib and EZ-Template, head-to-head
+    autonomous and Skills.
 
 Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safari 27+.
 

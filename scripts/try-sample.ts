@@ -33,7 +33,8 @@ if (g) {
       const held = Object.entries(s.held).filter(([, v]) => v.length).map(([k, v]) => `${k}:${v.map((p) => (p.kind === 'pin' ? p.colors.join('/') : 'cup-' + p.up)).join('+')}`);
       const mech = rec.mechanisms.map((m, k) => `${m}=${rec.frames[i + 6 + k].toFixed(0)}`).join(' ');
       const tg = s.toggles.map((x) => x.angle.toFixed(0) + (x.touched ? '*' : '')).join(',');
-      console.log(`  t=${t} tg[${tg}] (${rec.frames[i + 1].toFixed(1)}, ${rec.frames[i + 2].toFixed(1)}) θ${rec.frames[i + 3].toFixed(0)} v${rec.frames[i + 4].toFixed(0)}/${rec.frames[i + 5].toFixed(0)} ${mech} ${held.join(' ')}`);
+      const ld = Object.entries(s.loaders).filter(([, v]) => v.length).map(([k, v]) => k.slice(6) + ':' + v.map((p) => p.kind[0]).join('')).join(' ');
+      console.log(`  t=${t} ${ld} tg[${tg}] (${rec.frames[i + 1].toFixed(1)}, ${rec.frames[i + 2].toFixed(1)}) θ${rec.frames[i + 3].toFixed(0)} v${rec.frames[i + 4].toFixed(0)}/${rec.frames[i + 5].toFixed(0)} ${mech} ${held.join(' ')}`);
     }
   }
   const s = g.snapshots.at(-1)!.state;

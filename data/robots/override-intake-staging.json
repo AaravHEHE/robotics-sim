@@ -5,7 +5,7 @@
   "description": "A front roller intake (port 10) feeds a staging tray that assembles a Pin + Cup combo; a 4-bar (port 7, 1:5) with a pneumatic claw (ADI A) picks the combo up and stacks it. The Preload starts in the staging tray. Good for Skills Match Loads.",
   "size": {
     "width": 15,
-    "length": 16,
+    "length": 15,
     "height": 13
   },
   "mass": 16,
@@ -51,7 +51,7 @@
       "ratio": 1,
       "zone": {
         "x": 0,
-        "y": 11.5,
+        "y": 12.5,
         "width": 8,
         "length": 3
       },
@@ -61,7 +61,7 @@
       "kind": "staging",
       "name": "Stage",
       "at": {
-        "y": 9,
+        "y": 10,
         "z": 2
       },
       "preload": "alliance-down"
@@ -74,7 +74,7 @@
       "ratio": 0.2,
       "range": [0, 110],
       "home": {
-        "y": 9,
+        "y": 10,
         "z": 2
       },
       "length": 11,

@@ -7,7 +7,8 @@ import { SAMPLES } from '../src/app/samples-meta.ts';
 import { finalPose, simulate } from './helpers.ts';
 
 describe('sample projects', () => {
-  for (const s of SAMPLES) {
+  // game-field samples are checked (with their scores) in override-samples.test.ts
+  for (const s of SAMPLES.filter((x) => !x.field)) {
     it(`${s.id} builds and runs on ${s.robot}`, async () => {
       const files = await readProjectDir(path.join(repoRoot, 'samples', s.id));
       const rec = await simulate(files, s.robot);

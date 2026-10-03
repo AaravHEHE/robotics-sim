@@ -23,7 +23,7 @@ const LOW_REACH = PIN.collarDiameter + 1.5;
 /** Output speed (rpm) above which rollers and intakes count as spinning. */
 const SPIN_RPM = 10;
 /** Minimum time between two intake pickups or ejections (ms). */
-const INTAKE_COOLDOWN = 150;
+const INTAKE_COOLDOWN = 350;
 /** Pieces a Loader chute holds, and how often the drive team adds one (Skills). */
 const LOADER_CAPACITY = 2;
 const LOADER_REFILL_MS = 1000;
@@ -144,6 +144,8 @@ export class Manipulators {
   private readonly arrival = new Map<string, number>();
   private readonly lastIntake = new Map<string, number>();
   private nextRefill = 0;
+  /** Kind of the piece last put in each Loader. */
+  private readonly lastLoaded = new Map<string, Piece['kind']>();
 
   constructor(ops: GameOps, world: World) {
     this.ops = ops;
@@ -349,16 +351,21 @@ export class Manipulators {
     const { state } = this.ops;
     const mine = state.held[spec.name];
     // deliver pieces that have travelled through
-    if (spec.into && mine.length) {
-      const dest = state.held[spec.into];
-      const destSpec = this.profile.mechanisms.find((m) => m.name === spec.into) as ClawSpec | StagingSpec;
-      for (const p of [...mine]) {
-        if ((this.arrival.get(p.id) ?? 0) > t || !fits(destSpec.capacity, dest, [p]) || !this.canReceive(destSpec)) continue;
-        mine.splice(mine.indexOf(p), 1);
-        this.arrival.delete(p.id);
-        state.held[spec.into] = merge(state.held[spec.into], [p]);
+    const destSpec = spec.into ? (this.profile.mechanisms.find((m) => m.name === spec.into) as ClawSpec | StagingSpec) : null;
+    if (spec.into && destSpec && mine.length && this.canReceive(destSpec)) {
+      const ready = mine.filter((p) => (this.arrival.get(p.id) ?? 0) <= t);
+      // pieces that came in together (a stack) move on together, keeping their order;
+      // otherwise one at a time, as far as there is room
+      const batches = fits(destSpec.capacity, state.held[spec.into], ready) ? [ready] : ready.map((p) => [p]);
+      for (const batch of batches) {
+        if (!batch.length || !fits(destSpec.capacity, state.held[spec.into], batch)) continue;
         const claw = this.claws.find((c) => c.spec.name === spec.into);
-        if (claw && state.held[spec.into].length === 1) claw.grip = 0;
+        if (claw && !state.held[spec.into].length) claw.grip = 0;
+        for (const p of batch) {
+          mine.splice(mine.indexOf(p), 1);
+          this.arrival.delete(p.id);
+        }
+        state.held[spec.into] = merge(state.held[spec.into], batch);
         this.ops.changed();
       }
     }
@@ -491,7 +498,7 @@ export class Manipulators {
     if (n.pins > 1 || n.cups > 1) this.ops.violation('SG6', `The robot possesses ${n.pins} Pins and ${n.cups} Cups (limit: 1 Pin and 1 Cup).`);
   }
 
-  /** Skills: the drive team keeps the red Loaders stocked from the Match Loads. */
+  /** Skills: the drive team keeps the red Loaders stocked from the Match Loads (Pins and Cups alternate in each). */
   private refillLoaders(t: number): void {
     const { state, field, mode } = this.ops;
     if (mode !== 'skills' || t < this.nextRefill) return;
@@ -500,7 +507,12 @@ export class Manipulators {
     const loaders = (field.loaders ?? []).filter((l) => l.alliance === 'red' && state.loaders[l.id].length < LOADER_CAPACITY);
     if (!loaders.length) return;
     loaders.sort((a, b) => state.loaders[a.id].length - state.loaders[b.id].length);
-    state.loaders[loaders[0].id].push(pool.shift()!);
+    // each chute alternates Pins and Cups, so a robot can build combos from one Loader
+    const id = loaders[0].id;
+    const i = Math.max(0, pool.findIndex((p) => p.kind !== this.lastLoaded.get(id)));
+    const [piece] = pool.splice(i, 1);
+    state.loaders[id].push(piece);
+    this.lastLoaded.set(id, piece.kind);
     this.nextRefill = t + LOADER_REFILL_MS / 2; // two Loaders, each refilled about once a second
     this.ops.changed();
   }
