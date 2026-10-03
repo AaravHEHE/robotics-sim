@@ -50,11 +50,13 @@
           <button class="btab" data-tab="console" role="tab">Console</button>
           <button class="btab" data-tab="lcd" role="tab">Brain screen</button>
           <button class="btab" data-tab="events" role="tab">Notes <span id="badge-events" class="badge"></span></button>
+          <button class="btab" data-tab="score" role="tab">Score</button>
         </div>
         <div class="bpanel active" id="panel-problems"><p class="empty">Press Run to compile.</p></div>
         <div class="bpanel" id="panel-console"><p class="empty">printf / std::cout output appears here.</p></div>
         <div class="bpanel" id="panel-lcd"><pre id="lcd" class="lcd"></pre></div>
         <div class="bpanel" id="panel-events"><p class="empty">Warnings about unsupported calls and robot mismatches appear here.</p></div>
+        <div class="bpanel" id="panel-score"><p class="empty">Scores appear here after a run on a game field.</p></div>
       </div>
     </section>
 
@@ -63,6 +65,7 @@
         <div class="hud">
           <div class="timer" id="timer">0:00.00</div>
           <div class="hud-sub" id="timer-sub">Autonomous</div>
+          <div class="hud-score" id="hud-score" hidden></div>
         </div>
         <div class="view-buttons" role="group" aria-label="Camera">
           <button data-view="orbit" class="active">3D</button>

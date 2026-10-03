@@ -1,0 +1,129 @@
+// Toggle model (SC4). A Toggle is a triangular prism that rolls about its long axis in
+// 120° steps between three faces. Its color is the face seen from inside the field.
+// Angle convention: 0 = starting orientation; +120 = one roll with the top moving
+// outward (away from the field), which brings the face that was down on the mounts to
+// the inside; -120 = one roll with the top moving inward, which brings the outward face in.
+//
+// Contact model (idealized, no rigid-body simulation): the part of the Toggle that hangs
+// over the field is a thin strip along the wall. A robot tall enough to reach it touches
+// it when its footprint enters the strip; pressing into it (against the wall) rolls the
+// Toggle outward one face, after which the robot must back off before the next press
+// ("each square press advances one face"). Released between faces, the Toggle falls
+// back to the nearest face. Manipulators that roll it inward come with step 2.4.
+
+import type { FieldDef, ToggleDef, Vec2 } from '../../sim/field.ts';
+import type { ToggleState } from './state.ts';
+
+/** How far from a detent a Toggle may rest and still count as fully seated. */
+export const SEAT_TOLERANCE_DEG = 4;
+/** Roll speed while a robot presses it, and settle speed when released (deg/s). */
+const PRESS_RATE = 480;
+const SETTLE_RATE = 360;
+/** Fraction of the overhang a robot must press into to roll the Toggle. */
+const PRESS_DEPTH = 0.6;
+
+export type ToggleColor = 'red' | 'blue' | 'yellow';
+
+/** The face seen from inside the field at a given roll angle (nearest detent). */
+export function faceInside(def: ToggleDef, angle: number): ToggleColor {
+  const k = ((Math.round(angle / 120) % 3) + 3) % 3;
+  return (k === 0 ? def.start.in : k === 1 ? def.start.down : def.start.out) as ToggleColor;
+}
+
+/** Set color per SC4: seated on a face and not touched by a robot; otherwise neutral (yellow). */
+export function setColor(def: ToggleDef, angle: number, touched: boolean): ToggleColor {
+  if (touched) return 'yellow';
+  const off = Math.abs(angle - 120 * Math.round(angle / 120));
+  if (off > SEAT_TOLERANCE_DEG) return 'yellow';
+  return faceInside(def, angle);
+}
+
+/** Inward unit normal of the Toggle's wall and its along-wall direction. */
+function wallFrame(def: ToggleDef): { n: Vec2; u: Vec2 } {
+  switch (def.wall) {
+    case 'left': return { n: [1, 0], u: [0, 1] };
+    case 'right': return { n: [-1, 0], u: [0, 1] };
+    case 'bottom': return { n: [0, 1], u: [1, 0] };
+    default: return { n: [0, -1], u: [1, 0] };
+  }
+}
+
+/** How far the Toggle hangs over the field: half its cross-section width. */
+export function overhang(def: ToggleDef): number {
+  return def.sectionHeight / Math.sqrt(3); // half the side of an equilateral triangle
+}
+
+/**
+ * Depth (in) a robot footprint reaches into the Toggle's overhang strip, or 0 if it does
+ * not touch it. Only the part of the footprint within the Toggle's length counts.
+ */
+export function contactDepth(def: ToggleDef, footprint: Vec2[], robotHeight: number): number {
+  if (robotHeight < def.topHeight - def.sectionHeight) return 0; // too low to reach it
+  const { n, u } = wallFrame(def);
+  // local coords: s along the wall from the Toggle center, d = distance into the field from the wall line
+  let poly = footprint.map(([x, y]): Vec2 => [(x - def.x) * u[0] + (y - def.y) * u[1], (x - def.x) * n[0] + (y - def.y) * n[1]]);
+  poly = clip(poly, (p) => p[0] + def.length / 2); // s >= -L/2
+  poly = clip(poly, (p) => def.length / 2 - p[0]); // s <= +L/2
+  if (poly.length === 0) return 0;
+  const minD = Math.min(...poly.map((p) => p[1]));
+  return Math.max(0, overhang(def) - minD);
+}
+
+/** Sutherland–Hodgman clip of a convex polygon to the half-plane f(p) >= 0. */
+function clip(poly: Vec2[], f: (p: Vec2) => number): Vec2[] {
+  const out: Vec2[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const fa = f(a);
+    const fb = f(b);
+    if (fa >= 0) out.push(a);
+    if (fa >= 0 !== fb >= 0) {
+      const k = fa / (fa - fb);
+      out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
+    }
+  }
+  return out;
+}
+
+/** Steps every Toggle on the field from robot contact. */
+export class ToggleSim {
+  private readonly defs: ToggleDef[];
+  /** Per toggle: the press already rolled it one face; wait for release. */
+  private readonly latched = new Map<string, boolean>();
+  /** Detent each Toggle is rolling toward while pressed. */
+  private readonly target = new Map<string, number>();
+
+  constructor(field: FieldDef) {
+    this.defs = field.toggles ?? [];
+  }
+
+  step(dtMs: number, states: ToggleState[], footprint: Vec2[], robotHeight: number): void {
+    const dt = dtMs / 1000;
+    for (const def of this.defs) {
+      const s = states.find((x) => x.id === def.id);
+      if (!s) continue;
+      const depth = contactDepth(def, footprint, robotHeight);
+      s.touched = depth > 0;
+      const pressing = depth >= PRESS_DEPTH * overhang(def);
+      if (pressing && !this.latched.get(def.id)) {
+        const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + 120;
+        this.target.set(def.id, goal);
+        s.angle = Math.min(goal, s.angle + PRESS_RATE * dt);
+        if (s.angle >= goal) {
+          this.latched.set(def.id, true);
+          this.target.delete(def.id);
+        }
+        continue;
+      }
+      if (!pressing) {
+        this.latched.set(def.id, false);
+        this.target.delete(def.id);
+      }
+      // settle onto the nearest face
+      const rest = 120 * Math.round(s.angle / 120);
+      const delta = rest - s.angle;
+      s.angle = Math.abs(delta) <= SETTLE_RATE * dt ? rest : s.angle + Math.sign(delta) * SETTLE_RATE * dt;
+    }
+  }
+}

@@ -72,5 +72,11 @@ void autonomous() { left.move(127); right.move(127); pros::delay(800); left.brak
     expect(rec.game?.id).toBe('override');
     expect(rec.game?.layout).toBe('h2h');
     expect(rec.game?.snapshots[0].state.floor.length).toBe(36); // 24 wall-group cups + 4 cross + 4 corner + 4 diagonal
+    // nothing scored, but driving north from (0, -33) crosses the Autonomous Line (SG7)
+    expect(rec.game?.alliance).toBe('red');
+    expect(rec.game?.result?.score).toMatchObject({ red: 0, blue: 0 });
+    expect(rec.game?.violations.map((v) => v.rule)).toContain('SG7');
+    expect(rec.game?.result?.autonomousBonus).toEqual({ red: 0, blue: 12 });
+    expect(rec.events.some((e) => e.message.startsWith('<SG7>'))).toBe(true);
   });
 });

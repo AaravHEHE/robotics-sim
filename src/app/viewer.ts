@@ -8,6 +8,7 @@ import type { FieldDef } from '../sim/field.ts';
 import type { MechanismSpec, RobotProfile } from '../sim/profile.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
+import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
 import { drawTape, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
@@ -488,16 +489,8 @@ export class FieldViewer {
       this.shownSnapshot = idx;
     }
     for (const [id, tr] of Object.entries(g.tracks)) {
-      // last sample at or before t (samples are [t, a, b, c] in time order)
-      let lo = 0;
-      let hi = tr.length / 4 - 1;
-      if (hi < 0 || tr[0] > t) continue;
-      while (lo < hi) {
-        const mid = (lo + hi + 1) >> 1;
-        if (tr[mid * 4] <= t) lo = mid;
-        else hi = mid - 1;
-      }
-      const k = lo * 4;
+      const k = sampleAt(tr, t);
+      if (k < 0) continue;
       const roll = this.toggleRolls.get(id);
       if (roll) {
         roll.rotation.x = (-tr[k + 1] * Math.PI) / 180;

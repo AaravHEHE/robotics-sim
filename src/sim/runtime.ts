@@ -458,6 +458,8 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   for (const c of world.collisions) {
     events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : `Robot hit the ${c.wall} wall.` });
   }
+  const gameRec = game?.finish() ?? null;
+  for (const v of gameRec?.violations ?? []) events.push({ t: v.t, level: 'warning', message: `<${v.rule}> ${v.message}` });
   events.sort((a, b) => a.t - b.t);
   if (outBuf[1]) consoleLines.push({ t: sched.now, text: outBuf[1] });
   if (outBuf[2]) consoleLines.push({ t: sched.now, text: outBuf[2] });
@@ -476,7 +478,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     motions,
     error,
     wallMs: performance.now() - wallStart,
-    game: game?.finish() ?? null,
+    game: gameRec,
   };
 }
 

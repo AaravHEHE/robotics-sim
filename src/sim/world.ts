@@ -482,7 +482,7 @@ export function fieldObstacles(field: FieldDef): Obstacle[] {
 
 /**
  * Separating-axis test for two convex polygons. Returns the minimum translation that
- * moves  out of , or null if they don't overlap.
+ * moves `a` out of `b`, or null if they do not overlap.
  */
 export function satMtv(a: Vec2[], b: Vec2[]): Vec2 | null {
   let best = Infinity;

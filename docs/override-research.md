@@ -179,6 +179,22 @@ The user's code only commands motors and pistons. The robot profile says which m
 
 Pieces on the floor use deterministic 2D rigid-body physics, so robots can push and plow them. Scoring is computed exactly per SC1–SC8 / RSC3, and replayed live in the score display.
 
+**What is implemented so far (step 2.3):**
+- **Scoring** (`src/games/override/scoring.ts`) is pure: Placed per SC2, visible halves per SC3, Toggle ownership per SC4/SC5, Midfield, the Autonomous Bonus, AWP (standard and Worlds criteria) and Skills rules.
+  - A 15 s run is scored as the head-to-head Autonomous Period, so the Midfield is excluded (SC7a).
+  - A 60 s run is scored as an Autonomous Coding Skills Match.
+- **Toggles** (`toggle.ts`) use an idealized contact model.
+  - Part of the robot that is at least as tall as the Toggle's underside (about 11.2″) touches the strip that overhangs the field.
+  - Pressing into the Toggle rolls it outward one face; the robot must back off before the next press.
+  - If released between faces, the Toggle falls back to the nearest face.
+  - A touched Toggle is neutral.
+  - Robot-profile chassis boxes under about 11.2″ tall can't reach a Toggle. Step 2.4 adds bumper, roller and plate mechanisms, including inward rolls.
+- **Rule monitors** (`rules.ts`) report violations in Notes:
+  - SG1/SG2 size limits.
+  - SG7: crossing the Autonomous Line, or touching objects that start on the opposing side. The 28 line objects are shared.
+  - SG9: touching an opponent Goal.
+  - A violation gives the Autonomous Bonus to the opponent and voids the AWP.
+
 | Archetype | Simulator mechanisms |
 |---|---|
 | Flex | `lift: arm` + `claw` (motor) |

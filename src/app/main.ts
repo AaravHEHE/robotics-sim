@@ -17,6 +17,7 @@ import {
   deleteCustomRobot, download, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
   projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
+import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -171,6 +172,7 @@ function applyField() {
   state.recording = null;
   viewer.setRecording(null);
   viewer.setGameState(f.game?.id === 'override' ? initialState(f, layoutId()) : null);
+  renderScore(null, 0);
   $('start-pose').classList.remove('hidden');
   renderPresets();
   viewer.showPose(state.start);
@@ -462,6 +464,14 @@ function seek(t: number) {
       : rec.autonEnd !== null && state.t >= rec.autonEnd ? `autonomous() returned at ${fmtTime(rec.autonEnd - auton)}` : 'Autonomous';
   renderLcd(rec, state.t);
   renderConsole(rec, state.t);
+  renderScore(rec, state.t);
+}
+
+function renderScore(rec: Recording | null, t: number) {
+  const g = rec?.game ?? null;
+  const r = rec && g ? liveResult(field(), rec, g, t, robot().size) : null;
+  renderHud($('hud-score'), g, r);
+  renderScorePanel($('panel-score'), g, r, !!rec && t >= rec.stop - 1);
 }
 
 function setPlaying(on: boolean) {
