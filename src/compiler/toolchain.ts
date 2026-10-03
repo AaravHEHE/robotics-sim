@@ -52,18 +52,31 @@ export class Toolchain {
     let stderr = '';
     let memory: WebAssembly.Memory | null = null;
     const t0 = performance.now();
-    const M = await this.parts.factory({
-      noInitialRun: true,
-      print: (s: string) => { stdout += s + '\n'; },
-      printErr: (s: string) => { stderr += s + '\n'; },
-      instantiateWasm: (imports: WebAssembly.Imports, done: (i: WebAssembly.Instance) => void) => {
-        WebAssembly.instantiate(this.parts.module, imports).then((inst) => {
-          memory = (Object.values(inst.exports).find((e) => e instanceof WebAssembly.Memory) as WebAssembly.Memory) ?? null;
-          done(inst);
-        });
-        return {};
-      },
-    });
+    // Emscripten waits for done() forever: a failed instantiate (e.g. out of memory) must
+    // reject this call instead of hanging the compiler
+    let fail: (e: Error) => void = () => {};
+    const failed = new Promise<never>((_, reject) => (fail = reject));
+    const M = await Promise.race([
+      this.parts.factory({
+        noInitialRun: true,
+        print: (s: string) => { stdout += s + '\n'; },
+        printErr: (s: string) => { stderr += s + '\n'; },
+        instantiateWasm: (imports: WebAssembly.Imports, done: (i: WebAssembly.Instance) => void) => {
+          WebAssembly.instantiate(this.parts.module, imports).then(
+            (inst) => {
+              memory = (Object.values(inst.exports).find((e) => e instanceof WebAssembly.Memory) as WebAssembly.Memory) ?? null;
+              done(inst);
+            },
+            (e: unknown) => {
+              const msg = String((e as Error)?.message ?? e);
+              fail(new Error(/memory/i.test(msg) ? `The compiler ran out of memory (${msg}). Reload the page and try again.` : `The compiler could not start: ${msg}`));
+            },
+          );
+          return {};
+        },
+      }),
+      failed,
+    ]);
     const tInst = performance.now();
     const FS = M.FS;
     const made = new Set<string>();

@@ -44,10 +44,29 @@ export interface BuildOptions {
   onProgress?: (msg: string) => void;
 }
 
+/** Objects kept for unchanged files (oldest dropped first): enough for big projects' edit loops. */
+const OBJECT_CACHE_SIZE = 200;
+
+/**
+ * A step failed without any file:line error clang/wasm-ld could be parsed for (a crash,
+ * out of memory, a driver error): show the end of its output instead of "0 errors".
+ */
+function explain(diagnostics: Diagnostic[], what: string, stderr: string, code: number): void {
+  if (diagnostics.some((d) => d.severity === 'error')) return;
+  const lines = stderr.trim().split('\n').filter(Boolean);
+  const last = lines.at(-1) ?? `exit code ${code}`;
+  diagnostics.push({ severity: 'error', file: null, line: 0, column: 0, message: `${what} failed: ${last}`, detail: lines.slice(-20).join('\n') || `exit code ${code}` });
+}
+
 export class ProjectBuilder {
   private readonly tc: Toolchain;
   private readonly bundle: ShimBundle;
   private readonly cache = new Map<string, Uint8Array>();
+
+  private remember(key: string, obj: Uint8Array): void {
+    this.cache.set(key, obj);
+    while (this.cache.size > OBJECT_CACHE_SIZE) this.cache.delete(this.cache.keys().next().value!);
+  }
   private readonly mountedPch = new Set<PchVariant>();
   private readonly simulated: Set<string>;
   private readonly knownCApi: Set<string>;
@@ -116,6 +135,9 @@ export class ProjectBuilder {
       const objPath = '/obj/' + u.path.replace(/[^A-Za-z0-9]/g, '_') + '.o';
       const hit = this.cache.get(key);
       if (hit) {
+        // most recently used last (see remember)
+        this.cache.delete(key);
+        this.cache.set(key, hit);
         objects[objPath] = hit;
         steps.push({ step: `compile ${u.path}`, ms: 0, cached: true });
         continue;
@@ -125,8 +147,11 @@ export class ProjectBuilder {
       const r = await this.tc.run(['clang', ...args, '-c', src, '-o', objPath], { ...inputs, [src]: u.text }, [objPath]);
       steps.push({ step: `compile ${u.path}`, ms: r.ms.total });
       diagnostics.push(...parseDiagnostics(r.stderr));
-      if (r.code !== 0 || !r.files[objPath]) return fail();
-      this.cache.set(key, r.files[objPath]);
+      if (r.code !== 0 || !r.files[objPath]) {
+        explain(diagnostics, `Compiling ${u.path}`, r.stderr, r.code);
+        return fail();
+      }
+      this.remember(key, r.files[objPath]);
       objects[objPath] = r.files[objPath];
     }
 
@@ -143,7 +168,10 @@ export class ProjectBuilder {
     const l = await this.tc.run(linkArgs([...Object.keys(objects), ...Object.keys(shimObjects)], out), { ...objects, ...shimObjects }, [out]);
     steps.push({ step: 'link', ms: l.ms.total });
     diagnostics.push(...parseDiagnostics(l.stderr));
-    if (l.code !== 0 || !l.files[out]) return fail();
+    if (l.code !== 0 || !l.files[out]) {
+      explain(diagnostics, 'Linking', l.stderr, l.code);
+      return fail();
+    }
     const wasm = new Uint8Array(l.files[out]);
     const report = classifyImports(WebAssembly.Module.imports(await WebAssembly.compile(wasm)), this.simulated, this.knownCApi);
     for (const u of report.undefined) {

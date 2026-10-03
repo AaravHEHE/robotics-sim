@@ -11,7 +11,7 @@ import type { OverrideRecording } from '../games/override/game.ts';
 import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
 import { ManipulatorVisuals } from './manipulator-meshes.ts';
-import { drawTape, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
+import { drawTape, shared, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
 export type ViewMode = 'top' | 'orbit' | 'follow';
 export interface FieldPose {
@@ -21,6 +21,25 @@ export interface FieldPose {
 }
 
 const DEG = Math.PI / 180;
+
+/**
+ * Remove a group's children and free their GPU resources (geometries, materials,
+ * textures), except the ones shared by many meshes. Without this, each field, robot or
+ * replay change leaks GPU memory until WebGL gives up.
+ */
+function clearGroup(group: THREE.Object3D): void {
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry && !shared.has(m.geometry)) m.geometry.dispose();
+    const mats = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
+    for (const mat of mats) {
+      if (shared.has(mat)) continue;
+      for (const v of Object.values(mat)) if (v instanceof THREE.Texture) v.dispose();
+      mat.dispose();
+    }
+  });
+  group.clear();
+}
 const toThree = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, -y);
 
 interface MechVisual {
@@ -51,6 +70,7 @@ export class FieldViewer {
   private futureTrail: THREE.Line | null = null;
   private rec: Recording | null = null;
   private mechs: MechVisual[] = [];
+  private robotLoad = 0;
   /** Game manipulators and the pieces they hold. */
   private manipVis: ManipulatorVisuals | null = null;
   private lastGameState: OverrideState | null = null;
@@ -70,6 +90,9 @@ export class FieldViewer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
+    // the GPU can drop the context (driver reset, too many tabs): allow it to come back
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => (this.needsRender = true));
     this.camera = new THREE.PerspectiveCamera(40, 1, 1, 2000);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -156,8 +179,8 @@ export class FieldViewer {
 
   setField(field: FieldDef) {
     this.field = field;
-    this.fieldGroup.clear();
-    this.gameGroup.clear();
+    clearGroup(this.fieldGroup);
+    clearGroup(this.gameGroup);
     this.toggleRolls.clear();
     const inside = field.perimeter.inside;
     const half = inside / 2;
@@ -270,11 +293,17 @@ export class FieldViewer {
   // ---------------- robot ----------------
 
   async setRobot(profile: RobotProfile, glb?: ArrayBuffer) {
-    this.profile = profile;
-    this.robotGroup.clear();
-    this.ghost.clear();
-    this.mechs = [];
+    // two quick robot changes: only the last one may build the robot
+    const token = ++this.robotLoad;
     const body = glb ? await this.loadModel(profile, glb).catch(() => null) : null;
+    if (token !== this.robotLoad) {
+      if (body) clearGroup(body);
+      return;
+    }
+    this.profile = profile;
+    clearGroup(this.robotGroup);
+    clearGroup(this.ghost);
+    this.mechs = [];
     this.robotGroup.add(body ?? this.boxRobot(profile));
     this.manipVis = new ManipulatorVisuals(profile, this.robotGroup, !body);
     this.manipVis.setHeld(this.lastGameState);
@@ -419,7 +448,7 @@ export class FieldViewer {
     this.rec = rec;
     this.gameRec = rec?.game ?? null;
     this.shownSnapshot = -1;
-    this.overlay.clear();
+    clearGroup(this.overlay);
     this.trail = this.futureTrail = null;
     this.ghost.visible = false;
     if (!rec) return;

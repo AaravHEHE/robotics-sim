@@ -134,11 +134,14 @@ export class FloorPhysics {
   touchingRobot(id: string): boolean {
     const b = this.bodies.get(id);
     if (!b) return false;
+    // a narrow-phase pair also exists for overlapping bounding boxes: require a contact point
     let touching = false;
-    for (let i = 0; i < b.numColliders(); i++) {
-      this.world.contactPairsWith(b.collider(i), (other) => {
-        if (other.parent()?.handle === this.robot.handle) touching = true;
-      });
+    for (let i = 0; i < b.numColliders() && !touching; i++) {
+      for (let j = 0; j < this.robot.numColliders() && !touching; j++) {
+        this.world.contactPair(b.collider(i), this.robot.collider(j), (m) => {
+          for (let k = 0; k < m.numContacts(); k++) if (m.contactDist(k) <= 0.002) touching = true;
+        });
+      }
     }
     return touching;
   }

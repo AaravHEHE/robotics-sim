@@ -270,3 +270,23 @@ void autonomous() {
     expect(g.violations).toEqual([]);
   });
 });
+
+describe('robustness', () => {
+  it('an internal simulator error ends the run with a message and keeps what was recorded', async () => {
+    // a profile that skipped validation: a Toggle tool without its box
+    const r = await robot('tank-6m-450');
+    r.devices.push({ type: 'motor', port: 10, cartridge: 'blue' });
+    r.mechanisms = [{ kind: 'toggleTool', name: 'Bumper', tool: 'bumper', bottom: 11, top: 13 } as unknown as MechanismSpec];
+    const rec = await simulate(
+      prosProject(`#include "main.h"
+pros::Motor intake(10);
+void initialize() {}
+void autonomous() { intake.move(127); pros::delay(2000); }
+`),
+      'tank-6m-450',
+      { field: await field(), profile: r, start: { x: -60.705, y: -37, theta: 90 } },
+    );
+    expect(rec.error).toMatch(/internal error/);
+    expect(rec.frames.length).toBeGreaterThan(0);
+  });
+});

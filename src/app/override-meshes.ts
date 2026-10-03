@@ -10,12 +10,16 @@ const DEG = Math.PI / 180;
 const MM = 1 / 25.4;
 
 const PIN_COLORS: Record<string, number> = { red: 0xd8343a, blue: 0x2f6fde, yellow: 0xf2c418 };
+/** Geometries and materials reused by many meshes: never disposed with a scene part. */
+export const shared = new WeakSet<object>();
+
 const mats = new Map<string, THREE.Material>();
 function mat(key: string, make: () => THREE.Material): THREE.Material {
   let m = mats.get(key);
   if (!m) {
     m = make();
     mats.set(key, m);
+    shared.add(m);
   }
   return m;
 }
@@ -40,14 +44,18 @@ const pinHalfGeo = (() => {
     new THREE.Vector2(PIN.collarDiameter / 2, PIN.half + PIN.collar / 2),
     new THREE.Vector2(0, PIN.half + PIN.collar / 2),
   ];
-  return new THREE.LatheGeometry(pts, 6);
+  const geo = new THREE.LatheGeometry(pts, 6);
+  shared.add(geo);
+  return geo;
 })();
 
 /** One half of a cup (rim at y = 0, waist at y = CUP.height / 2). */
 const cupHalfGeo = (() => {
   const h = CUP.height / 2;
   const pts = [new THREE.Vector2(CUP.rimDiameter / 2, 0), new THREE.Vector2(CUP.rimDiameter / 2 - 0.08, 0.15), new THREE.Vector2(CUP.waistDiameter / 2, h)];
-  return new THREE.LatheGeometry(pts, 24);
+  const geo = new THREE.LatheGeometry(pts, 24);
+  shared.add(geo);
+  return geo;
 })();
 
 /** A pin standing upright; `colors` = [bottom, top]. Origin at the pin's bottom end. */

@@ -12,7 +12,7 @@ import type { Recording } from '../sim/recording.ts';
 import type { PlaceMode } from '../sim/runtime.ts';
 import type { SimRequest, SimResponse } from '../sim/worker.ts';
 import { jsonEditor, ProjectEditor } from './editor.ts';
-import { SAMPLES } from './samples-meta.ts';
+import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
   deleteCustomRobot, download, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
   projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
@@ -39,7 +39,24 @@ function sampleProject(id: string): Record<string, string> {
 
 // ---------------- state ----------------
 
+/** Everything a run depends on besides the code, frozen when Run is pressed. */
+interface RunSetup {
+  robot: RobotProfile;
+  field: FieldDef;
+  start: { x: number; y: number; theta: number };
+  autonMs: number;
+  place: PlaceMode;
+}
+
+const AUTON_LENGTHS = [15000, 60000];
+const DEFAULT_FIELD = 'generic-12ft';
+
 const state = {
+  /** Bumped whenever a setting a run depends on changes: results of older runs are stale. */
+  runSeq: 0,
+  /** The setup of the shown recording. */
+  setup: null as RunSetup | null,
+  booted: false,
   projectName: 'my-auton',
   binary: {} as Record<string, Uint8Array>,
   robots: [...PRESETS] as RobotProfile[],
@@ -115,15 +132,27 @@ function renderRobotSelect() {
 
 async function applyRobot() {
   const r = robot();
-  const glb = r.model ? await loadModel(r.model.assetId) : undefined;
-  await viewer.setRobot(r, glb);
+  try {
+    const glb = r.model ? await loadModel(r.model.assetId) : undefined;
+    await viewer.setRobot(r, glb);
+  } catch (e) {
+    // a broken model or profile must not take the app down: show the plain box robot
+    console.error(e);
+    setStatus(`Could not show “${r.name}”: ${(e as Error).message}`, 'err');
+    try {
+      await viewer.setRobot({ ...r, model: undefined, mechanisms: [] });
+    } catch {
+      /* nothing more to try */
+    }
+  }
   if (!state.recording) viewer.showPose(state.start);
   else viewer.showTime(state.t);
 }
 
 $<HTMLSelectElement>('robot-select').onchange = async (e) => {
   state.robotId = (e.target as HTMLSelectElement).value;
-  invalidateRun();
+  settingsChanged();
+  clearRecording();
   await applyRobot();
   persistSettings();
 };
@@ -135,7 +164,7 @@ function readStart() {
   const [x, y, t] = spInputs.map((i) => Number(i.value) || 0);
   const half = field().perimeter.inside / 2 - 6;
   state.start = { x: Math.max(-half, Math.min(half, x)), y: Math.max(-half, Math.min(half, y)), theta: t };
-  invalidateRun();
+  settingsChanged();
   viewer.showPose(state.start);
   persistSettings();
 }
@@ -160,7 +189,7 @@ function renderPresets() {
 function setStart(p: { x: number; y: number; theta: number }) {
   state.start = { x: p.x, y: p.y, theta: p.theta };
   [p.x, p.y, p.theta].forEach((v, i) => (spInputs[i].value = String(v)));
-  invalidateRun();
+  settingsChanged();
   viewer.showPose(state.start);
   persistSettings();
 }
@@ -168,9 +197,9 @@ function setStart(p: { x: number; y: number; theta: number }) {
 /** Show the selected field and its starting layout (before any run). */
 function applyField() {
   const f = field();
+  settingsChanged();
   viewer.setField(f);
-  state.recording = null;
-  viewer.setRecording(null);
+  clearRecording();
   viewer.setGameState(f.game?.id === 'override' ? initialState(f, layoutId()) : null);
   renderScore(null, 0);
   $('start-pose').classList.remove('hidden');
@@ -193,37 +222,96 @@ $<HTMLSelectElement>('sp-preset').onchange = (e) => {
 };
 $<HTMLSelectElement>('sp-place').onchange = (e) => {
   state.place = (e.target as HTMLSelectElement).value as PlaceMode;
-  invalidateRun();
+  settingsChanged();
   persistSettings();
 };
 $<HTMLSelectElement>('auton-length').onchange = (e) => {
   state.autonMs = Number((e.target as HTMLSelectElement).value);
-  invalidateRun();
   applyField();
+  // a start that is only legal in the other layout (e.g. Red 2 in Skills) moves to a legal one
+  const legal = (field().startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
+  const onPreset = (field().startPositions ?? []).find((p) => p.x === state.start.x && p.y === state.start.y);
+  if (onPreset && !legal.includes(onPreset) && legal[0]) setStart(legal[0]);
+  renderPresets();
   persistSettings();
 };
 
+/** The code changed: the shown run no longer matches it. */
 function invalidateRun() {
   state.dirtySinceRun = true;
 }
 
+/** A setting a run depends on changed: a run in progress is stale, so stop it. */
+function settingsChanged() {
+  state.dirtySinceRun = true;
+  if (state.running) cancelRun();
+}
+
+/** Forget the shown run (its robot, field or layout no longer match what's selected). */
+function clearRecording() {
+  setPlaying(false);
+  state.recording = null;
+  state.setup = null;
+  viewer.setRecording(null);
+  renderScore(null, 0);
+  $('start-pose').classList.remove('hidden');
+}
+
 // ---------------- compiler + simulator ----------------
 
-const compiler = new Worker(new URL('../compiler/worker.ts', import.meta.url), { type: 'module' });
+// The compiler worker lives as long as the page (the toolchain stays compiled in it).
+// If it crashes, can't load (e.g. the site was updated under an open tab) or goes quiet,
+// pending builds fail with a message and the next build gets a fresh worker.
+let compiler: Worker | null = null;
 let reqId = 0;
-const pending = new Map<number, { resolve: (r: BuildResult) => void; reject: (e: Error) => void }>();
-compiler.onmessage = (ev: MessageEvent<CompilerResponse>) => {
-  const m = ev.data;
-  if (m.type === 'progress') {
-    setStatus(m.message, '', m.total ? { loaded: m.loaded ?? 0, total: m.total } : undefined);
-    return;
+const pending = new Map<number, { resolve: (r: BuildResult) => void; reject: (e: Error) => void; timer: number }>();
+/** A build that sends nothing (no progress, no result) for this long is given up (ms). */
+const COMPILER_SILENCE_MS = 120_000;
+
+function compilerWorker(): Worker {
+  if (compiler) return compiler;
+  const w = new Worker(new URL('../compiler/worker.ts', import.meta.url), { type: 'module' });
+  w.onmessage = (ev: MessageEvent<CompilerResponse>) => {
+    const m = ev.data;
+    const p = pending.get(m.id);
+    if (p) {
+      clearTimeout(p.timer);
+      p.timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), COMPILER_SILENCE_MS);
+    }
+    if (m.type === 'progress') {
+      setStatus(m.message, '', m.total ? { loaded: m.loaded ?? 0, total: m.total } : undefined);
+      return;
+    }
+    if (!p) return;
+    clearTimeout(p.timer);
+    pending.delete(m.id);
+    if (m.type === 'result') p.resolve(m.result);
+    else {
+      // the worker's toolchain may be in a bad state (e.g. out of memory): start over next time
+      restartCompiler();
+      p.reject(new Error(m.message));
+    }
+  };
+  w.onerror = (e) => {
+    e.preventDefault();
+    restartCompiler(e.message ? `The compiler crashed: ${e.message}` : 'The compiler could not start. If the site was just updated, reload the page.');
+  };
+  w.onmessageerror = () => restartCompiler('The compiler sent a message that could not be read.');
+  return (compiler = w);
+}
+
+/** Throw the compiler worker away; pending builds fail with `message`. */
+function restartCompiler(message?: string) {
+  compiler?.terminate();
+  compiler = null;
+  if (!message) return;
+  for (const [id, p] of pending) {
+    clearTimeout(p.timer);
+    pending.delete(id);
+    p.reject(new Error(message));
   }
-  const p = pending.get(m.id);
-  if (!p) return;
-  pending.delete(m.id);
-  if (m.type === 'result') p.resolve(m.result);
-  else p.reject(new Error(m.message));
-};
+}
+
 const SIMULATED = simulatedEnvNames();
 
 function projectFiles(): Record<string, string | Uint8Array> {
@@ -233,44 +321,76 @@ function projectFiles(): Record<string, string | Uint8Array> {
 function compile(): Promise<BuildResult> {
   const id = ++reqId;
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    compiler.postMessage({ id, type: 'build', files: projectFiles(), simulated: SIMULATED, base: new URL('.', location.href).href } satisfies CompilerRequest);
+    const timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), COMPILER_SILENCE_MS);
+    pending.set(id, { resolve, reject, timer });
+    compilerWorker().postMessage({ id, type: 'build', files: projectFiles(), simulated: SIMULATED, base: new URL('.', location.href).href } satisfies CompilerRequest);
   });
 }
 
-function simulate(wasm: Uint8Array<ArrayBuffer>): Promise<Recording> {
-  // a fresh sandbox per run; terminated on completion or if it hangs
+class Cancelled extends Error {}
+
+/** The simulation sandbox of the run in progress. */
+let activeSim: { w: Worker; reject: (e: Error) => void } | null = null;
+
+/** Stop a run in progress: its result would no longer match the selected settings. */
+function cancelRun() {
+  state.runSeq++;
+  activeSim?.reject(new Cancelled());
+}
+
+function simulate(wasm: Uint8Array<ArrayBuffer>, setup: RunSetup): Promise<Recording> {
+  // a fresh sandbox per run; terminated on completion, cancellation, or if it hangs
   const w = new Worker(new URL('../sim/worker.ts', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      w.terminate();
-      reject(new Error('The program ran for over 45 s of real time without finishing. A loop that never calls pros::delay() can freeze the simulation.'));
-    }, 45_000);
-    w.onmessage = (ev: MessageEvent<SimResponse>) => {
+    let timer = 0;
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       w.terminate();
-      if (ev.data.type === 'result') resolve(ev.data.recording);
-      else reject(new Error(ev.data.message));
+      if (activeSim?.w === w) activeSim = null;
+      fn();
+    };
+    activeSim = { w, reject: (e) => finish(() => reject(e)) };
+    // the real-time budget starts once the sandbox has loaded; long Skills runs get more
+    const budgetMs = 30_000 + setup.autonMs;
+    timer = window.setTimeout(() => finish(() => reject(new Error('The simulation sandbox did not start. If the site was just updated, reload the page.'))), 30_000);
+    w.onmessage = (ev: MessageEvent<SimResponse>) => {
+      const m = ev.data;
+      if (m.type === 'ready') {
+        clearTimeout(timer);
+        timer = window.setTimeout(
+          () => finish(() => reject(new Error(`The program ran for over ${budgetMs / 1000} s of real time without finishing. A loop that never calls pros::delay() can freeze the simulation.`))),
+          budgetMs,
+        );
+        const req: SimRequest = {
+          wasm,
+          options: { profile: setup.robot, field: setup.field, start: setup.start, autonMs: setup.autonMs, placeAtSetPose: setup.place, wallLimitMs: budgetMs - 5000 },
+        };
+        w.postMessage(req, [wasm.buffer]);
+        return;
+      }
+      if (m.type === 'result') finish(() => resolve(m.recording));
+      else finish(() => reject(new Error(m.message)));
     };
     w.onerror = (e) => {
-      clearTimeout(timer);
-      w.terminate();
-      reject(new Error(e.message || 'The simulation worker crashed.'));
+      e.preventDefault();
+      finish(() => reject(new Error(e.message ? `The simulation crashed: ${e.message}` : 'The simulation sandbox could not load. If the site was just updated, reload the page.')));
     };
-    const req: SimRequest = {
-      wasm,
-      options: { profile: robot(), field: field(), start: state.start, autonMs: state.autonMs, placeAtSetPose: state.place },
-    };
-    w.postMessage(req, [wasm.buffer]);
   });
 }
 
 async function run() {
-  if (state.running) return;
+  if (state.running || !state.booted) return;
   if (typeof (WebAssembly as unknown as { Suspending?: unknown }).Suspending !== 'function') {
     setStatus('This browser is too old to run programs (needs WebAssembly JSPI: Chrome 137+, Firefox 153+, Safari 27+).', 'err');
     return;
   }
+  // everything the run depends on is frozen now; changing a setting cancels it
+  const seq = ++state.runSeq;
+  const setup: RunSetup = { robot: robot(), field: field(), start: { ...state.start }, autonMs: state.autonMs, place: state.place };
+  const stale = () => seq !== state.runSeq;
   state.running = true;
   setPlaying(false);
   $<HTMLButtonElement>('btn-run').disabled = true;
@@ -278,17 +398,19 @@ async function run() {
   const t0 = performance.now();
   try {
     const b = await compile();
+    if (stale()) throw new Cancelled();
     renderProblems(b);
     if (!b.ok || !b.wasm) {
       const n = b.diagnostics.filter((d) => d.severity === 'error').length + b.notes.filter((n) => n.level === 'error').length;
-      setStatus(`Build failed with ${n} error${n === 1 ? '' : 's'}.`, 'err');
+      setStatus(n ? `Build failed with ${n} error${n === 1 ? '' : 's'}.` : 'Build failed (see Problems).', 'err');
       showTab('problems');
       return;
     }
     const compileMs = performance.now() - t0;
     setStatus('Running…');
-    const rec = await simulate(b.wasm);
-    loadRecording(rec);
+    const rec = await simulate(b.wasm, setup);
+    if (stale()) throw new Cancelled();
+    loadRecording(rec, setup);
     const warnings = rec.events.filter((e) => e.level !== 'info').length;
     if (rec.error) {
       setStatus(rec.error, 'err');
@@ -304,7 +426,11 @@ async function run() {
     state.dirtySinceRun = false;
     setPlaying(true);
   } catch (e) {
-    setStatus((e as Error).message, 'err');
+    if (e instanceof Cancelled) setStatus('Run cancelled: the robot, field or start changed. Press Run again.');
+    else {
+      console.error(e);
+      setStatus((e as Error).message, 'err');
+    }
   } finally {
     state.running = false;
     $<HTMLButtonElement>('btn-run').disabled = false;
@@ -394,18 +520,23 @@ function renderEvents(rec: Recording) {
   );
 }
 
+/** Console rows shown (a program printing in a tight loop must not freeze the page). */
+const CONSOLE_ROWS = 2000;
+/** Number of console rows currently shown as "already printed" (rows are in time order). */
+let consolePast = 0;
 function renderConsole(rec: Recording, t: number) {
   const panel = $('panel-console');
   if (!rec.console.length) {
-    panel.innerHTML = '<p class="empty">No console output.</p>';
+    if (!panel.querySelector('.empty')) panel.innerHTML = '<p class="empty">No console output.</p>';
     return;
   }
   const base = rec.autonStart ?? 0;
-  if (panel.childElementCount !== rec.console.length) {
+  const lines = rec.console.slice(0, CONSOLE_ROWS);
+  if (panel.dataset.rows !== String(lines.length) || panel.dataset.rec !== String(rec.stop) + ':' + rec.console.length) {
     panel.replaceChildren(
-      ...rec.console.map((c) => {
+      ...lines.map((c) => {
         const row = document.createElement('div');
-        row.className = 'console-line';
+        row.className = 'console-line future';
         const ts = document.createElement('span');
         ts.className = 't';
         ts.textContent = c.t < base ? 'init' : fmtTime(c.t - base);
@@ -415,8 +546,26 @@ function renderConsole(rec: Recording, t: number) {
         return row;
       }),
     );
+    if (rec.console.length > CONSOLE_ROWS) {
+      const more = document.createElement('p');
+      more.className = 'empty';
+      more.textContent = `… and ${rec.console.length - CONSOLE_ROWS} more lines (only the first ${CONSOLE_ROWS} are shown).`;
+      panel.append(more);
+    }
+    panel.dataset.rows = String(lines.length);
+    panel.dataset.rec = String(rec.stop) + ':' + rec.console.length;
+    consolePast = 0;
   }
-  rec.console.forEach((c, i) => (panel.children[i] as HTMLElement).classList.toggle('future', c.t > t));
+  // rows printed by time t: binary search, then only flip the rows that changed
+  let lo = 0;
+  let hi = lines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].t <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = Math.min(lo, consolePast); i < Math.max(lo, consolePast); i++) (panel.children[i] as HTMLElement).classList.toggle('future', i >= lo);
+  consolePast = lo;
 }
 
 function renderLcd(rec: Recording, t: number) {
@@ -433,8 +582,10 @@ function renderLcd(rec: Recording, t: number) {
 const scrub = $<HTMLInputElement>('scrub');
 const playBtn = $<HTMLButtonElement>('btn-play');
 
-function loadRecording(rec: Recording) {
+function loadRecording(rec: Recording, setup: RunSetup) {
   state.recording = rec;
+  state.setup = setup;
+  scoreCache = null;
   viewer.setRecording(rec);
   const start = rec.autonStart ?? 0;
   scrub.min = String(start);
@@ -442,6 +593,7 @@ function loadRecording(rec: Recording) {
   $('start-pose').classList.add('hidden');
   renderEvents(rec);
   $('panel-console').replaceChildren();
+  delete $('panel-console').dataset.rows; // rebuild the rows for this run
   seek(start);
 }
 
@@ -460,18 +612,26 @@ function seek(t: number) {
   $('timer-sub').textContent = rec.autonStart === null
     ? 'initialize() never returned'
     : atStop
-      ? rec.error ? 'Stopped: error' : `Auto-stop at ${state.autonMs / 1000} s`
+      ? rec.error ? 'Stopped: error' : `Auto-stop at ${(state.setup?.autonMs ?? state.autonMs) / 1000} s`
       : rec.autonEnd !== null && state.t >= rec.autonEnd ? `autonomous() returned at ${fmtTime(rec.autonEnd - auton)}` : 'Autonomous';
   renderLcd(rec, state.t);
   renderConsole(rec, state.t);
   renderScore(rec, state.t);
 }
 
+/** Scoring a replayed moment clones and scores the whole state: do it ~10 times a second. */
+let scoreCache: { rec: Recording; bucket: number } | null = null;
 function renderScore(rec: Recording | null, t: number) {
   const g = rec?.game ?? null;
-  const r = rec && g ? liveResult(field(), rec, g, t, robot().size) : null;
+  const setup = state.setup;
+  const atEnd = !!rec && t >= rec.stop - 1;
+  const bucket = atEnd ? -1 : Math.floor(t / 100);
+  if (rec && scoreCache?.rec === rec && scoreCache.bucket === bucket) return;
+  scoreCache = rec ? { rec, bucket } : null;
+  // the run's own field and robot, not whatever is selected now
+  const r = rec && g && setup ? liveResult(setup.field, rec, g, t, setup.robot.size) : null;
   renderHud($('hud-score'), g, r);
-  renderScorePanel($('panel-score'), g, r, !!rec && t >= rec.stop - 1);
+  renderScorePanel($('panel-score'), g, r, atEnd);
 }
 
 function setPlaying(on: boolean) {
@@ -483,13 +643,19 @@ function setPlaying(on: boolean) {
 
 let lastFrame = performance.now();
 function tick(now: number) {
+  // schedule first: one bad frame must not stop playback for good
+  requestAnimationFrame(tick);
   const dt = now - lastFrame;
   lastFrame = now;
-  if (state.playing && state.recording) {
+  if (!state.playing || !state.recording) return;
+  try {
     seek(state.t + dt * state.speed);
     if (state.t >= state.recording.stop - 1) setPlaying(false);
+  } catch (e) {
+    console.error(e);
+    setPlaying(false);
+    setStatus('Playback stopped: ' + (e as Error).message, 'err');
   }
-  requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 
@@ -587,6 +753,26 @@ function commonRoot(paths: string[]): string {
 
 $('btn-export').onclick = () => download(`${state.projectName || 'project'}.zip`, projectToZip(editor.files(), state.binary), 'application/zip');
 
+/**
+ * Open a sample with everything it was written for: its robot, its field (the empty field
+ * unless it names a game field), start position and auto-stop.
+ */
+async function openSample(s: SampleMeta) {
+  settingsChanged();
+  state.robotId = state.robots.some((r) => r.id === s.robot) ? s.robot : PRESETS[0].id;
+  renderRobotSelect();
+  state.fieldId = s.field && FIELDS.some((f) => f.id === s.field) ? s.field : DEFAULT_FIELD;
+  state.autonMs = s.autonMs ?? 15000;
+  renderFieldSelect();
+  $<HTMLSelectElement>('auton-length').value = String(state.autonMs);
+  const starts = (field().startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
+  const start = starts.find((p) => p.id === s.start) ?? starts[0];
+  setStart(start ?? { x: 0, y: 0, theta: 0 });
+  await applyRobot();
+  loadFiles(s.id, sampleProject(s.id));
+  persistSettings();
+}
+
 // samples dialog
 $('btn-samples').onclick = () => {
   const list = $('sample-list');
@@ -600,19 +786,7 @@ $('btn-samples').onclick = () => {
       b.querySelector('span')!.textContent = `${s.description} Robot: ${PRESETS.find((p) => p.id === s.robot)?.name ?? s.robot}.`;
       b.onclick = async () => {
         $<HTMLDialogElement>('dlg-samples').close();
-        state.robotId = s.robot;
-        renderRobotSelect();
-        // a sample written for a field, start position and auto-stop opens with them
-        if (s.field && FIELDS.some((f) => f.id === s.field)) state.fieldId = s.field;
-        if (s.autonMs) state.autonMs = s.autonMs;
-        renderFieldSelect();
-        $<HTMLSelectElement>('auton-length').value = String(state.autonMs);
-        const starts = (field().startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
-        const start = starts.find((p) => p.id === s.start) ?? starts[0];
-        setStart(start ?? { x: 0, y: 0, theta: 0 });
-        await applyRobot();
-        loadFiles(s.id, sampleProject(s.id));
-        persistSettings();
+        await openSample(s);
         setStatus(`Opened “${s.name}”. Press Run.`);
       };
       return b;
@@ -742,16 +916,38 @@ function persistSettings() {
   void safe(idb.put('settings', 'app', { robotId: state.robotId, fieldId: state.fieldId, autonMs: state.autonMs, start: state.start, place: state.place }), undefined);
 }
 
+/** Saved robots that no longer validate (e.g. made with an older version) are skipped, not fatal. */
+async function loadRobots(): Promise<string[]> {
+  const custom = await safe(listCustomRobots(), []);
+  const ok: RobotProfile[] = [];
+  const skipped: string[] = [];
+  for (const r of custom) {
+    let errs: string[];
+    try {
+      errs = validateProfile(r);
+    } catch (e) {
+      errs = [(e as Error).message];
+    }
+    if (errs.length) skipped.push(r?.name ?? r?.id ?? 'a robot');
+    else ok.push(r);
+  }
+  state.robots = [...PRESETS, ...ok];
+  return skipped;
+}
+
 async function boot() {
   $<HTMLButtonElement>('btn-run').disabled = true; // until the project is loaded
-  state.robots = [...PRESETS, ...(await listCustomRobots())];
+  const skipped = await loadRobots();
   const settings = await safe(idb.get<{ robotId: string; fieldId?: string; autonMs: number; start: typeof state.start; place: PlaceMode }>('settings', 'app'), undefined);
+  // restore only what still makes sense: a robot that exists, a field, a valid auto-stop
   if (settings) {
     if (state.robots.some((r) => r.id === settings.robotId)) state.robotId = settings.robotId;
     if (settings.fieldId && FIELDS.some((f) => f.id === settings.fieldId)) state.fieldId = settings.fieldId;
-    state.autonMs = settings.autonMs ?? 15000;
-    state.start = settings.start ?? state.start;
-    state.place = settings.place ?? 'auto';
+    state.autonMs = AUTON_LENGTHS.includes(settings.autonMs) ? settings.autonMs : 15000;
+    const st = settings.start;
+    const half = field().perimeter.inside / 2;
+    if (st && [st.x, st.y, st.theta].every(Number.isFinite) && Math.abs(st.x) < half && Math.abs(st.y) < half) state.start = { x: st.x, y: st.y, theta: st.theta };
+    state.place = (['auto', 'always', 'never'] as PlaceMode[]).includes(settings.place) ? settings.place : 'auto';
   }
   $<HTMLSelectElement>('auton-length').value = String(state.autonMs);
   $<HTMLSelectElement>('sp-place').value = state.place;
@@ -759,29 +955,31 @@ async function boot() {
   renderRobotSelect();
   renderFieldSelect();
   applyField();
-  if (!settings) {
-    const first = (field().startPositions ?? []).find((p) => p.layouts.includes(layoutId()));
-    if (first) setStart(first);
-  }
   await applyRobot();
 
-  const saved = await loadProject();
+  const saved = await safe(loadProject(), undefined);
   if (saved && Object.keys(saved.files).length) {
     const binary: Record<string, Uint8Array> = {};
     for (const [p, b] of Object.entries(saved.binary ?? {})) binary[p] = fromBase64(b);
     loadFiles(saved.name, saved.files, binary);
     setStatus('Restored your last project. Press Run (Ctrl+Enter).');
   } else {
-    const first = SAMPLES[0];
-    state.robotId = first.robot;
-    renderRobotSelect();
-    await applyRobot();
-    loadFiles(first.id, sampleProject(first.id));
+    // first visit: the plain PROS starter on the empty field
+    await openSample(SAMPLES[0]);
     setStatus('Welcome! This is a sample project: press Run to compile it in your browser. The first run downloads the compiler (~40 MB, cached afterwards).');
   }
+  if (skipped.length) setStatus(`Skipped saved robot${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')}: ${skipped.length > 1 ? 'they no longer match' : 'it no longer matches'} the robot format. Open it from an exported file to fix it.`, 'err');
 }
 
-void boot().finally(() => ($<HTMLButtonElement>('btn-run').disabled = false));
+void boot()
+  .catch((e) => {
+    console.error(e);
+    setStatus('Something went wrong while starting: ' + (e as Error).message + '. Reload the page to try again.', 'err');
+  })
+  .finally(() => {
+    state.booted = true;
+    $<HTMLButtonElement>('btn-run').disabled = false;
+  });
 
 // diagnostics type is re-exported for tooling
 export type { Diagnostic };

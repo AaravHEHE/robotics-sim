@@ -59,8 +59,26 @@ export interface SavedProject {
   robotId: string;
 }
 
-export const saveProject = (p: SavedProject) => safe(idb.put('projects', 'current', p), undefined);
-export const loadProject = () => safe(idb.get<SavedProject>('projects', 'current'), undefined);
+/**
+ * Each browser tab keeps its own project (two open tabs must not overwrite each other's
+ * code); a new tab starts from the project saved last in any tab.
+ */
+const tabKey = (() => {
+  try {
+    let id = sessionStorage.getItem('vexsim-tab');
+    if (!id) sessionStorage.setItem('vexsim-tab', (id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)));
+    return 'tab:' + id;
+  } catch {
+    return 'current';
+  }
+})();
+
+export const saveProject = async (p: SavedProject) => {
+  await safe(idb.put('projects', tabKey, p), undefined);
+  await safe(idb.put('projects', 'current', p), undefined);
+};
+export const loadProject = async () =>
+  (await safe(idb.get<SavedProject>('projects', tabKey), undefined)) ?? (await safe(idb.get<SavedProject>('projects', 'current'), undefined));
 
 const TEXT_EXT = /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inc|ipp|txt|md|json|pros|mk|csv)$|Makefile$/i;
 

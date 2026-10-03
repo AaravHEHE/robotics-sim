@@ -14,7 +14,7 @@ import { createProsApi } from './pros-api.ts';
 import type { MotionMarker, Recording, SimEvent } from './recording.ts';
 import { Scheduler, StuckError } from './scheduler.ts';
 import { OdomFrame, World, type Pose } from './world.ts';
-import { OverrideGame } from '../games/override/game.ts';
+import { OverrideGame, type OverrideRecording } from '../games/override/game.ts';
 
 export type PlaceMode = 'auto' | 'always' | 'never';
 
@@ -152,6 +152,11 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     },
     motion_start: (kind: number, ptr: number, n: number) => {
       const p = Array.from(new Float64Array(memory.buffer.slice(ptr, ptr + n * 8)));
+      // a target computed from uninitialised values (NaN/inf) would poison the pose
+      if (!p.every(Number.isFinite)) {
+        warn('motion-nan', 'A motion was given a target that is not a number (NaN or infinity), so it was skipped. Check the values passed to the motion.');
+        return;
+      }
       robotHasMoved = true;
       switch (kind) {
         case 1: { // moveToPoint x y timeout forwards max min early
@@ -236,6 +241,10 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     },
     motion_cancel: () => endMotion(),
     odom_set: (x: number, y: number, theta: number) => {
+      if (![x, y, theta].every(Number.isFinite)) {
+        warn('odom-nan', 'setPose() was given a value that is not a number (NaN or infinity), so it was ignored.');
+        return;
+      }
       const isOrigin = Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6;
       if (!placed && !robotHasMoved && (place === 'always' || (place === 'auto' && !isOrigin))) {
         const half = opts.field.perimeter.inside / 2;
@@ -441,9 +450,15 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
       error = `initialize() did not return within ${initLimit / 1000} s of simulated time, so autonomous never started.`;
       break;
     }
-    world.step(STEP_MS);
-    sched.now += STEP_MS;
-    game?.step(STEP_MS);
+    try {
+      world.step(STEP_MS);
+      sched.now += STEP_MS;
+      game?.step(STEP_MS);
+    } catch (e) {
+      // a simulator bug must not lose the whole run: stop here and keep what was recorded
+      error = `The simulation stopped at ${(sched.now / 1000).toFixed(2)} s because of an internal error (${String((e as Error)?.message ?? e)}). This is a simulator bug, not your code.`;
+      break;
+    }
     if (Math.abs(world.vL) + Math.abs(world.vR) > 1e-6) robotHasMoved = true;
     if (motion && motion.done) {
       if (marker && marker.t1 === null) marker.t1 = sched.now;
@@ -458,7 +473,12 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   for (const c of world.collisions) {
     events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : `Robot hit the ${c.wall} wall.` });
   }
-  const gameRec = game?.finish() ?? null;
+  let gameRec: OverrideRecording | null = null;
+  try {
+    gameRec = game?.finish() ?? null;
+  } catch (e) {
+    error ??= `Scoring the run failed (${String((e as Error)?.message ?? e)}). This is a simulator bug, not your code.`;
+  }
   for (const v of gameRec?.violations ?? []) events.push({ t: v.t, level: 'warning', message: `<${v.rule}> ${v.message}` });
   for (const n of gameRec?.notes ?? []) events.push({ t: 0, level: 'info', message: n });
   events.sort((a, b) => a.t - b.t);

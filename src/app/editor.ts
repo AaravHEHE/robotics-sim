@@ -121,17 +121,26 @@ export class ProjectEditor {
 
   setDiagnostics(diags: Diagnostic[]) {
     for (const [p, m] of this.models) {
+      // the file may have been edited while it compiled: keep markers on lines that exist
+      const last = m.getLineCount();
       const markers = diags
         .filter((d) => d.file === p && d.line > 0)
-        .map((d) => ({
-          severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : d.severity === 'warning' ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
-          message: d.message,
-          startLineNumber: d.line,
-          startColumn: d.column || 1,
-          endLineNumber: d.line,
-          endColumn: m.getLineMaxColumn(d.line),
-        }));
-      monaco.editor.setModelMarkers(m, 'clang', markers);
+        .map((d) => {
+          const line = Math.min(d.line, last);
+          return {
+            severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : d.severity === 'warning' ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
+            message: d.message,
+            startLineNumber: line,
+            startColumn: d.column || 1,
+            endLineNumber: line,
+            endColumn: m.getLineMaxColumn(line),
+          };
+        });
+      try {
+        monaco.editor.setModelMarkers(m, 'clang', markers);
+      } catch {
+        // markers are cosmetic; the Problems panel still lists everything
+      }
     }
     this.renderTabs(diags);
   }

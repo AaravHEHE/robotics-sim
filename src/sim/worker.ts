@@ -7,9 +7,12 @@ import type { Recording } from './recording.ts';
 import { runProgram, type RunOptions } from './runtime.ts';
 
 export type SimRequest = { wasm: Uint8Array<ArrayBuffer>; options: RunOptions };
-export type SimResponse = { type: 'result'; recording: Recording } | { type: 'error'; message: string };
+export type SimResponse = { type: 'ready' } | { type: 'result'; recording: Recording } | { type: 'error'; message: string };
 
 declare const self: DedicatedWorkerGlobalScope;
+
+// loaded: the main thread starts the run's real-time budget now, not while this script loads
+self.postMessage({ type: 'ready' } satisfies SimResponse);
 
 self.onmessage = async (ev: MessageEvent<SimRequest>) => {
   try {
