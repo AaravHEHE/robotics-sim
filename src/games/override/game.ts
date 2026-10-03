@@ -3,10 +3,12 @@
 
 import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
 import type { World } from '../../sim/world.ts';
+import type { Piece, PinColor } from './elements.ts';
+import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS } from './physics.ts';
 import { inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type Violation } from './rules.ts';
 import { autonomousBonus, awp, score, type AwpCheck, type Mode, type ScoreBreakdown } from './scoring.ts';
-import { initialState, type OverrideState } from './state.ts';
+import { initialState, type FloorStack, type OverrideState } from './state.ts';
 import { ToggleSim } from './toggle.ts';
 
 /** End-of-run scoring: what the referee would record when the run stops. */
@@ -33,12 +35,14 @@ export interface OverrideRecording {
   /** Object or toggle id -> flat [t, x, y, heading, ...] samples (toggles: [t, angle, touched, 0]). */
   tracks: Record<string, number[]>;
   violations: Violation[];
+  /** Setup notes (e.g. where the Preload went). */
+  notes: string[];
   result: OverrideResult | null;
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-export class OverrideGame {
+export class OverrideGame implements GameOps {
   readonly field: FieldDef;
   readonly layout: string;
   readonly mode: Mode;
@@ -48,6 +52,9 @@ export class OverrideGame {
   private readonly world: World;
   private readonly physics: FloorPhysics;
   private readonly toggles: ToggleSim;
+  readonly manipulators: Manipulators;
+  private dirty = false;
+  private dropCount = 0;
   /** Objects on the opponent's side of the Autonomous Line at the start (SG7e). */
   private readonly opponentSide = new Set<string>();
   private clock = 0;
@@ -73,6 +80,15 @@ export class OverrideGame {
     this.physics = new FloorPhysics(field, world.profile.size, { x: world.pose.x, y: world.pose.y, heading: world.pose.theta });
     for (const s of this.state.floor) this.physics.addStack(s);
     for (const p of this.state.lying) this.physics.addLying(p);
+    // the drive team loads Pins and Cups alternately, so the robot can assemble combos
+    const loads = this.state.matchLoads.red;
+    if (loads) {
+      const pins = loads.filter((x) => x.kind === 'pin');
+      const cups = loads.filter((x) => x.kind === 'cup');
+      this.state.matchLoads.red = Array.from({ length: Math.max(pins.length, cups.length) }, (_, i) => [pins[i], cups[i]]).flat().filter((x): x is Piece => !!x);
+    }
+    this.notes = [];
+    this.manipulators = new Manipulators(this, world);
     this.rec = {
       id: 'override',
       layout,
@@ -81,6 +97,7 @@ export class OverrideGame {
       snapshots: [{ t: 0, state: clone(this.state) }],
       tracks: {},
       violations: this.rules.violations,
+      notes: this.notes,
       result: null,
     };
   }
@@ -98,15 +115,15 @@ export class OverrideGame {
   /** Advance by one simulator step (1 ms); physics runs every PHYSICS_DT_MS. */
   step(dtMs: number): void {
     this.clock += dtMs;
-    const fp = this.world.footprint();
-    this.toggles.step(dtMs, this.state.toggles, fp, this.world.profile.size.height);
-    this.rules.check(this.clock, fp);
+    this.toggles.step(dtMs, this.state.toggles, this.manipulators.contactShapes());
+    this.rules.check(this.clock, this.world.footprint());
     this.physicsClock += dtMs;
     while (this.physicsClock >= PHYSICS_DT_MS) {
       this.physicsClock -= PHYSICS_DT_MS;
       this.physics.setRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
       this.physics.step();
       this.syncFromPhysics();
+      this.manipulators.step(this.clock);
       for (const id of this.opponentSide) {
         if (!this.physics.touchingRobot(id)) continue;
         this.rules.add(this.clock, 'SG7', 'The robot touched a Scoring Object on the opposing side of the Autonomous Line.');
@@ -114,6 +131,48 @@ export class OverrideGame {
         break;
       }
     }
+    if (this.dirty) {
+      this.dirty = false;
+      this.snapshot(this.clock);
+    }
+  }
+
+  // ---------------- GameOps (used by the manipulators) ----------------
+
+  readonly notes: string[];
+
+  removeFloor(id: string): void {
+    this.physics.remove(id);
+    this.opponentSide.delete(id);
+  }
+
+  addFloor(pieces: Piece[], x: number, y: number): void {
+    const s: FloorStack = { id: `d${++this.dropCount}`, x, y, pieces };
+    this.state.floor.push(s);
+    this.physics.addStack(s, false);
+  }
+
+  addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): void {
+    const l = { id: `d${++this.dropCount}`, x, y, heading, colors };
+    this.state.lying.push(l);
+    this.physics.addLying(l, false);
+  }
+
+  rebuildFloor(stack: FloorStack): void {
+    this.physics.remove(stack.id);
+    this.physics.addStack(stack, false);
+  }
+
+  changed(): void {
+    this.dirty = true;
+  }
+
+  violation(rule: string, message: string): void {
+    this.rules.add(this.clock, rule, message);
+  }
+
+  note(message: string): void {
+    this.notes.push(message);
   }
 
   private syncFromPhysics(): void {

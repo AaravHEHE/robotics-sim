@@ -195,6 +195,11 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
   - SG9: touching an opponent Goal.
   - A violation gives the Autonomous Bonus to the opponent and voids the AWP.
 
+**Step 2.4 (manipulators)** adds the `lift`, `claw`, `intake`, `staging`, `wrist` and `toggleTool` profile mechanisms, documented in [robot-profile.md](robot-profile.md):
+- **Rules:** pickup, placement and drop rules; the Preload; and Skills Match Loads through the red Loaders.
+- **New monitors:** SG6 possession, SG9 adding to or removing from opponent Goals, and SG10 removing from neutral Goals.
+- **First preset:** `override-fourbar-claw`, the 4-bar workhorse with a Toggle bumper.
+
 | Archetype | Simulator mechanisms |
 |---|---|
 | Flex | `lift: arm` + `claw` (motor) |

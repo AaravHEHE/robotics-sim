@@ -38,6 +38,12 @@ export interface OverrideState {
   toggles: ToggleState[];
   /** Match loads still off the field, per alliance. */
   matchLoads: Partial<Record<'red' | 'blue', Piece[]>>;
+  /** Loader id -> pieces in its chute, bottom first (the bottom one can be taken). */
+  loaders: Record<string, Piece[]>;
+  /** Robot mechanism name (claw, staging, intake) -> pieces it holds, bottom first. */
+  held: Record<string, Piece[]>;
+  /** Claw name -> height of its grip point above the bottom of what it holds. */
+  grip: Record<string, number>;
 }
 
 let counter = 0;
@@ -58,6 +64,9 @@ export function initialState(field: FieldDef, layoutId: string): OverrideState {
     goals: Object.fromEntries((field.goals ?? []).map((g) => [g.id, [] as Piece[]])),
     toggles: (field.toggles ?? []).map((t) => ({ id: t.id, angle: 0, touched: false })),
     matchLoads: {},
+    loaders: Object.fromEntries((field.loaders ?? []).map((l) => [l.id, [] as Piece[]])),
+    held: {},
+    grip: {},
   };
   if (!layout) return state;
   for (const it of layout.items) {
@@ -84,5 +93,7 @@ export function inventory(state: OverrideState): { cups: number; pins: Record<st
   for (const l of state.lying) addPin(l.colors);
   for (const ps of Object.values(state.goals)) ps.forEach(visit);
   for (const ps of Object.values(state.matchLoads)) ps?.forEach(visit);
+  for (const ps of Object.values(state.loaders)) ps.forEach(visit);
+  for (const ps of Object.values(state.held)) ps.forEach(visit);
   return { cups, pins };
 }

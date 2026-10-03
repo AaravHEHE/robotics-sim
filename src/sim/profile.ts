@@ -23,20 +23,150 @@ export type DeviceSpec =
   | { type: 'optical' | 'gps' | 'vision' | 'ai_vision'; port: number; name?: string }
   | { type: 'adi_digital_out' | 'adi_digital_in'; port: string; name?: string };
 
+/**
+ * How a mechanism is driven: by motors (output angle = motor angle × ratio, optional
+ * hard stops) or by a solenoid on an ADI port (0 = retracted, 1 = extended).
+ */
+export interface MechanismDrive {
+  /** Motor ports driving it (unsigned). */
+  motors?: number[];
+  /** Output revolutions per motor revolution. */
+  ratio?: number;
+  /** Travel limits (hard stops), degrees of output rotation. */
+  range?: [number, number];
+  /** Solenoid port letter. */
+  adi?: string;
+  /** Named node in the GLB model that this mechanism animates. */
+  node?: string;
+}
+
+/** A robot-frame point: +x right, +y forward, z up from the tiles (inches). */
+export interface RobotPoint {
+  x?: number;
+  y: number;
+  z: number;
+}
+
+/** A robot-frame rectangle on the floor plan: center (x right, y forward) and size. */
+export interface RobotRect {
+  x: number;
+  y: number;
+  width: number;
+  length: number;
+}
+
+export type LiftType = 'arm' | 'fourbar' | 'sixbar' | 'dr4b' | 'cascade' | 'piston';
+
+/** A lift. Its end effector sits at `home` when the lift's output is 0. */
+export interface LiftSpec extends MechanismDrive {
+  kind: 'lift';
+  name: string;
+  lift: LiftType;
+  home: RobotPoint;
+  /** Bar length (arm, fourbar, sixbar, dr4b), inches. */
+  length?: number;
+  /** Bar angle above horizontal at output 0 (arm, fourbar, sixbar, dr4b), degrees. */
+  startAngle?: number;
+  /** Spool diameter (cascade), inches. */
+  spoolDiameter?: number;
+  /** Stages moving with the carriage (cascade; default 1). */
+  stages?: number;
+  /** Rise when extended (piston), inches. */
+  travel?: number;
+}
+
+/** What a claw / intake / staging area can hold at once. */
+export interface Capacity {
+  pins: number;
+  cups: number;
+}
+
+export type PreloadOrientation = 'alliance-down' | 'yellow-down';
+
+export interface ClawSpec extends MechanismDrive {
+  kind: 'claw';
+  name: string;
+  /** The lift it rides on; without one it sits fixed at `at`. */
+  lift?: string;
+  at?: RobotPoint;
+  /**
+   * piston: closed while the solenoid is extended (or retracted, see closedWhen);
+   * motor: closed at or past `closedAt` degrees; roller: grabs while spinning inward.
+   */
+  grip: 'piston' | 'motor' | 'roller';
+  closedWhen?: 'extended' | 'retracted';
+  closedAt?: number;
+  /** Sign of the output speed that pulls objects in (roller grip, default 1). */
+  inward?: 1 | -1;
+  /** Horizontal capture radius around the effector (default 2 in). */
+  reach?: number;
+  capacity?: Capacity;
+  /** Start the Match holding the Preload Pin. */
+  preload?: PreloadOrientation;
+}
+
+export interface IntakeSpec extends MechanismDrive {
+  kind: 'intake';
+  name: string;
+  /** Capture area on the floor, robot frame. */
+  zone: RobotRect;
+  /** Where acquired pieces go (a claw or staging area); omitted = they stay in the intake. */
+  into?: string;
+  accepts?: { pins?: boolean; cups?: boolean; lying?: boolean };
+  inward?: 1 | -1;
+  /** Time from pickup to arrival at `into` (default 300 ms). */
+  transferMs?: number;
+  capacity?: Capacity;
+  preload?: PreloadOrientation;
+}
+
+/** A passive holder where an intake assembles a Pin + Cup combo for a claw to grab. */
+export interface StagingSpec extends MechanismDrive {
+  kind: 'staging';
+  name: string;
+  at: RobotPoint;
+  capacity?: Capacity;
+  preload?: PreloadOrientation;
+}
+
+/** Flips what a claw holds end over end (motor output past 90°, or solenoid extended). */
+export interface WristSpec extends MechanismDrive {
+  kind: 'wrist';
+  name: string;
+  claw: string;
+}
+
+/**
+ * Something that reaches a perimeter Toggle: a fixed bumper, a solenoid plate (active
+ * while extended) or a spinning roller.
+ */
+export interface ToggleToolSpec extends MechanismDrive {
+  kind: 'toggleTool';
+  name: string;
+  tool: 'bumper' | 'plate' | 'roller';
+  /** Footprint, robot frame (the plate's extended position). */
+  box: RobotRect;
+  /** Height range it covers above the tiles. */
+  bottom: number;
+  top: number;
+  /** Sign of the roller's output speed that rolls the Toggle's top into the field (default 1). */
+  inward?: 1 | -1;
+}
+
 export type MechanismSpec =
-  | {
-      kind: 'roller' | 'arm' | 'flywheel';
-      name: string;
-      /** Motor ports driving it (unsigned). */
-      motors: number[];
-      /** Output revolutions per motor revolution. */
-      ratio: number;
-      /** Optional travel limits for arms, degrees of output rotation. */
-      range?: [number, number];
-      /** Named node in the GLB model that this mechanism animates. */
-      node?: string;
-    }
-  | { kind: 'piston'; name: string; adi: string; node?: string; travel?: number };
+  | (MechanismDrive & { kind: 'roller' | 'arm' | 'flywheel'; name: string; motors: number[]; ratio: number })
+  | (MechanismDrive & { kind: 'piston'; name: string; adi: string; travel?: number })
+  | LiftSpec
+  | ClawSpec
+  | IntakeSpec
+  | StagingSpec
+  | WristSpec
+  | ToggleToolSpec;
+
+/** Is the mechanism driven by a solenoid (state 0/1) rather than motors (angle)? */
+export const isPneumatic = (m: MechanismSpec): boolean => typeof m.adi === 'string' && m.adi.length > 0;
+/** Is it driven by motors? */
+export const isMotorized = (m: MechanismSpec): boolean => Array.isArray(m.motors) && m.motors.length > 0;
 
 export interface RobotProfile {
   schema: 1;
@@ -128,13 +258,93 @@ export function validateProfile(p: unknown): string[] {
       claim(String(dev.port), dev.name ?? dev.type);
     }
   }
-  for (const m of r.mechanisms) {
+  e.push(...validateMechanisms(r.mechanisms));
+  return e;
+}
+
+const KINDS = ['roller', 'arm', 'flywheel', 'piston', 'lift', 'claw', 'intake', 'staging', 'wrist', 'toggleTool'];
+const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'piston'];
+const isPoint = (p: RobotPoint | undefined) => !!p && isNum(p.y, -40, 40) && isNum(p.z, -5, 80) && (p.x === undefined || isNum(p.x, -40, 40));
+const isRect = (r: RobotRect | undefined) => !!r && isNum(r.x, -40, 40) && isNum(r.y, -40, 40) && isNum(r.width, 0.1, 40) && isNum(r.length, 0.1, 40);
+
+function validateMechanisms(mechs: MechanismSpec[]): string[] {
+  const e: string[] = [];
+  const names = new Map(mechs.map((m) => [m.name, m]));
+  if (names.size !== mechs.length) e.push('Mechanism names must be unique.');
+  const drive = (m: MechanismSpec, need: 'motors' | 'adi' | 'either' | 'none') => {
+    const hasM = isMotorized(m);
+    const hasA = m.adi !== undefined;
+    if (hasA && !/^[A-Ha-h]$/.test(String(m.adi))) e.push(`Mechanism ${m.name}: adi must be a letter A-H.`);
+    if (hasM && !isNum(m.ratio, 1e-4, 1e4)) e.push(`Mechanism ${m.name}: needs motors and a positive ratio.`);
+    if (hasM && hasA) e.push(`Mechanism ${m.name}: use either motors or adi, not both.`);
+    if (need === 'motors' && !(hasM && isNum(m.ratio, 1e-4, 1e4))) e.push(`Mechanism ${m.name}: needs motors and a positive ratio.`);
+    if (need === 'adi' && !hasA) e.push(`Mechanism ${m.name}: needs an adi port.`);
+    if (need === 'either' && !hasM && !hasA) e.push(`Mechanism ${m.name}: needs motors (with a ratio) or an adi port.`);
+  };
+  const ref = (m: MechanismSpec, target: string | undefined, kinds: string[], what: string) => {
+    if (target === undefined) return;
+    const t = names.get(target);
+    if (!t || !kinds.includes(t.kind)) e.push(`Mechanism ${m.name}: ${what} "${target}" must name a ${kinds.join(' or ')} mechanism.`);
+  };
+  const cap = (m: { name: string; capacity?: Capacity }) => {
+    if (m.capacity && !(isNum(m.capacity.pins, 0, 10) && isNum(m.capacity.cups, 0, 10))) e.push(`Mechanism ${m.name}: capacity needs pins and cups counts.`);
+  };
+  let preloads = 0;
+  for (const m of mechs) {
     if (!m.name) e.push('Every mechanism needs a name.');
-    if (m.kind === 'piston') {
-      if (!/^[A-Ha-h]$/.test(m.adi)) e.push(`Mechanism ${m.name}: adi must be a letter A-H.`);
-    } else if (!Array.isArray(m.motors) || !m.motors.length || !isNum(m.ratio, 1e-4, 1e4)) {
-      e.push(`Mechanism ${m.name}: needs motors and a positive ratio.`);
+    if (!KINDS.includes(m.kind)) {
+      e.push(`Mechanism ${m.name}: unknown kind "${m.kind as string}".`);
+      continue;
     }
+    switch (m.kind) {
+      case 'piston':
+        drive(m, 'adi');
+        break;
+      case 'roller':
+      case 'arm':
+      case 'flywheel':
+        drive(m, 'motors');
+        break;
+      case 'lift':
+        if (!LIFTS.includes(m.lift)) e.push(`Lift ${m.name}: lift must be one of ${LIFTS.join(', ')}.`);
+        drive(m, m.lift === 'piston' ? 'adi' : 'motors');
+        if (!isPoint(m.home)) e.push(`Lift ${m.name}: home {y, z} is required (inches).`);
+        if (['arm', 'fourbar', 'sixbar', 'dr4b'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
+        if (m.lift === 'cascade' && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
+        if (m.lift === 'piston' && !isNum(m.travel, 0.1, 60)) e.push(`Lift ${m.name}: travel is required.`);
+        break;
+      case 'claw':
+        if (!['piston', 'motor', 'roller'].includes(m.grip)) e.push(`Claw ${m.name}: grip must be piston, motor or roller.`);
+        drive(m, m.grip === 'piston' ? 'adi' : 'motors');
+        if (m.grip === 'motor' && !isNum(m.closedAt)) e.push(`Claw ${m.name}: closedAt (degrees) is required for a motor claw.`);
+        ref(m, m.lift, ['lift'], 'lift');
+        if (!m.lift && !isPoint(m.at)) e.push(`Claw ${m.name}: needs a lift or a fixed position at {y, z}.`);
+        cap(m);
+        break;
+      case 'intake':
+        drive(m, 'motors');
+        if (!isRect(m.zone)) e.push(`Intake ${m.name}: zone {x, y, width, length} is required.`);
+        ref(m, m.into, ['claw', 'staging'], 'into');
+        cap(m);
+        break;
+      case 'staging':
+        drive(m, 'none');
+        if (!isPoint(m.at)) e.push(`Staging ${m.name}: at {y, z} is required.`);
+        cap(m);
+        break;
+      case 'wrist':
+        drive(m, 'either');
+        ref(m, m.claw, ['claw'], 'claw');
+        break;
+      case 'toggleTool':
+        if (!['bumper', 'plate', 'roller'].includes(m.tool)) e.push(`Toggle tool ${m.name}: tool must be bumper, plate or roller.`);
+        drive(m, m.tool === 'plate' ? 'adi' : m.tool === 'roller' ? 'motors' : 'none');
+        if (!isRect(m.box)) e.push(`Toggle tool ${m.name}: box {x, y, width, length} is required.`);
+        if (!isNum(m.bottom, 0, 80) || !isNum(m.top, 0, 80) || m.top <= m.bottom) e.push(`Toggle tool ${m.name}: needs bottom < top heights.`);
+        break;
+    }
+    if ('preload' in m && m.preload) preloads++;
   }
+  if (preloads > 1) e.push('Only one mechanism can hold the Preload.');
   return e;
 }

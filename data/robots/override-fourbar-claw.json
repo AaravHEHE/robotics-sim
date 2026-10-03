@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "override-fourbar-claw",
+  "name": "Override: 4-bar + piston claw + Toggle bumper",
+  "description": "The common Override \"workhorse\": a 6-motor 450 rpm drive, a green-motor 4-bar (port 7, 1:5) carrying a pneumatic claw (ADI A, closed when extended) that starts holding the Preload, and a passive front bumper at Toggle height that rolls a Toggle one face per press.",
+  "size": { "width": 15, "length": 15, "height": 11 },
+  "mass": 15,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    { "type": "imu", "port": 11, "name": "IMU" },
+    { "type": "motor", "port": 7, "cartridge": "green", "name": "Lift" },
+    { "type": "adi_digital_out", "port": "A", "name": "Claw" }
+  ],
+  "mechanisms": [
+    {
+      "kind": "lift",
+      "name": "Lift",
+      "lift": "fourbar",
+      "motors": [7],
+      "ratio": 0.2,
+      "range": [0, 110],
+      "home": { "y": 10, "z": 3 },
+      "length": 12,
+      "startAngle": -30
+    },
+    { "kind": "claw", "name": "Claw", "lift": "Lift", "grip": "piston", "adi": "A", "preload": "alliance-down" },
+    { "kind": "toggleTool", "name": "Bumper", "tool": "bumper", "box": { "x": 0, "y": 7.75, "width": 12, "length": 0.5 }, "bottom": 11, "top": 13.5 }
+  ]
+}

@@ -69,14 +69,37 @@
         "type": "object",
         "required": ["kind", "name"],
         "properties": {
-          "kind": { "enum": ["roller", "arm", "flywheel", "piston"] },
+          "kind": { "enum": ["roller", "arm", "flywheel", "piston", "lift", "claw", "intake", "staging", "wrist", "toggleTool"] },
           "name": { "type": "string" },
           "motors": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 21 } },
           "ratio": { "type": "number", "exclusiveMinimum": 0 },
           "range": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
           "adi": { "type": "string", "pattern": "^[A-Ha-h]$" },
           "travel": { "type": "number" },
-          "node": { "type": "string", "description": "Named node in the GLB model animated by this mechanism" }
+          "node": { "type": "string", "description": "Named node in the GLB model animated by this mechanism" },
+          "lift": { "enum": ["arm", "fourbar", "sixbar", "dr4b", "cascade", "piston"], "description": "lift: kinematics" },
+          "home": { "$ref": "#/$defs/point", "description": "lift: end effector at output 0" },
+          "length": { "type": "number", "description": "lift: bar length (arm, fourbar, sixbar, dr4b)" },
+          "startAngle": { "type": "number", "description": "lift: bar angle above horizontal at output 0, degrees" },
+          "spoolDiameter": { "type": "number", "description": "lift: cascade spool diameter" },
+          "stages": { "type": "integer", "minimum": 1, "description": "lift: cascade stages" },
+          "grip": { "enum": ["piston", "motor", "roller"], "description": "claw: how it grips" },
+          "closedWhen": { "enum": ["extended", "retracted"] },
+          "closedAt": { "type": "number", "description": "claw (motor): closed at or past this output angle" },
+          "inward": { "enum": [1, -1], "description": "sign of the output speed that pulls objects in / rolls a Toggle inward" },
+          "reach": { "type": "number", "description": "claw: capture radius" },
+          "at": { "$ref": "#/$defs/point", "description": "claw without a lift, or staging: position" },
+          "capacity": { "type": "object", "required": ["pins", "cups"], "properties": { "pins": { "type": "integer", "minimum": 0 }, "cups": { "type": "integer", "minimum": 0 } } },
+          "preload": { "enum": ["alliance-down", "yellow-down"], "description": "start the Match holding the Preload Pin" },
+          "zone": { "$ref": "#/$defs/rect", "description": "intake: capture area" },
+          "into": { "type": "string", "description": "intake: claw or staging that receives its pieces" },
+          "accepts": { "type": "object", "properties": { "pins": { "type": "boolean" }, "cups": { "type": "boolean" }, "lying": { "type": "boolean" } } },
+          "transferMs": { "type": "number", "minimum": 0 },
+          "claw": { "type": "string", "description": "wrist: the claw it flips" },
+          "tool": { "enum": ["bumper", "plate", "roller"], "description": "toggleTool: kind" },
+          "box": { "$ref": "#/$defs/rect", "description": "toggleTool: footprint" },
+          "bottom": { "type": "number" },
+          "top": { "type": "number" }
         }
       }
     },
@@ -97,6 +120,18 @@
       "type": "array",
       "minItems": 1,
       "items": { "type": "integer", "minimum": -21, "maximum": 21, "not": { "const": 0 } }
+    },
+    "point": {
+      "type": "object",
+      "description": "Robot frame, inches: x right, y forward, z up from the tiles",
+      "required": ["y", "z"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }
+    },
+    "rect": {
+      "type": "object",
+      "description": "Robot frame floor-plan rectangle: center x (right), y (forward), width, length",
+      "required": ["x", "y", "width", "length"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number" }, "length": { "type": "number" } }
     }
   }
 }

@@ -39,6 +39,9 @@ const boxAt = (x: number, y: number, w = 15, l = 15): Vec2[] => [
   [x - w / 2, y + l / 2],
 ];
 
+/** The chassis as a Toggle contact shape. */
+const body = (poly: Vec2[], top: number) => ({ poly, bottom: 0, top });
+
 describe('Override scoring (SC2–SC8)', () => {
   // the manual's worked example (page 17): 3 visible red, 1 visible blue and 3 visible
   // yellow halves in one Quadrant (here split over Red 1's two Goals)
@@ -159,10 +162,10 @@ describe('Override Toggles', () => {
     const f = await field();
     const t = f.toggles!.find((x) => x.id === 'T_red1')!; // left wall, x = -70.205
     const half = f.perimeter.inside / 2;
-    expect(contactDepth(t, boxAt(-half + 7.5, 0), 14)).toBeGreaterThan(1);
-    expect(contactDepth(t, boxAt(-half + 7.5, 0), 10)).toBe(0); // under it
-    expect(contactDepth(t, boxAt(-half + 7.5, 25), 14)).toBe(0); // beyond its end
-    expect(contactDepth(t, boxAt(-half + 12, 0), 14)).toBe(0); // not reaching it
+    expect(contactDepth(t, body(boxAt(-half + 7.5, 0), 14))).toBeGreaterThan(1);
+    expect(contactDepth(t, body(boxAt(-half + 7.5, 0), 10))).toBe(0); // under it
+    expect(contactDepth(t, body(boxAt(-half + 7.5, 25), 14))).toBe(0); // beyond its end
+    expect(contactDepth(t, body(boxAt(-half + 12, 0), 14))).toBe(0); // not reaching it
   });
 
   it('each press rolls one face outward; releasing between faces settles back', async () => {
@@ -172,8 +175,8 @@ describe('Override Toggles', () => {
     const tg = s.find((x) => x.id === 'T_red1')!;
     const def = f.toggles!.find((x) => x.id === 'T_red1')!;
     const half = f.perimeter.inside / 2;
-    const press = (ms: number) => { for (let i = 0; i < ms; i++) sim.step(1, s, boxAt(-half + 7.5, 0), 14); };
-    const release = (ms: number) => { for (let i = 0; i < ms; i++) sim.step(1, s, boxAt(0, 0), 14); };
+    const press = (ms: number) => { for (let i = 0; i < ms; i++) sim.step(1, s, [body(boxAt(-half + 7.5, 0), 14)]); };
+    const release = (ms: number) => { for (let i = 0; i < ms; i++) sim.step(1, s, [body(boxAt(0, 0), 14)]); };
     press(100);
     expect(tg.angle).toBeGreaterThan(30);
     expect(tg.touched).toBe(true);

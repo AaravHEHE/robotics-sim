@@ -4,7 +4,7 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
 import type { FieldDef, Vec2 } from './field.ts';
-import { CARTRIDGE_RPM, CARTRIDGE_TICKS, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile } from './profile.ts';
+import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile } from './profile.ts';
 
 export interface Pose {
   x: number;
@@ -292,7 +292,7 @@ export class World {
         rate = (surface / (Math.PI * tw.wheelDiameter)) * 360;
       } else if (r.spec.mechanism) {
         const mech = this.profile.mechanisms.find((m) => m.name === r.spec.mechanism);
-        if (mech && mech.kind !== 'piston') rate = (this.motors.get(mech.motors[0])?.rpm ?? 0) * 6 * mech.ratio;
+        if (mech && isMotorized(mech)) rate = this.mechanismRpm(mech) * 6;
       }
       r.velocity = rate * 100;
       r.raw += rate * 100 * dt;
@@ -302,16 +302,17 @@ export class World {
 
   private applyMechanismLimits(): void {
     for (const mech of this.profile.mechanisms) {
-      if (mech.kind === 'piston' || !mech.range) continue;
-      for (const port of mech.motors) {
+      if (!isMotorized(mech) || !mech.range) continue;
+      const ratio = mech.ratio ?? 1;
+      for (const port of mech.motors!) {
         const m = this.motors.get(port);
         if (!m) continue;
-        const out = m.angle * mech.ratio;
+        const out = m.angle * ratio;
         if (out < mech.range[0]) {
-          m.angle = mech.range[0] / mech.ratio;
+          m.angle = mech.range[0] / ratio;
           m.rpm = Math.max(0, m.rpm);
         } else if (out > mech.range[1]) {
-          m.angle = mech.range[1] / mech.ratio;
+          m.angle = mech.range[1] / ratio;
           m.rpm = Math.min(0, m.rpm);
         }
       }
@@ -433,9 +434,16 @@ export class World {
 
   /** Output angle (deg) of a mechanism, or extension 0..1 for pistons. */
   mechanismState(mech: MechanismSpec): number {
-    if (mech.kind === 'piston') return this.adiOut.get(mech.adi.toUpperCase()) ? 1 : 0;
-    const m = this.motors.get(mech.motors[0]);
-    return m ? m.angle * mech.ratio : 0;
+    if (isPneumatic(mech)) return this.adiOut.get(mech.adi!.toUpperCase()) ? 1 : 0;
+    if (!isMotorized(mech)) return 0;
+    const m = this.motors.get(mech.motors![0]);
+    return m ? m.angle * (mech.ratio ?? 1) : 0;
+  }
+
+  /** Output speed (rpm) of a motor-driven mechanism (0 otherwise). */
+  mechanismRpm(mech: MechanismSpec): number {
+    if (!isMotorized(mech)) return 0;
+    return (this.motors.get(mech.motors![0])?.rpm ?? 0) * (mech.ratio ?? 1);
   }
 }
 

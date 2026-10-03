@@ -61,6 +61,43 @@ simulator shows a note, as a real robot with the wrong wiring would behave.
 make the moving part its own sub-assembly or part, then export the assembly as GLB. The
 part names become node names.
 
+### Game manipulators (V5RC Override)
+
+These mechanisms let your code pick up, carry, stack and drop Pins and Cups, and turn
+Toggles. Each one is driven like any other mechanism:
+- **Motors:** `motors` plus `ratio`, optionally `range`. The output is in degrees.
+- **Solenoid:** `adi`. The output is 0 when retracted and 1 when extended.
+
+Positions use the robot frame in inches: `x` is right, `y` is forward from the robot's
+center, and `z` is up from the tiles.
+
+Pickup and placement are idealized "snap" rules:
+- A claw that closes on an object takes it.
+- A claw that opens over a Goal or a stack at the right height nests what it holds.
+- Anywhere else, the held pieces drop. A lone Pin falls over; anything else lands
+  standing.
+
+| Kind | Fields | What it does |
+| --- | --- | --- |
+| `lift` | `lift`: `arm`, `fourbar`, `sixbar`, `dr4b`, `cascade` or `piston`. `home {y, z}`: the end effector at output 0. Bar lifts take `length` and `startAngle` (degrees above horizontal at output 0). `cascade` takes `spoolDiameter` and `stages`. `piston` takes `travel`. | Moves its end effector. arm / fourbar: the tip swings on a bar. sixbar: twice the rise of a fourbar with the reach of one bar. dr4b: twice the rise, with constant reach. cascade: rises by spool travel × stages. piston: rises `travel`. |
+| `claw` | `grip`: `piston`, `motor` (closed at or past `closedAt` degrees) or `roller`. `lift` (rides on it) or a fixed `at {y, z}`. Optional: `closedWhen` (`extended`, the default, or `retracted`), `inward` (roller), `reach` (capture radius, default 2″), `capacity {pins, cups}` (default 1 + 1), `preload`. | **Closing** grabs the nearest of these within `reach` of the grip point: a staging area's contents; the bottom piece of a Loader, if the claw is low; a lying Pin; or the piece of a floor or Goal stack at the grip height, together with everything above it. **Opening** within 1.5″ of a Goal or stack places the held stack, provided its bottom is between 2″ below and 4″ above where it would rest. A roller claw grabs while spinning in and releases while spinning out. |
+| `intake` | `zone {x, y, width, length}` (capture area). Optional: `into` (a claw or staging area), `accepts {pins, cups, lying}`, `inward`, `transferMs` (default 300), `capacity`, `preload`. | While spinning in, it takes standing stacks, lying Pins and a Loader's bottom piece whose center is in the zone, one every 150 ms. After `transferMs`, pieces move on to `into` if there's room; a claw only receives them while its lift is down. Spinning out spits back what is still in the intake. |
+| `staging` | `at {y, z}`. Optional: `capacity`, `preload`. | Holds what an intake delivers, assembled into a combo: Pin, then the Cup over it. A claw that closes at `at` takes the whole combo. |
+| `wrist` | `claw`, driven by motors or a solenoid | Turns what the claw holds end over end: a motor output between 90° and 270°, or the solenoid extended. |
+| `toggleTool` | `tool`: `bumper`, `plate` or `roller`. `box {x, y, width, length}`, plus `bottom` and `top` heights. `plate` uses `adi`; `roller` uses `motors` and `inward`. | Reaches the perimeter Toggles, whose underside is about 11.2″ up. Pressing a bumper, or an extended plate, into a Toggle rolls it outward one face per press. A roller rolls it either way while spinning. The chassis box (`size.height`) counts too. |
+
+Notes:
+- **Preload.** `preload` (`alliance-down` or `yellow-down`) on one claw, intake or
+  staging area starts the Match holding the alliance Preload Pin. A preloaded claw lets
+  go the first time it opens.
+- **Lying Pins.** A lying Pin that is picked up stands with the end nearest the robot at
+  the bottom.
+- **Possession.** The simulator reports `<SG6>` when the robot possesses more than 1 Pin
+  or 1 Cup in total. Capacities only limit what each mechanism can hold.
+- **Skills Match Loads.** In Skills, the drive team keeps both red Loaders stocked:
+  1 piece per Loader about every second, alternating Pins and Cups, up to 2 per chute.
+  In head-to-head autonomous, Match Loads aren't allowed (`<SG11>`).
+
 ## 3D models (optional)
 
 Attach a `.glb` (Onshape: right-click the assembly, then **Export → GLTF/GLB**). The

@@ -101,6 +101,16 @@ export function piecesGroup(field: FieldDef, state: OverrideState): { group: THR
   };
   for (const s of state.floor) addStack(s.pieces, s.x, s.y, 0, false, s.id);
   for (const g of field.goals ?? []) addStack(state.goals[g.id] ?? [], g.x, g.y, g.height, true);
+  // Match Loads waiting in a Loader chute, stacked one above the other
+  const half = field.perimeter.inside / 2;
+  for (const l of field.loaders ?? []) {
+    const inward = l.wall === 'left' ? 1 : -1;
+    let base = 0;
+    for (const p of state.loaders?.[l.id] ?? []) {
+      addStack([p], -inward * half + (inward * l.depth) / 2, l.y, base, false);
+      base += p.kind === 'pin' ? PIN.length : CUP.height;
+    }
+  }
   for (const l of state.lying) {
     const m = pinMesh(l.colors);
     // lay the pin along +z (three), then point it along the field heading

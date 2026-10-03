@@ -460,6 +460,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   }
   const gameRec = game?.finish() ?? null;
   for (const v of gameRec?.violations ?? []) events.push({ t: v.t, level: 'warning', message: `<${v.rule}> ${v.message}` });
+  for (const n of gameRec?.notes ?? []) events.push({ t: 0, level: 'info', message: n });
   events.sort((a, b) => a.t - b.t);
   if (outBuf[1]) consoleLines.push({ t: sched.now, text: outBuf[1] });
   if (outBuf[2]) consoleLines.push({ t: sched.now, text: outBuf[2] });

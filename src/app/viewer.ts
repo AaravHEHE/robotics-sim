@@ -5,11 +5,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { FieldDef } from '../sim/field.ts';
-import type { MechanismSpec, RobotProfile } from '../sim/profile.ts';
+import { isPneumatic, type MechanismSpec, type RobotProfile } from '../sim/profile.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
 import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
+import { ManipulatorVisuals } from './manipulator-meshes.ts';
 import { drawTape, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
 export type ViewMode = 'top' | 'orbit' | 'follow';
@@ -50,6 +51,9 @@ export class FieldViewer {
   private futureTrail: THREE.Line | null = null;
   private rec: Recording | null = null;
   private mechs: MechVisual[] = [];
+  /** Game manipulators and the pieces they hold. */
+  private manipVis: ManipulatorVisuals | null = null;
+  private lastGameState: OverrideState | null = null;
   private profile: RobotProfile | null = null;
   private field: FieldDef | null = null;
   private mode: ViewMode = 'orbit';
@@ -248,6 +252,8 @@ export class FieldViewer {
     this.gameGroup.clear();
     this.pieceNodes = new Map();
     this.lyingIds = new Set(state?.lying.map((l) => l.id) ?? []);
+    this.lastGameState = state;
+    this.manipVis?.setHeld(state);
     if (state && this.field) {
       const { group, nodes } = piecesGroup(this.field, state);
       this.pieceNodes = nodes;
@@ -270,6 +276,9 @@ export class FieldViewer {
     this.mechs = [];
     const body = glb ? await this.loadModel(profile, glb).catch(() => null) : null;
     this.robotGroup.add(body ?? this.boxRobot(profile));
+    this.manipVis = new ManipulatorVisuals(profile, this.robotGroup, !body);
+    this.manipVis.setHeld(this.lastGameState);
+    this.manipVis.update(() => 0);
     // ghost (start pose marker)
     const outline = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(profile.size.width, 0.2, profile.size.length)),
@@ -343,6 +352,7 @@ export class FieldViewer {
     // mechanisms
     let pistonSlot = 0;
     for (const m of p.mechanisms) {
+      if (ManipulatorVisuals.handles(m)) continue;
       if (m.kind === 'piston') {
         const plate = new THREE.Mesh(new THREE.BoxGeometry(width * 0.5, 2.5, 0.6), accent);
         plate.position.set(0, wheelR + 4 + pistonSlot * 3, -length / 2 + 1.2);
@@ -463,13 +473,17 @@ export class FieldViewer {
       const k = 6 + (this.profile?.mechanisms.indexOf(m.spec) ?? -1);
       if (k < 6) return;
       const v = lerp(k);
-      if (m.spec.kind === 'piston') {
+      if (isPneumatic(m.spec)) {
         m.object.position.copy(m.base.position);
-        m.object.translateZ(-(m.spec.travel ?? 2) * v);
+        m.object.translateZ(-(('travel' in m.spec && m.spec.travel) || 2) * v);
       } else {
         m.object.rotation.copy(m.base.rotation);
         m.object.rotateX(-v * DEG);
       }
+    });
+    this.manipVis?.update((m) => {
+      const k = 6 + (this.profile?.mechanisms.indexOf(m) ?? -1);
+      return k < 6 ? 0 : lerp(k);
     });
     this.showGameAt(t);
     const count = Math.max(2, i0 + 1);

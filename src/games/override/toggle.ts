@@ -5,11 +5,12 @@
 // the inside; -120 = one roll with the top moving inward, which brings the outward face in.
 //
 // Contact model (idealized, no rigid-body simulation): the part of the Toggle that hangs
-// over the field is a thin strip along the wall. A robot tall enough to reach it touches
-// it when its footprint enters the strip; pressing into it (against the wall) rolls the
-// Toggle outward one face, after which the robot must back off before the next press
-// ("each square press advances one face"). Released between faces, the Toggle falls
-// back to the nearest face. Manipulators that roll it inward come with step 2.4.
+// over the field is a thin strip along the wall. A robot part (the chassis box, a bumper,
+// a plate or a roller) whose height range overlaps the Toggle touches it when its
+// footprint enters the strip. Pressing into it (against the wall) rolls the Toggle
+// outward one face, after which the part must back off before the next press ("each
+// square press advances one face"). A spinning roller rolls it either way at the
+// roller's speed. Released between faces, the Toggle falls back to the nearest face.
 
 import type { FieldDef, ToggleDef, Vec2 } from '../../sim/field.ts';
 import type { ToggleState } from './state.ts';
@@ -53,15 +54,25 @@ export function overhang(def: ToggleDef): number {
   return def.sectionHeight / Math.sqrt(3); // half the side of an equilateral triangle
 }
 
+/** A robot part that can touch a Toggle. */
+export interface ContactShape {
+  /** Floor-plan outline, field frame. */
+  poly: Vec2[];
+  bottom: number;
+  top: number;
+  /** A spinning roller: Toggle roll rate it imposes (deg/s, + = top outward). */
+  spin?: number;
+}
+
 /**
- * Depth (in) a robot footprint reaches into the Toggle's overhang strip, or 0 if it does
- * not touch it. Only the part of the footprint within the Toggle's length counts.
+ * Depth (in) a robot part reaches into the Toggle's overhang strip, or 0 if it does not
+ * touch it. Only the part of the outline within the Toggle's length counts.
  */
-export function contactDepth(def: ToggleDef, footprint: Vec2[], robotHeight: number): number {
-  if (robotHeight < def.topHeight - def.sectionHeight) return 0; // too low to reach it
+export function contactDepth(def: ToggleDef, shape: ContactShape): number {
+  if (shape.top < def.topHeight - def.sectionHeight || shape.bottom > def.topHeight) return 0; // misses it vertically
   const { n, u } = wallFrame(def);
   // local coords: s along the wall from the Toggle center, d = distance into the field from the wall line
-  let poly = footprint.map(([x, y]): Vec2 => [(x - def.x) * u[0] + (y - def.y) * u[1], (x - def.x) * n[0] + (y - def.y) * n[1]]);
+  let poly = shape.poly.map(([x, y]): Vec2 => [(x - def.x) * u[0] + (y - def.y) * u[1], (x - def.x) * n[0] + (y - def.y) * n[1]]);
   poly = clip(poly, (p) => p[0] + def.length / 2); // s >= -L/2
   poly = clip(poly, (p) => def.length / 2 - p[0]); // s <= +L/2
   if (poly.length === 0) return 0;
@@ -98,14 +109,28 @@ export class ToggleSim {
     this.defs = field.toggles ?? [];
   }
 
-  step(dtMs: number, states: ToggleState[], footprint: Vec2[], robotHeight: number): void {
+  step(dtMs: number, states: ToggleState[], shapes: ContactShape[]): void {
     const dt = dtMs / 1000;
     for (const def of this.defs) {
       const s = states.find((x) => x.id === def.id);
       if (!s) continue;
-      const depth = contactDepth(def, footprint, robotHeight);
-      s.touched = depth > 0;
-      const pressing = depth >= PRESS_DEPTH * overhang(def);
+      let pressing = false;
+      let spin = 0;
+      s.touched = false;
+      for (const shape of shapes) {
+        const depth = contactDepth(def, shape);
+        if (depth <= 0) continue;
+        s.touched = true;
+        if (shape.spin) spin += shape.spin;
+        else if (depth >= PRESS_DEPTH * overhang(def)) pressing = true;
+      }
+      if (spin) {
+        // a roller drives it continuously, either way; no detent latching
+        s.angle += Math.max(-PRESS_RATE, Math.min(PRESS_RATE, spin)) * dt;
+        this.latched.set(def.id, false);
+        this.target.delete(def.id);
+        continue;
+      }
       if (pressing && !this.latched.get(def.id)) {
         const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + 120;
         this.target.set(def.id, goal);

@@ -66,7 +66,7 @@ export class FloorPhysics {
     this.world.createCollider(RAPIER.ColliderDesc.cuboid((robotSize.width / 2) * M, (robotSize.length / 2) * M), this.robot);
   }
 
-  private dynamic(x: number, y: number, heading: number): RAPIER.RigidBody {
+  private dynamic(x: number, y: number, heading: number, asleep: boolean): RAPIER.RigidBody {
     return this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(x * M, y * M)
@@ -75,20 +75,21 @@ export class FloorPhysics {
         .setAngularDamping(FLOOR_DAMPING)
         .setCanSleep(true)
         // start at rest: objects placed touching (e.g. wall-group cups) must not drift
-        .setSleeping(true),
+        .setSleeping(asleep),
     );
   }
 
-  addStack(s: FloorStack): void {
-    const body = this.dynamic(s.x, s.y, 0);
+  /** Add a standing stack; `asleep` for the starting layout, awake for dropped objects. */
+  addStack(s: FloorStack, asleep = true): void {
+    const body = this.dynamic(s.x, s.y, 0, asleep);
     const r = stackRadius(s.pieces) * M;
     const mass = s.pieces.reduce((m, p) => m + PIECE_MASS[p.kind], 0);
     this.world.createCollider(RAPIER.ColliderDesc.ball(r).setMass(mass).setFriction(0.4).setRestitution(0.1), body);
     this.bodies.set(s.id, body);
   }
 
-  addLying(p: LyingPin): void {
-    const body = this.dynamic(p.x, p.y, p.heading);
+  addLying(p: LyingPin, asleep = true): void {
+    const body = this.dynamic(p.x, p.y, p.heading, asleep);
     // capsule along local +y = the pin's axis; radius ~ the cone (collar is short)
     const r = (PIN.coneDiameter / 2) * M;
     const halfLen = (PIN.length / 2) * M - r;
