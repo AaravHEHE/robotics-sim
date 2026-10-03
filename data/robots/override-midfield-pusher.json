@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "override-midfield-pusher",
+  "name": "Override: Midfield pusher",
+  "description": "A low, heavy 6-motor traction drive (333 rpm on 4\" wheels) with no manipulators, built to hold the Midfield at the end of a Match.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 9
+  },
+  "mass": 17,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 4,
+    "wheelRpm": 333,
+    "trackWidth": 11.5,
+    "maxAccel": 220
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    }
+  ],
+  "mechanisms": []
+}

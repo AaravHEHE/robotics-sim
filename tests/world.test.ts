@@ -39,10 +39,24 @@ describe('drivetrain kinematics', () => {
       const m = w.motor(p);
       m.cmd = 127 * Math.sign(p);
     }
-    runUntil(w, () => false, 2000);
+    runUntil(w, () => false, 900); // top speed, before reaching the far wall
     expect(w.speed).toBeCloseTo(maxSpeed(w.profile), 6); // 450 rpm * 3.25" * pi / 60 = 76.6 in/s
     expect(w.pose.theta).toBeCloseTo(0, 9);
     expect(w.pose.x).toBeCloseTo(0, 9);
+  });
+
+  it('wheels stall against a wall, so reversing pulls away at once', async () => {
+    const w = await world();
+    const all = (cmd: number) => {
+      for (const p of [...w.profile.drivetrain.left, ...w.profile.drivetrain.right]) w.motor(p).cmd = cmd * Math.sign(p);
+    };
+    all(127);
+    runUntil(w, () => false, 2500); // pinned against the far wall
+    expect(w.speed).toBeCloseTo(0, 6);
+    const y = w.pose.y;
+    all(-80);
+    runUntil(w, () => false, 250);
+    expect(y - w.pose.y).toBeGreaterThan(2);
   });
 
   it('motors with the wrong reversal drive the wrong way', async () => {

@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "id": "override-intake-staging",
+  "name": "Override: intake -> staging -> claw",
+  "description": "A front roller intake (port 10) feeds a staging tray that assembles a Pin + Cup combo; a 4-bar (port 7, 1:5) with a pneumatic claw (ADI A) picks the combo up and stacks it. The Preload starts in the staging tray. Good for Skills Match Loads.",
+  "size": {
+    "width": 15,
+    "length": 16,
+    "height": 13
+  },
+  "mass": 16,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "green",
+      "name": "Lift"
+    },
+    {
+      "type": "motor",
+      "port": 10,
+      "cartridge": "blue",
+      "name": "Intake"
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "A",
+      "name": "Claw"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "intake",
+      "name": "Intake",
+      "motors": [10],
+      "ratio": 1,
+      "zone": {
+        "x": 0,
+        "y": 11.5,
+        "width": 8,
+        "length": 3
+      },
+      "into": "Stage"
+    },
+    {
+      "kind": "staging",
+      "name": "Stage",
+      "at": {
+        "y": 9,
+        "z": 2
+      },
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "lift",
+      "name": "Lift",
+      "lift": "fourbar",
+      "motors": [7],
+      "ratio": 0.2,
+      "range": [0, 110],
+      "home": {
+        "y": 9,
+        "z": 2
+      },
+      "length": 11,
+      "startAngle": -25
+    },
+    {
+      "kind": "claw",
+      "name": "Claw",
+      "lift": "Lift",
+      "grip": "piston",
+      "adi": "A"
+    }
+  ]
+}

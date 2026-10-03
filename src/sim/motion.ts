@@ -119,7 +119,8 @@ export class MoveToPoint extends Motion {
     const along = dist * dcos(wrap180(headingTo(pose, this.x, this.y) - pose.theta) * RAD);
 
     if (this.close) {
-      if (Math.abs(along) < 0.25 && vmin === 0) {
+      // settled: on target and (nearly) stopped, like LemLib's small-error exit condition
+      if (Math.abs(along) < 0.25 && Math.abs(w.speed) < 3 && vmin === 0) {
         this.done = true;
         return [0, 0];
       }

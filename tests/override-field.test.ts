@@ -76,6 +76,18 @@ describe('Override field data (manual v2.0 Appendix A)', () => {
       const w = new World(r, f, { x: sp.x, y: sp.y, theta: sp.theta });
       w.step(1);
       expect(Math.hypot(w.pose.x - sp.x, w.pose.y - sp.y)).toBeLessThan(1e-9); // nothing pushed it
+      // not touching any Scoring Object (SG1 / SG5), even at 15 x 15
+      const st = initialState(f, 'h2h');
+      const hits = (x: number, y: number, r0: number) => Math.abs(x - sp.x) < 7.5 + r0 && Math.abs(y - sp.y) < 7.5 + r0;
+      for (const o of st.floor) expect(hits(o.x, o.y, CUP.rimDiameter / 2), `${sp.id} touches ${o.id}`).toBe(false);
+      for (const o of st.lying) {
+        // sample along the pin's axis
+        for (let k = -3; k <= 3; k++) {
+          const d = (k / 3) * (PIN.length / 2 - PIN.endDiameter / 2);
+          const h = (o.heading * Math.PI) / 180;
+          expect(hits(o.x + d * Math.sin(h), o.y + d * Math.cos(h), PIN.collarDiameter / 2), `${sp.id} touches ${o.id}`).toBe(false);
+        }
+      }
     }
   });
 });

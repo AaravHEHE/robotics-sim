@@ -262,8 +262,18 @@ export class World {
     this.pose.x += v * dsin(thMid) * dt;
     this.pose.y += v * dcos(thMid) * dt;
     this.pose.theta += (w * dt) / RAD;
+    const bx = this.pose.x;
+    const by = this.pose.y;
     this.resolveObstacles();
     this.resolveWalls();
+    // Blocked by a wall or field element: the wheels stall instead of spinning on at the
+    // commanded speed, so the forward speed drops to what the robot actually achieved.
+    const pushed = (this.pose.x - bx) * dsinDeg(this.pose.theta) + (this.pose.y - by) * dcosDeg(this.pose.theta);
+    if (pushed * v < 0) {
+      const achieved = Math.sign(v) * Math.max(0, Math.abs(v) - Math.abs(pushed) / dt);
+      this.vL += achieved - v;
+      this.vR += achieved - v;
+    }
 
     // motors: drive motors follow their side; others ramp toward their target
     const wheelToMotor = CARTRIDGE_RPM[d.cartridge] / d.wheelRpm;

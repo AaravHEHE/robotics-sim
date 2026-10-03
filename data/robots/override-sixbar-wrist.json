@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "id": "override-sixbar-wrist",
+  "name": "Override: 6-bar + wrist claw",
+  "description": "A 6-bar (port 7, 1:5) with a pneumatic claw (ADI A) on a motorized wrist (port 8, 1:2) that turns the held stack end over end past 90 degrees. Starts holding the Preload yellow end down.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 13
+  },
+  "mass": 15,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "green",
+      "name": "Six-bar"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "green",
+      "name": "Wrist"
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "A",
+      "name": "Claw"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "lift",
+      "name": "Six-bar",
+      "lift": "sixbar",
+      "motors": [7],
+      "ratio": 0.2,
+      "range": [0, 110],
+      "home": {
+        "y": 10,
+        "z": 3
+      },
+      "length": 8,
+      "startAngle": -30
+    },
+    {
+      "kind": "claw",
+      "name": "Claw",
+      "lift": "Six-bar",
+      "grip": "piston",
+      "adi": "A",
+      "preload": "yellow-down"
+    },
+    {
+      "kind": "wrist",
+      "name": "Wrist",
+      "claw": "Claw",
+      "motors": [8],
+      "ratio": 0.5,
+      "range": [0, 180]
+    }
+  ]
+}

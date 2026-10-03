@@ -60,7 +60,7 @@ export interface ContactShape {
   poly: Vec2[];
   bottom: number;
   top: number;
-  /** A spinning roller: Toggle roll rate it imposes (deg/s, + = top outward). */
+  /** A roller (set even when stopped): the Toggle roll rate it imposes (deg/s, + = top outward). */
   spin?: number;
 }
 
@@ -121,7 +121,7 @@ export class ToggleSim {
         const depth = contactDepth(def, shape);
         if (depth <= 0) continue;
         s.touched = true;
-        if (shape.spin) spin += shape.spin;
+        if (shape.spin !== undefined) spin += shape.spin; // rollers roll it, never shove it
         else if (depth >= PRESS_DEPTH * overhang(def)) pressing = true;
       }
       if (spin) {

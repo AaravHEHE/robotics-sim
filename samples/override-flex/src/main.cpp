@@ -1,0 +1,113 @@
+#include "main.h"
+
+// V5RC Override: Flex, the official Hero Bot (plain PROS).
+// Robot: "Override: Flex (Hero Bot) arm + claw". Start: Red 1 (left wall, south).
+//
+//  1. Drop the Preload (red half down) into red Goal R1: 5 points for the red half.
+//  2. Press the Red 1 Toggle twice with the front of the chassis (the Flex is 12" tall,
+//     tall enough to reach a Toggle on top of the wall): yellow -> blue -> red. Now the
+//     Preload's yellow half and the yellow Pin on neutral Goal N_R1 are Owned by red.
+//
+// Field headings: 0° faces the top wall, clockwise positive (the GPS / LemLib convention).
+// The robot starts facing 90° (into the field from the left wall); the IMU starts at 0.
+
+pros::MotorGroup leftDrive({-1}, pros::MotorGears::green, pros::MotorUnits::degrees);
+pros::MotorGroup rightDrive({2}, pros::MotorGears::green, pros::MotorUnits::degrees);
+pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);   // 1:5 to the arm
+pros::Motor claw(8, pros::MotorGears::green, pros::MotorUnits::degrees);  // closed past 60°
+pros::Imu imu(11);
+
+// 4" wheels, direct drive
+constexpr double IN_PER_MOTOR_DEG = 4.0 * M_PI / 360.0;
+constexpr double START_HEADING = 90.0;
+
+double fieldHeading() { return START_HEADING + imu.get_rotation(); }
+
+// Drive straight using motor encoders: a P loop on the remaining distance (so the robot
+// slows down before the target instead of skidding past it), holding the heading with
+// the IMU. Gives up after `timeoutMs` (e.g. when a wall stops the robot).
+void drive(double inches, int maxSpeed = 127, int timeoutMs = 2500) {
+  leftDrive.tare_position_all();
+  rightDrive.tare_position_all();
+  const double heading = imu.get_rotation();
+  const std::uint32_t end = pros::millis() + timeoutMs;
+  int settled = 0;
+  while (pros::millis() < end && settled < 3) {
+    const double traveled = (leftDrive.get_position() + rightDrive.get_position()) / 2 * IN_PER_MOTOR_DEG;
+    const double error = inches - traveled;
+    settled = std::fabs(error) < 0.5 ? settled + 1 : 0;
+    const double power = std::clamp(error * 8.0, -double(maxSpeed), double(maxSpeed));
+    const double correction = (heading - imu.get_rotation()) * 2.0;
+    leftDrive.move(power + correction);
+    rightDrive.move(power - correction);
+    pros::delay(10);
+  }
+  leftDrive.brake();
+  rightDrive.brake();
+  pros::delay(100);
+}
+
+// Turn in place to a field heading (degrees, clockwise from the top wall): a P loop that
+// waits until the robot has settled on the target.
+void turnTo(double target, int maxSpeed = 127) {
+  const std::uint32_t end = pros::millis() + 2000;
+  int settled = 0;
+  while (pros::millis() < end && settled < 3) {
+    const double error = std::remainder(target - fieldHeading(), 360.0);
+    settled = std::fabs(error) < 1.5 ? settled + 1 : 0;
+    const double power = std::clamp(error * 2.5, -double(maxSpeed), double(maxSpeed));
+    leftDrive.move(power);
+    rightDrive.move(-power);
+    pros::delay(10);
+  }
+  leftDrive.brake();
+  rightDrive.brake();
+  pros::delay(100);
+}
+
+
+// Push into whatever is ahead (a wall) at a fixed power for a moment, then back off.
+void press(int ms = 800) {
+  leftDrive.move(80);
+  rightDrive.move(80);
+  pros::delay(ms);
+  leftDrive.move(-70);
+  rightDrive.move(-70);
+  pros::delay(250);
+  leftDrive.brake();
+  rightDrive.brake();
+  pros::delay(100);
+}
+
+void initialize() {
+  pros::lcd::initialize();
+  imu.reset(true);  // blocks ~2 s while the IMU calibrates
+  leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
+  rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
+  claw.move_absolute(90, 100);  // grip the Preload
+}
+
+void disabled() {}
+void competition_initialize() {}
+
+void autonomous() {
+  // 1. Preload into R1 (-47.1, -23.5), approached on the diagonal, stopping 10.5" from
+  //    the Goal's center so the claw (10" ahead of the robot's center) is over it.
+  turnTo(45);
+  drive(8.6, 80);
+  claw.move_absolute(0, 100);  // open: the Pin drops into the Goal
+  pros::delay(300);
+
+  // 2. Back off, then up the lane x = -57.5 to the Red 1 Toggle (left wall, y = 0).
+  drive(-4.5);
+  turnTo(0);
+  drive(28);
+  turnTo(270);
+  press();  // yellow -> blue
+  press();  // blue -> red
+  printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
+}
+
+void opcontrol() {
+  while (true) pros::delay(20);
+}

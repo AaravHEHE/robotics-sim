@@ -5,6 +5,12 @@ export interface SampleMeta {
   description: string;
   /** Robot preset the sample is written for. */
   robot: string;
+  /** Field it runs on (default: the empty 12 ft field). */
+  field?: string;
+  /** Start position preset id on that field. */
+  start?: string;
+  /** Auto-stop (ms): 15000 = head-to-head autonomous, 60000 = Skills. */
+  autonMs?: number;
 }
 
 export const SAMPLES: SampleMeta[] = [
@@ -25,5 +31,50 @@ export const SAMPLES: SampleMeta[] = [
     name: 'EZ-Template 3.2 example',
     description: "EZ-Template's example project with its auton selector; the first auton (drive forward and back) runs.",
     robot: 'ez-example',
+  },
+  {
+    id: 'override-flex',
+    name: 'Override: Flex Hero Bot (PROS)',
+    description: 'Plain PROS. Drops the Preload into Goal R1 with the motor claw, then presses the Red 1 Toggle twice with the chassis.',
+    robot: 'override-flex',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 15000,
+  },
+  {
+    id: 'override-dr4b',
+    name: 'Override: DR4B + roller claw (LemLib)',
+    description: 'LemLib in field coordinates. Rolls the Preload into Goal R1, then stacks a Cup + yellow Pin on it with the DR4B.',
+    robot: 'override-dr4b-roller',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 15000,
+  },
+  {
+    id: 'override-toggle-bot',
+    name: 'Override: Toggle control (PROS)',
+    description: 'Plain PROS. Turns both red-side Toggles red with a roller, so the yellow Pins already on the neutral Goals score for red.',
+    robot: 'override-toggle-bot',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 15000,
+  },
+  {
+    id: 'override-workhorse-toggle',
+    name: 'Override: 4-bar workhorse (EZ-Template)',
+    description: 'EZ-Template odometry. Drops the Preload into Goal R1, stacks a Cup + yellow Pin on it, then presses the Red 1 Toggle twice to red.',
+    robot: 'override-fourbar-claw',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 15000,
+  },
+  {
+    id: 'override-midfield-pusher',
+    name: 'Override Skills: park in the Midfield (PROS)',
+    description: 'Plain PROS, 60 s Autonomous Coding Skills. Drives into the Midfield and parks: +8.',
+    robot: 'override-midfield-pusher',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 60000,
   },
 ];

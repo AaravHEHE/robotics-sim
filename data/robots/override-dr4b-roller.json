@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "id": "override-dr4b-roller",
+  "name": "Override: DR4B + roller claw",
+  "description": "A double reverse 4-bar (ports 7 and 8, 1:5, about 38\" reach) carrying an 11 W roller claw (port 9) that grabs while spinning in and lets go spinning out. Starts holding the Preload.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 14
+  },
+  "mass": 16,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "green",
+      "name": "Lift L"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "green",
+      "name": "Lift R"
+    },
+    {
+      "type": "motor",
+      "port": 9,
+      "cartridge": "blue",
+      "name": "Claw rollers"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "lift",
+      "name": "DR4B",
+      "lift": "dr4b",
+      "motors": [7, 8],
+      "ratio": 0.2,
+      "range": [0, 100],
+      "home": {
+        "y": 10,
+        "z": 2.5
+      },
+      "length": 12,
+      "startAngle": -40
+    },
+    {
+      "kind": "claw",
+      "name": "Roller claw",
+      "lift": "DR4B",
+      "grip": "roller",
+      "motors": [9],
+      "ratio": 1,
+      "preload": "alliance-down"
+    }
+  ]
+}

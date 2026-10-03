@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "override-toggle-bot",
+  "name": "Override: Toggle control bot",
+  "description": "A zoning robot: a front roller at Toggle height (port 8) that spins a Toggle either way, and a rear fold-out plate (ADI B) that presses a Toggle one face per push. No game-piece manipulators.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 11
+  },
+  "mass": 13,
+  "drivetrain": {
+    "type": "tank",
+    "left": [-1, -2, -3],
+    "right": [4, 5, 6],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "green",
+      "name": "Toggle roller"
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "B",
+      "name": "Plate"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "toggleTool",
+      "name": "Toggle roller",
+      "tool": "roller",
+      "motors": [8],
+      "ratio": 1,
+      "box": {
+        "x": 0,
+        "y": 8,
+        "width": 10,
+        "length": 1.5
+      },
+      "bottom": 10.5,
+      "top": 14
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Plate",
+      "tool": "plate",
+      "adi": "B",
+      "box": {
+        "x": 0,
+        "y": -8.25,
+        "width": 12,
+        "length": 1.5
+      },
+      "bottom": 11,
+      "top": 13.5
+    }
+  ]
+}

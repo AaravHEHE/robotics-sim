@@ -2467,7 +2467,7 @@
    "alliance": "red",
    "zone": "red1",
    "x": -60.705,
-   "y": 30,
+   "y": 37,
    "theta": 90,
    "layouts": [
     "h2h",
@@ -2480,7 +2480,7 @@
    "alliance": "red",
    "zone": "red1",
    "x": -60.705,
-   "y": -30,
+   "y": -37,
    "theta": 90,
    "layouts": [
     "h2h",
@@ -2492,7 +2492,7 @@
    "name": "Red 2 (bottom wall, west)",
    "alliance": "red",
    "zone": "red2",
-   "x": -30,
+   "x": -37,
    "y": -60.705,
    "theta": 0,
    "layouts": [
@@ -2504,7 +2504,7 @@
    "name": "Red 2 (bottom wall, east)",
    "alliance": "red",
    "zone": "red2",
-   "x": 30,
+   "x": 37,
    "y": -60.705,
    "theta": 0,
    "layouts": [
@@ -2517,7 +2517,7 @@
    "alliance": "blue",
    "zone": "blue1",
    "x": 60.705,
-   "y": 30,
+   "y": 37,
    "theta": 270,
    "layouts": [
     "h2h"
@@ -2529,7 +2529,7 @@
    "alliance": "blue",
    "zone": "blue1",
    "x": 60.705,
-   "y": -30,
+   "y": -37,
    "theta": 270,
    "layouts": [
     "h2h"
@@ -2540,7 +2540,7 @@
    "name": "Blue 2 (top wall, west)",
    "alliance": "blue",
    "zone": "blue2",
-   "x": -30,
+   "x": -37,
    "y": 60.705,
    "theta": 180,
    "layouts": [
@@ -2552,7 +2552,7 @@
    "name": "Blue 2 (top wall, east)",
    "alliance": "blue",
    "zone": "blue2",
-   "x": 30,
+   "x": 37,
    "y": 60.705,
    "theta": 180,
    "layouts": [

@@ -131,18 +131,20 @@ for (const v of [-G2, -G1, G1, G2]) items.push({ type: 'stack', x: IN(v), y: IN(
 const neutralGoalPins: LayoutItem[] = goals.filter((g) => g.color === 'neutral').map((g) => ({ type: 'goal', goal: g.id, pieces: [pin(...yellow)] }));
 const many = (n: number, p: LayoutPiece) => Array.from({ length: n }, () => p);
 
-// Legal SG1 starts: against the own wall, clear of the Toggle (wall center), Goals and Load Zones.
+// Legal SG1 starts: against the own wall, clear of the Toggle (wall center), Goals, Load Zones
+// and the wall-group Cups (whose outer Cup reaches 28.3" from the wall center), for robots up
+// to 15" wide.
 const S = IN(HALF) - 9.5;
 const start = (id: string, name: string, alliance: 'red' | 'blue', zone: string, x: number, y: number, theta: number, layouts: string[]): StartPosition => ({ id, name, alliance, zone, x, y, theta, layouts });
 const startPositions: StartPosition[] = [
-  start('red1_n', 'Red 1 (left wall, north)', 'red', 'red1', -S, 30, 90, ['h2h', 'skills']),
-  start('red1_s', 'Red 1 (left wall, south)', 'red', 'red1', -S, -30, 90, ['h2h', 'skills']),
-  start('red2_w', 'Red 2 (bottom wall, west)', 'red', 'red2', -30, -S, 0, ['h2h']),
-  start('red2_e', 'Red 2 (bottom wall, east)', 'red', 'red2', 30, -S, 0, ['h2h']),
-  start('blue1_n', 'Blue 1 (right wall, north)', 'blue', 'blue1', S, 30, 270, ['h2h']),
-  start('blue1_s', 'Blue 1 (right wall, south)', 'blue', 'blue1', S, -30, 270, ['h2h']),
-  start('blue2_w', 'Blue 2 (top wall, west)', 'blue', 'blue2', -30, S, 180, ['h2h']),
-  start('blue2_e', 'Blue 2 (top wall, east)', 'blue', 'blue2', 30, S, 180, ['h2h']),
+  start('red1_n', 'Red 1 (left wall, north)', 'red', 'red1', -S, 37, 90, ['h2h', 'skills']),
+  start('red1_s', 'Red 1 (left wall, south)', 'red', 'red1', -S, -37, 90, ['h2h', 'skills']),
+  start('red2_w', 'Red 2 (bottom wall, west)', 'red', 'red2', -37, -S, 0, ['h2h']),
+  start('red2_e', 'Red 2 (bottom wall, east)', 'red', 'red2', 37, -S, 0, ['h2h']),
+  start('blue1_n', 'Blue 1 (right wall, north)', 'blue', 'blue1', S, 37, 270, ['h2h']),
+  start('blue1_s', 'Blue 1 (right wall, south)', 'blue', 'blue1', S, -37, 270, ['h2h']),
+  start('blue2_w', 'Blue 2 (top wall, west)', 'blue', 'blue2', -37, S, 180, ['h2h']),
+  start('blue2_e', 'Blue 2 (top wall, east)', 'blue', 'blue2', 37, S, 180, ['h2h']),
 ];
 
 const field: FieldDef = {
