@@ -1,0 +1,88 @@
+// Override game state: where every Pin and Cup is, what each Goal holds, and each
+// Toggle's angle. Built from a field layout; evolved by the simulator; recorded for
+// replay; scored by scoring.ts.
+
+import type { FieldDef, LayoutPiece } from '../../sim/field.ts';
+import type { CupPiece, Piece, PinColor, PinPiece } from './elements.ts';
+
+/** Pieces standing on the floor at (x, y), bottom first (e.g. a cup holding a pin). */
+export interface FloorStack {
+  id: string;
+  x: number;
+  y: number;
+  pieces: Piece[];
+}
+
+/** A pin lying on its side; heading points from colors[0]'s end to colors[1]'s end. */
+export interface LyingPin {
+  id: string;
+  x: number;
+  y: number;
+  heading: number;
+  colors: [PinColor, PinColor];
+}
+
+export interface ToggleState {
+  id: string;
+  /** Roll angle in degrees: 0 = starting orientation; +120 = one roll with the top moving outward. */
+  angle: number;
+  /** A robot is touching the toggle right now. */
+  touched: boolean;
+}
+
+export interface OverrideState {
+  floor: FloorStack[];
+  lying: LyingPin[];
+  /** Goal id -> pieces placed on it, bottom first. */
+  goals: Record<string, Piece[]>;
+  toggles: ToggleState[];
+  /** Match loads still off the field, per alliance. */
+  matchLoads: Partial<Record<'red' | 'blue', Piece[]>>;
+}
+
+let counter = 0;
+const nextId = (prefix: string) => `${prefix}${++counter}`;
+
+export function pieceFrom(p: LayoutPiece): Piece {
+  if (p.kind === 'pin') return { kind: 'pin', id: nextId('pin'), colors: p.colors as [PinColor, PinColor] } satisfies PinPiece;
+  return { kind: 'cup', id: nextId('cup'), up: p.up } satisfies CupPiece;
+}
+
+/** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call. */
+export function initialState(field: FieldDef, layoutId: string): OverrideState {
+  counter = 0;
+  const layout = field.layouts?.[layoutId];
+  const state: OverrideState = {
+    floor: [],
+    lying: [],
+    goals: Object.fromEntries((field.goals ?? []).map((g) => [g.id, [] as Piece[]])),
+    toggles: (field.toggles ?? []).map((t) => ({ id: t.id, angle: 0, touched: false })),
+    matchLoads: {},
+  };
+  if (!layout) return state;
+  for (const it of layout.items) {
+    if (it.type === 'stack') state.floor.push({ id: nextId('s'), x: it.x, y: it.y, pieces: it.pieces.map(pieceFrom) });
+    else if (it.type === 'lying') state.lying.push({ id: nextId('pin'), x: it.x, y: it.y, heading: it.heading, colors: it.colors as [PinColor, PinColor] });
+    else state.goals[it.goal].push(...it.pieces.map(pieceFrom));
+  }
+  for (const [alliance, loads] of Object.entries(layout.matchLoads ?? {})) {
+    state.matchLoads[alliance as 'red' | 'blue'] = (loads ?? []).map(pieceFrom);
+  }
+  return state;
+}
+
+/** Count objects in a state (for checks against the manual's inventory). */
+export function inventory(state: OverrideState): { cups: number; pins: Record<string, number> } {
+  const pins: Record<string, number> = {};
+  let cups = 0;
+  const addPin = (c: [string, string]) => {
+    const key = [...c].sort().join('/');
+    pins[key] = (pins[key] ?? 0) + 1;
+  };
+  const visit = (p: Piece) => (p.kind === 'cup' ? cups++ : addPin(p.colors));
+  for (const s of state.floor) s.pieces.forEach(visit);
+  for (const l of state.lying) addPin(l.colors);
+  for (const ps of Object.values(state.goals)) ps.forEach(visit);
+  for (const ps of Object.values(state.matchLoads)) ps?.forEach(visit);
+  return { cups, pins };
+}

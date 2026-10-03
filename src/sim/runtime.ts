@@ -446,7 +446,9 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     }
   }
   if (marker && marker.t1 === null) marker.t1 = sched.now;
-  for (const c of world.collisions) events.push({ t: c.t, level: 'info', message: `Robot hit the ${c.wall} wall.` });
+  for (const c of world.collisions) {
+    events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : `Robot hit the ${c.wall} wall.` });
+  }
   events.sort((a, b) => a.t - b.t);
   if (outBuf[1]) consoleLines.push({ t: sched.now, text: outBuf[1] });
   if (outBuf[2]) consoleLines.push({ t: sched.now, text: outBuf[2] });

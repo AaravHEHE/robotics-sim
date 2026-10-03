@@ -3,7 +3,7 @@
 // (dmath.ts) so a given program produces bit-identical results on every machine.
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
-import type { FieldDef } from './field.ts';
+import type { FieldDef, Vec2 } from './field.ts';
 import { CARTRIDGE_RPM, CARTRIDGE_TICKS, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile } from './profile.ts';
 
 export interface Pose {
@@ -159,6 +159,9 @@ export class World {
   controller: DriveController | null = null;
   readonly collisions: Collision[] = [];
   private lastCollisionWall = '';
+  private lastObstacle = '';
+  /** Static convex obstacles (goals, loaders, field objects) in the field frame. */
+  readonly obstacles: Obstacle[];
   time = 0;
   /** Total distance driven by each side, in (for tracking/drive encoders). */
   private readonly maxV: number;
@@ -168,6 +171,7 @@ export class World {
     this.field = field;
     this.pose = { ...start };
     this.maxV = maxSpeed(profile);
+    this.obstacles = fieldObstacles(field);
     const dt = profile.drivetrain;
     for (const [side, ports] of [['left', dt.left], ['right', dt.right]] as const) {
       for (const p of ports) {
@@ -258,6 +262,7 @@ export class World {
     this.pose.x += v * dsin(thMid) * dt;
     this.pose.y += v * dcos(thMid) * dt;
     this.pose.theta += (w * dt) / RAD;
+    this.resolveObstacles();
     this.resolveWalls();
 
     // motors: drive motors follow their side; others ramp toward their target
@@ -311,6 +316,35 @@ export class World {
         }
       }
     }
+  }
+
+  /** Robot footprint corners in the field frame (robot frame: +x right, +y forward). */
+  footprint(): Vec2[] {
+    const { width, length } = this.profile.size;
+    const s = dsinDeg(this.pose.theta);
+    const c = dcosDeg(this.pose.theta);
+    return ([[-width / 2, -length / 2], [width / 2, -length / 2], [width / 2, length / 2], [-width / 2, length / 2]] as Vec2[]).map(
+      ([lx, ly]): Vec2 => [this.pose.x + lx * c + ly * s, this.pose.y - lx * s + ly * c],
+    );
+  }
+
+  /** Push the robot out of static field elements (goals, loaders, field objects). */
+  private resolveObstacles(): void {
+    let hit = '';
+    for (let iter = 0; iter < 3; iter++) {
+      let moved = false;
+      for (const ob of this.obstacles) {
+        const mtv = satMtv(this.footprint(), ob.poly);
+        if (!mtv) continue;
+        this.pose.x += mtv[0];
+        this.pose.y += mtv[1];
+        hit = ob.id;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    if (hit && hit !== this.lastObstacle) this.collisions.push({ t: this.time, wall: hit });
+    this.lastObstacle = hit;
   }
 
   /** Keep the robot footprint inside the perimeter (position correction only). */
@@ -393,6 +427,7 @@ export class World {
     if (dx < -1e-9) best = Math.min(best, (-half - ox) / dx);
     if (dy > 1e-9) best = Math.min(best, (half - oy) / dy);
     if (dy < -1e-9) best = Math.min(best, (-half - oy) / dy);
+    for (const ob of this.obstacles) best = Math.min(best, rayPolygon(ox, oy, dx, dy, ob.poly));
     return best;
   }
 
@@ -402,6 +437,105 @@ export class World {
     const m = this.motors.get(mech.motors[0]);
     return m ? m.angle * mech.ratio : 0;
   }
+}
+
+// ---------------- static obstacles and geometry ----------------
+
+export interface Obstacle {
+  id: string;
+  /** Convex polygon, field frame, inches. */
+  poly: Vec2[];
+}
+
+const COS_22_5 = dcosDeg(22.5);
+
+/** Octagon with flats facing the axes (Override goals), given the width across flats. */
+export function octagon(cx: number, cy: number, acrossFlats: number): Vec2[] {
+  const r = acrossFlats / 2 / COS_22_5;
+  const pts: Vec2[] = [];
+  for (let k = 0; k < 8; k++) pts.push([cx + r * dcosDeg(22.5 + 45 * k), cy + r * dsinDeg(22.5 + 45 * k)]);
+  return pts;
+}
+
+function box(cx: number, cy: number, w: number, l: number, heading = 0): Vec2[] {
+  const s = dsinDeg(heading);
+  const c = dcosDeg(heading);
+  return ([[-w / 2, -l / 2], [w / 2, -l / 2], [w / 2, l / 2], [-w / 2, l / 2]] as Vec2[]).map(([lx, ly]): Vec2 => [cx + lx * c + ly * s, cy - lx * s + ly * c]);
+}
+
+/** Collision shapes of everything fixed on the field. */
+export function fieldObstacles(field: FieldDef): Obstacle[] {
+  const out: Obstacle[] = [];
+  for (const g of field.goals ?? []) out.push({ id: `goal ${g.id}`, poly: octagon(g.x, g.y, g.baseWidth) });
+  const half = field.perimeter.inside / 2;
+  for (const l of field.loaders ?? []) {
+    const inward = l.wall === 'left' ? 1 : -1;
+    out.push({ id: `loader ${l.id}`, poly: box(-inward * half + (inward * l.depth) / 2, l.y, l.depth, l.width) });
+  }
+  for (const o of field.objects) {
+    if (o.movable) continue;
+    if (o.shape.type === 'box') out.push({ id: o.id, poly: box(o.shape.x, o.shape.y, o.shape.width, o.shape.length, o.shape.heading) });
+    else out.push({ id: o.id, poly: octagon(o.shape.x, o.shape.y, o.shape.radius * 2 * COS_22_5) });
+  }
+  return out;
+}
+
+/**
+ * Separating-axis test for two convex polygons. Returns the minimum translation that
+ * moves  out of , or null if they don't overlap.
+ */
+export function satMtv(a: Vec2[], b: Vec2[]): Vec2 | null {
+  let best = Infinity;
+  let axis: Vec2 = [0, 0];
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const q = poly[(i + 1) % poly.length];
+      let nx = q[1] - p[1];
+      let ny = p[0] - q[0];
+      const len = Math.sqrt(nx * nx + ny * ny);
+      if (len < 1e-12) continue;
+      nx /= len;
+      ny /= len;
+      let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
+      for (const v of a) {
+        const d = v[0] * nx + v[1] * ny;
+        aMin = Math.min(aMin, d);
+        aMax = Math.max(aMax, d);
+      }
+      for (const v of b) {
+        const d = v[0] * nx + v[1] * ny;
+        bMin = Math.min(bMin, d);
+        bMax = Math.max(bMax, d);
+      }
+      const overlap = Math.min(aMax, bMax) - Math.max(aMin, bMin);
+      if (overlap <= 0) return null;
+      if (overlap < best) {
+        best = overlap;
+        // push a away from b
+        const sign = (aMin + aMax) / 2 < (bMin + bMax) / 2 ? -1 : 1;
+        axis = [nx * sign, ny * sign];
+      }
+    }
+  }
+  return [axis[0] * best, axis[1] * best];
+}
+
+/** Distance along a ray (unit direction) to a convex polygon's edges, or Infinity. */
+export function rayPolygon(ox: number, oy: number, dx: number, dy: number, poly: Vec2[]): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [px, py] = poly[i];
+    const [qx, qy] = poly[(i + 1) % poly.length];
+    const ex = qx - px;
+    const ey = qy - py;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((px - ox) * ey - (py - oy) * ex) / den;
+    const u = ((px - ox) * dy - (py - oy) * dx) / den;
+    if (t >= 0 && u >= 0 && u <= 1) best = Math.min(best, t);
+  }
+  return best;
 }
 
 // ---------------- frame transforms ----------------

@@ -4,7 +4,7 @@
 import type { BuildResult } from '../compiler/build.ts';
 import type { Diagnostic } from '../compiler/diagnostics.ts';
 import type { CompilerRequest, CompilerResponse } from '../compiler/worker.ts';
-import fieldJson from '../../data/fields/generic-12ft.json';
+import { initialState } from '../games/override/state.ts';
 import type { FieldDef } from '../sim/field.ts';
 import { maxSpeed, validateProfile, type RobotProfile } from '../sim/profile.ts';
 import { simulatedEnvNames } from '../sim/pros-api.ts';
@@ -20,7 +20,8 @@ import {
 import { FieldViewer, type ViewMode } from './viewer.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const field = fieldJson as FieldDef;
+const fieldModules = import.meta.glob('../../data/fields/*.json', { eager: true, import: 'default' }) as Record<string, FieldDef>;
+const FIELDS: FieldDef[] = Object.values(fieldModules).sort((a, b) => (a.game ? -1 : 1) - (b.game ? -1 : 1) || a.name.localeCompare(b.name));
 
 // ---------------- data: presets and samples ----------------
 
@@ -42,6 +43,7 @@ const state = {
   binary: {} as Record<string, Uint8Array>,
   robots: [...PRESETS] as RobotProfile[],
   robotId: PRESETS.find((p) => p.id === 'tank-6m-450')?.id ?? PRESETS[0].id,
+  fieldId: FIELDS.find((f) => f.id === 'override')?.id ?? FIELDS[0].id,
   autonMs: 15000,
   start: { x: 0, y: 0, theta: 0 },
   place: 'auto' as PlaceMode,
@@ -53,12 +55,14 @@ const state = {
   dirtySinceRun: true,
 };
 const robot = () => state.robots.find((r) => r.id === state.robotId) ?? PRESETS[0];
+const field = () => FIELDS.find((f) => f.id === state.fieldId) ?? FIELDS[0];
+/** Game fields have a Head-to-Head and a Skills layout; the auto-stop length picks one. */
+const layoutId = () => (state.autonMs >= 60000 ? 'skills' : 'h2h');
 
 // ---------------- UI pieces ----------------
 
 const editor = new ProjectEditor($('editor'), $('file-tabs'));
 const viewer = new FieldViewer($('viewer'));
-viewer.setField(field);
 if (import.meta.env.DEV) Object.assign(window, { __viewer: viewer, __state: state });
 
 function setStatus(text: string, kind: '' | 'ok' | 'err' = '', progress?: { loaded: number; total: number }) {
@@ -128,13 +132,63 @@ $<HTMLSelectElement>('robot-select').onchange = async (e) => {
 const spInputs = ['sp-x', 'sp-y', 'sp-t'].map((id) => $<HTMLInputElement>(id));
 function readStart() {
   const [x, y, t] = spInputs.map((i) => Number(i.value) || 0);
-  const half = field.perimeter.inside / 2 - 6;
+  const half = field().perimeter.inside / 2 - 6;
   state.start = { x: Math.max(-half, Math.min(half, x)), y: Math.max(-half, Math.min(half, y)), theta: t };
   invalidateRun();
   viewer.showPose(state.start);
   persistSettings();
 }
 spInputs.forEach((i) => i.addEventListener('change', readStart));
+
+// ---------------- fields and start presets ----------------
+
+function renderFieldSelect() {
+  const sel = $<HTMLSelectElement>('field-select');
+  sel.replaceChildren(...FIELDS.map((f) => new Option(f.name, f.id, false, f.id === state.fieldId)));
+}
+
+function renderPresets() {
+  const f = field();
+  const presets = (f.startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
+  const sel = $<HTMLSelectElement>('sp-preset');
+  $('sp-preset-label').hidden = presets.length === 0;
+  const match = presets.find((p) => p.x === state.start.x && p.y === state.start.y && p.theta === state.start.theta);
+  sel.replaceChildren(new Option('Custom', '', false, !match), ...presets.map((p) => new Option(p.name, p.id, false, p === match)));
+}
+
+function setStart(p: { x: number; y: number; theta: number }) {
+  state.start = { x: p.x, y: p.y, theta: p.theta };
+  [p.x, p.y, p.theta].forEach((v, i) => (spInputs[i].value = String(v)));
+  invalidateRun();
+  viewer.showPose(state.start);
+  persistSettings();
+}
+
+/** Show the selected field and its starting layout (before any run). */
+function applyField() {
+  const f = field();
+  viewer.setField(f);
+  state.recording = null;
+  viewer.setRecording(null);
+  viewer.setGameState(f.game?.id === 'override' ? initialState(f, layoutId()) : null);
+  $('start-pose').classList.remove('hidden');
+  renderPresets();
+  viewer.showPose(state.start);
+}
+
+$<HTMLSelectElement>('field-select').onchange = (e) => {
+  state.fieldId = (e.target as HTMLSelectElement).value;
+  const f = field();
+  // jump to the first legal start on a game field
+  const first = (f.startPositions ?? []).find((p) => p.layouts.includes(layoutId()));
+  applyField();
+  setStart(first ?? { x: 0, y: 0, theta: 0 });
+  renderPresets();
+};
+$<HTMLSelectElement>('sp-preset').onchange = (e) => {
+  const p = (field().startPositions ?? []).find((x) => x.id === (e.target as HTMLSelectElement).value);
+  if (p) setStart(p);
+};
 $<HTMLSelectElement>('sp-place').onchange = (e) => {
   state.place = (e.target as HTMLSelectElement).value as PlaceMode;
   invalidateRun();
@@ -143,6 +197,7 @@ $<HTMLSelectElement>('sp-place').onchange = (e) => {
 $<HTMLSelectElement>('auton-length').onchange = (e) => {
   state.autonMs = Number((e.target as HTMLSelectElement).value);
   invalidateRun();
+  applyField();
   persistSettings();
 };
 
@@ -202,7 +257,7 @@ function simulate(wasm: Uint8Array<ArrayBuffer>): Promise<Recording> {
     };
     const req: SimRequest = {
       wasm,
-      options: { profile: robot(), field, start: state.start, autonMs: state.autonMs, placeAtSetPose: state.place },
+      options: { profile: robot(), field: field(), start: state.start, autonMs: state.autonMs, placeAtSetPose: state.place },
     };
     w.postMessage(req, [wasm.buffer]);
   });
@@ -471,10 +526,7 @@ function loadFiles(name: string, files: Record<string, string>, binary: Record<s
   }
   state.projectName = name;
   editor.load(editable);
-  state.recording = null;
-  viewer.setRecording(null);
-  viewer.showPose(state.start);
-  $('start-pose').classList.remove('hidden');
+  applyField();
   persistProject();
 }
 
@@ -540,8 +592,8 @@ $('btn-samples').onclick = () => {
         $<HTMLDialogElement>('dlg-samples').close();
         state.robotId = s.robot;
         renderRobotSelect();
-        state.start = { x: 0, y: 0, theta: 0 };
-        spInputs.forEach((i) => (i.value = '0'));
+        const firstStart = (field().startPositions ?? []).find((p) => p.layouts.includes(layoutId()));
+        setStart(firstStart ?? { x: 0, y: 0, theta: 0 });
         await applyRobot();
         loadFiles(s.id, sampleProject(s.id));
         persistSettings();
@@ -671,15 +723,16 @@ $('btn-robot').onclick = openRobotDialog;
 // ---------------- settings persistence ----------------
 
 function persistSettings() {
-  void safe(idb.put('settings', 'app', { robotId: state.robotId, autonMs: state.autonMs, start: state.start, place: state.place }), undefined);
+  void safe(idb.put('settings', 'app', { robotId: state.robotId, fieldId: state.fieldId, autonMs: state.autonMs, start: state.start, place: state.place }), undefined);
 }
 
 async function boot() {
   $<HTMLButtonElement>('btn-run').disabled = true; // until the project is loaded
   state.robots = [...PRESETS, ...(await listCustomRobots())];
-  const settings = await safe(idb.get<{ robotId: string; autonMs: number; start: typeof state.start; place: PlaceMode }>('settings', 'app'), undefined);
+  const settings = await safe(idb.get<{ robotId: string; fieldId?: string; autonMs: number; start: typeof state.start; place: PlaceMode }>('settings', 'app'), undefined);
   if (settings) {
     if (state.robots.some((r) => r.id === settings.robotId)) state.robotId = settings.robotId;
+    if (settings.fieldId && FIELDS.some((f) => f.id === settings.fieldId)) state.fieldId = settings.fieldId;
     state.autonMs = settings.autonMs ?? 15000;
     state.start = settings.start ?? state.start;
     state.place = settings.place ?? 'auto';
@@ -688,6 +741,12 @@ async function boot() {
   $<HTMLSelectElement>('sp-place').value = state.place;
   [state.start.x, state.start.y, state.start.theta].forEach((v, i) => (spInputs[i].value = String(v)));
   renderRobotSelect();
+  renderFieldSelect();
+  applyField();
+  if (!settings) {
+    const first = (field().startPositions ?? []).find((p) => p.layouts.includes(layoutId()));
+    if (first) setStart(first);
+  }
   await applyRobot();
 
   const saved = await loadProject();

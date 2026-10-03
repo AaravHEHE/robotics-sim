@@ -38,6 +38,57 @@
         }
       }
     },
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "color", "x", "y", "height", "baseWidth", "topWidth", "bodyHeight", "socket", "zone"],
+        "properties": {
+          "id": { "type": "string" }, "kind": { "enum": ["alliance", "neutral", "center"] }, "color": { "enum": ["red", "blue", "neutral"] },
+          "x": { "type": "number" }, "y": { "type": "number" }, "height": { "type": "number" }, "baseWidth": { "type": "number" },
+          "topWidth": { "type": "number" }, "bodyHeight": { "type": "number" }, "socket": { "type": "number" }, "zone": { "type": "string" },
+          "aprilTag": { "type": "integer" }
+        }
+      }
+    },
+    "toggles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "wall", "x", "y", "length", "sectionHeight", "topHeight", "zone", "start"],
+        "properties": {
+          "wall": { "enum": ["left", "right", "top", "bottom"] },
+          "start": { "type": "object", "required": ["in", "out", "down"], "description": "Face colors at the start: into the field, out of the field, down on the mounts" }
+        }
+      }
+    },
+    "loaders": { "type": "array", "items": { "type": "object", "required": ["id", "alliance", "x", "y", "wall", "width", "depth", "height", "opening"] } },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "name", "color", "polygon"],
+        "properties": { "kind": { "enum": ["quadrant", "midfield", "loadZone"] }, "polygon": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 } } }
+      }
+    },
+    "tape": { "type": "array", "items": { "type": "object", "required": ["from", "to", "width", "color"] } },
+    "layouts": {
+      "type": "object",
+      "description": "Starting layouts by mode: h2h (Head-to-Head) and skills (Robot Skills)",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "items"],
+        "properties": {
+          "items": { "type": "array", "description": "{type: stack|lying|goal, ...}; stacks list pieces bottom first" },
+          "matchLoads": { "type": "object" },
+          "preload": { "type": "object" }
+        }
+      }
+    },
+    "startPositions": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "name", "alliance", "zone", "x", "y", "theta", "layouts"] }
+    },
     "game": { "oneOf": [{ "type": "null" }, { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } }] },
     "sources": { "type": "array", "items": { "type": "string" } }
   }

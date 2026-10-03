@@ -7,6 +7,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { FieldDef } from '../sim/field.ts';
 import type { MechanismSpec, RobotProfile } from '../sim/profile.ts';
 import type { Recording } from '../sim/recording.ts';
+import type { OverrideState } from '../games/override/state.ts';
+import { drawTape, goalMesh, loaderMesh, piecesGroup, toggleMesh } from './override-meshes.ts';
 
 export type ViewMode = 'top' | 'orbit' | 'follow';
 export interface FieldPose {
@@ -33,6 +35,10 @@ export class FieldViewer {
   private readonly robotGroup = new THREE.Group();
   private readonly ghost = new THREE.Group();
   private readonly overlay = new THREE.Group();
+  /** Scoring objects of a game field. */
+  private readonly gameGroup = new THREE.Group();
+  /** Toggle id -> group to rotate for its roll angle. */
+  private readonly toggleRolls = new Map<string, THREE.Group>();
   private trail: THREE.Line | null = null;
   private futureTrail: THREE.Line | null = null;
   private rec: Recording | null = null;
@@ -67,7 +73,7 @@ export class FieldViewer {
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 400 });
     this.scene.add(sun);
-    this.scene.add(this.fieldGroup, this.overlay, this.ghost, this.robotGroup);
+    this.scene.add(this.fieldGroup, this.gameGroup, this.overlay, this.ghost, this.robotGroup);
     this.applyTheme();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
 
@@ -140,12 +146,14 @@ export class FieldViewer {
   setField(field: FieldDef) {
     this.field = field;
     this.fieldGroup.clear();
+    this.gameGroup.clear();
+    this.toggleRolls.clear();
     const inside = field.perimeter.inside;
     const half = inside / 2;
 
     // foam tiles: one canvas texture with seams
     const n = field.tiles.count;
-    const px = 1024;
+    const px = field.tape?.length ? 2048 : 1024;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = px;
     const g = canvas.getContext('2d')!;
@@ -172,6 +180,7 @@ export class FieldViewer {
       g.lineTo(px, p);
       g.stroke();
     }
+    drawTape(g, field, px);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
@@ -216,7 +225,29 @@ export class FieldViewer {
         this.fieldGroup.add(post);
       }
     }
+    // game field elements (goals, toggles, loaders)
+    for (const goal of field.goals ?? []) this.fieldGroup.add(goalMesh(goal));
+    for (const t of field.toggles ?? []) {
+      const { outer, roll } = toggleMesh(t, field);
+      this.toggleRolls.set(t.id, roll);
+      this.fieldGroup.add(outer);
+    }
+    for (const l of field.loaders ?? []) this.fieldGroup.add(loaderMesh(l, field));
     this.setView(this.mode);
+  }
+
+  /** Show a game state's scoring objects and toggle angles (null hides them). */
+  setGameState(state: OverrideState | null) {
+    this.gameGroup.clear();
+    if (state && this.field) {
+      this.gameGroup.add(piecesGroup(this.field, state));
+      for (const t of state.toggles) {
+        // +angle = top rolls outward = negative rotation about the local x axis
+        const roll = this.toggleRolls.get(t.id);
+        if (roll) roll.rotation.x = (-t.angle * Math.PI) / 180;
+      }
+    }
+    this.needsRender = true;
   }
 
   // ---------------- robot ----------------
