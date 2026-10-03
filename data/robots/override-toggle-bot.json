@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "override-toggle-bot",
   "name": "Override: Toggle control bot",
-  "description": "A zoning robot: a front roller at Toggle height (port 8) that spins a Toggle either way, and a rear fold-out plate (ADI B) that presses a Toggle one face per push. No game-piece manipulators.",
+  "description": "A zoning robot: a front roller at Toggle height (port 8) that spins a Toggle either way, an optical sensor (port 9) that sees the Toggle face in front of the roller, and a rear fold-out plate (ADI B) that presses a Toggle one face per push. No game-piece manipulators.",
   "size": {
     "width": 15,
     "length": 15,
@@ -35,6 +35,17 @@
       "type": "adi_digital_out",
       "port": "B",
       "name": "Plate"
+    },
+    {
+      "type": "optical",
+      "port": 9,
+      "name": "Toggle eye",
+      "mount": {
+        "x": 3,
+        "y": 6,
+        "z": 12.5,
+        "heading": 0
+      }
     }
   ],
   "mechanisms": [

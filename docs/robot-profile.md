@@ -42,9 +42,11 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | `motor` | `port`, `cartridge` | A motor with its own speed ramp (non-drive mechanisms). |
 | `imu` | `port` | Ideal heading and rotation. 2 s calibration. The accelerometer includes vibration while moving. |
 | `rotation` | `port`, plus optionally `trackingWheel {axis, wheelDiameter, offset}` or `mechanism` | A tracking wheel reads its travel: `vertical` wheels roll forward (offset = inches to the right of center), `horizontal` wheels roll sideways (offset = inches forward of center). With `mechanism`, it reads that mechanism's angle. |
-| `distance` | `port`, `mount {x, y, heading}` | Distance to the field walls along the sensor's direction (mm, like PROS). |
+| `distance` | `port`, `mount {x, y, z?, heading}` | Distance (mm, like PROS) along the sensor's direction to the walls, Goals and Loaders, and on a game field to Pins and Cups at its height `z` (default 3"). |
+| `gps` | `port`, optional `mount {x, y, heading?}` (where the sensor sits, which way it faces) | Field position in meters and heading. It reports the turning center when your code's offset (`pros::Gps(port, xOffset, yOffset)`) matches `mount`; otherwise the sensor's own position. |
+| `optical` | `port`, optional `mount {x, y, z?, heading}` (default: front center, 2" up, facing forward), optional `watches` (a claw, intake or staging mechanism) | On a game field: hue, saturation, brightness and proximity of the Pin, Cup, Goal or Toggle face in front of it (up to 6") at height `z`. With `watches`, it reads what that mechanism holds, e.g. the color of the Pin in a staging tray. |
 | `adi_digital_out` | `port` (`"A"`–`"H"`) | A solenoid. Drives `piston` mechanisms. |
-| `optical`, `gps`, `vision`, `ai_vision`, `adi_digital_in` | `port` | Present on the port, but readings aren't simulated yet. |
+| `vision`, `ai_vision`, `adi_digital_in` | `port` | Present on the port, but readings aren't simulated yet. |
 
 The **code is authoritative for ports**. If code uses a device on a port where the
 profile has nothing, or has a different device, the calls do nothing and the

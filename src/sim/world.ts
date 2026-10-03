@@ -4,7 +4,7 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
 import type { FieldDef, Vec2 } from './field.ts';
-import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile } from './profile.ts';
+import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile, type SensorMount } from './profile.ts';
 
 export interface Pose {
   x: number;
@@ -141,6 +141,35 @@ export interface DriveController {
   update(world: World, dt: number): [number, number];
 }
 
+/** A sensor beam in the field frame: origin, unit direction and height above the tiles. */
+export interface SensorBeam {
+  ox: number;
+  oy: number;
+  dx: number;
+  dy: number;
+  z: number;
+}
+
+/** Color and closeness of whatever an optical sensor sees (PROS units). */
+export interface OpticalReading {
+  /** 0-360 degrees */
+  hue: number;
+  /** 0-1 */
+  saturation: number;
+  /** 0-1 */
+  brightness: number;
+  /** 0 (nothing) - 255 (touching) */
+  proximity: number;
+}
+
+/** Game-specific sensing, installed by the game running on the field. */
+export interface SensorHooks {
+  /** Distance along a beam to the nearest game object (Infinity if none). */
+  objectRay?: (beam: SensorBeam) => number;
+  /** What an optical sensor sees. */
+  optical?: (device: Extract<DeviceSpec, { type: 'optical' }>) => OpticalReading;
+}
+
 export class World {
   readonly profile: RobotProfile;
   readonly field: FieldDef;
@@ -160,6 +189,8 @@ export class World {
   readonly collisions: Collision[] = [];
   private lastCollisionWall = '';
   private lastObstacle = '';
+  /** What a game adds to the robot's sensors (game objects, colors). */
+  sensors: SensorHooks = {};
   /** Static convex obstacles (goals, loaders, field objects) in the field frame. */
   readonly obstacles: Obstacle[];
   time = 0;
@@ -423,15 +454,26 @@ export class World {
     return [this.accelForward / G + vib * n(1), lateral + vib * n(2), 1 + vib * 0.5 * n(3)];
   }
 
-  /** Distance from a robot-mounted sensor to the nearest wall along its beam, inches. */
-  raycast(mount: { x: number; y: number; heading: number }): number {
+  /** Field-frame origin and direction of a robot-mounted sensor's beam. */
+  beam(mount: SensorMount): SensorBeam {
     const s = dsinDeg(this.pose.theta);
     const c = dcosDeg(this.pose.theta);
-    const ox = this.pose.x + mount.x * c + mount.y * s;
-    const oy = this.pose.y - mount.x * s + mount.y * c;
     const h = (this.pose.theta + mount.heading) * RAD;
-    const dx = dsin(h);
-    const dy = dcos(h);
+    return {
+      ox: this.pose.x + mount.x * c + mount.y * s,
+      oy: this.pose.y - mount.x * s + mount.y * c,
+      dx: dsin(h),
+      dy: dcos(h),
+      z: mount.z ?? 3,
+    };
+  }
+
+  /**
+   * Distance from a robot-mounted sensor to the nearest wall, field element or (through
+   * the game's sensor hook) game object along its beam, inches.
+   */
+  raycast(mount: SensorMount): number {
+    const { ox, oy, dx, dy, z } = this.beam(mount);
     const half = this.field.perimeter.inside / 2;
     let best = Infinity;
     if (dx > 1e-9) best = Math.min(best, (half - ox) / dx);
@@ -439,6 +481,7 @@ export class World {
     if (dy > 1e-9) best = Math.min(best, (half - oy) / dy);
     if (dy < -1e-9) best = Math.min(best, (-half - oy) / dy);
     for (const ob of this.obstacles) best = Math.min(best, rayPolygon(ox, oy, dx, dy, ob.poly));
+    if (this.sensors.objectRay) best = Math.min(best, this.sensors.objectRay({ ox, oy, dx, dy, z }));
     return best;
   }
 

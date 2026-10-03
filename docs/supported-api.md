@@ -52,15 +52,11 @@ are PROS's own code, compiled unmodified; they call the C functions below.
 
 ### Optical sensor
 
-**Simulated (0):** none yet
-
-**Not simulated (14):** `optical_disable_gesture`, `optical_enable_gesture`, `optical_get_brightness`, `optical_get_gesture`, `optical_get_gesture_raw`, `optical_get_hue`, `optical_get_integration_time`, `optical_get_led_pwm`, `optical_get_proximity`, `optical_get_raw`, `optical_get_rgb`, `optical_get_saturation`, `optical_set_integration_time`, `optical_set_led_pwm`
+**Simulated (14):** `optical_disable_gesture`, `optical_enable_gesture`, `optical_get_brightness`, `optical_get_gesture`, `optical_get_gesture_raw`, `optical_get_hue`, `optical_get_integration_time`, `optical_get_led_pwm`, `optical_get_proximity`, `optical_get_raw`, `optical_get_rgb`, `optical_get_saturation`, `optical_set_integration_time`, `optical_set_led_pwm`
 
 ### GPS sensor
 
-**Simulated (0):** none yet
-
-**Not simulated (24):** `gps_get_accel`, `gps_get_accel_x`, `gps_get_accel_y`, `gps_get_accel_z`, `gps_get_error`, `gps_get_gyro_rate`, `gps_get_gyro_rate_x`, `gps_get_gyro_rate_y`, `gps_get_gyro_rate_z`, `gps_get_heading`, `gps_get_heading_raw`, `gps_get_offset`, `gps_get_orientation`, `gps_get_pitch`, `gps_get_position`, `gps_get_position_and_orientation`, `gps_get_position_x`, `gps_get_position_y`, `gps_get_roll`, `gps_get_yaw`, `gps_initialize_full`, `gps_set_data_rate`, `gps_set_offset`, `gps_set_position`
+**Simulated (24):** `gps_get_accel`, `gps_get_accel_x`, `gps_get_accel_y`, `gps_get_accel_z`, `gps_get_error`, `gps_get_gyro_rate`, `gps_get_gyro_rate_x`, `gps_get_gyro_rate_y`, `gps_get_gyro_rate_z`, `gps_get_heading`, `gps_get_heading_raw`, `gps_get_offset`, `gps_get_orientation`, `gps_get_pitch`, `gps_get_position`, `gps_get_position_and_orientation`, `gps_get_position_x`, `gps_get_position_y`, `gps_get_roll`, `gps_get_yaw`, `gps_initialize_full`, `gps_set_data_rate`, `gps_set_offset`, `gps_set_position`
 
 ### Vision / AI Vision sensors
 
@@ -87,10 +83,12 @@ are PROS's own code, compiled unmodified; they call the C functions below.
 ### Model notes
 
 - **Motors:** speed follows the cartridge in the robot profile; the code's gearset setting scales encoder degrees and rpm like a real V5 motor (raw counts are physical ticks, the firmware default units). Brake modes: hold/brake stop at the drivetrain's full deceleration, coast at half. Temperature, power, torque and current are plausible constants.
-- **Drivetrain:** idealized tank kinematics limited by the profile's top speed and acceleration; walls stop the robot (wheels slip, encoders keep counting).
+- **Drivetrain:** idealized tank kinematics limited by the profile's top speed and acceleration; walls and field elements stop the robot and its wheels stall (encoders stop counting).
 - **IMU:** calibration takes 2 s; heading/rotation follow the robot exactly; the accelerometer reports real acceleration plus vibration while moving.
 - **Rotation sensors:** profile entries with `trackingWheel` read the wheel's travel; with `mechanism` they read that mechanism's angle.
-- **Distance sensors:** measure to the field perimeter along the mounted direction.
+- **Distance sensors:** measure along the mounted direction to the perimeter, Goals, Loaders and, on a game field, Pins and Cups at the sensor's height (`mount.z`, default 3").
+- **GPS:** reads the true position (meters) and heading. It reports the robot's turning center when the offset set in code (`pros::Gps(port, xOffset, yOffset)`, `set_offset`) matches where the sensor sits (profile `mount`); otherwise it reports where the sensor is, like a real one. Error is a constant 0.01 m; pitch and roll are 0.
+- **Optical sensors:** on a game field, see the color and closeness (`get_proximity`, up to 6") of the Pin, Cup, Goal or Toggle face in front of them at their height, or, with `watches`, what a claw, intake or staging area holds. Colors are idealized (red, blue, yellow, Cup gray / clear, black Goals); gestures never trigger.
 - **3-wire digital outputs:** drive pneumatic mechanisms in the profile (`adi_digital_out` devices).
 - **LLEMU (`pros::lcd`):** shown in the Brain screen panel. Other brain-screen drawing (`pros::screen`) is ignored silently.
 - **Controller:** always connected, all inputs zero (autonomous only).

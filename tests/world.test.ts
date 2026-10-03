@@ -1,4 +1,7 @@
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { repoRoot } from '../scripts/node-toolchain.ts';
 import { MoveToPoint, Turn } from '../src/sim/motion.ts';
 import { maxSpeed, validateProfile } from '../src/sim/profile.ts';
 import { validateField } from '../src/sim/field.ts';
@@ -20,7 +23,9 @@ function runUntil(w: World, done: () => boolean, maxMs = 10000): number {
 
 describe('presets and field', () => {
   it('all presets and the generic field validate', async () => {
-    for (const id of ['tank-6m-450', 'lemlib-template', 'ez-example']) expect(validateProfile(await robot(id))).toEqual([]);
+    const ids = readdirSync(path.join(repoRoot, 'data/robots')).map((f) => f.replace(/\.json$/, ''));
+    expect(ids.length).toBeGreaterThanOrEqual(11);
+    for (const id of ids) expect(validateProfile(await robot(id)), id).toEqual([]);
     expect(validateField(await field())).toEqual([]);
   });
 

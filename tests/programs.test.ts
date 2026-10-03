@@ -86,16 +86,16 @@ void autonomous() { pros::delay(1000); printf("ticks=%d\\n", ticks); }
   it('warns about unsupported API and missing devices instead of crashing', async () => {
     const rec = await simulate(
       prosProject(`#include "main.h"
-pros::Optical eye(3);
+pros::Vision eye(3);
 pros::Motor arm(15);
-void autonomous() { eye.get_hue(); arm.move(50); pros::delay(100); }
+void autonomous() { eye.get_object_count(); arm.move(50); pros::delay(100); }
 `),
       'tank-6m-450',
       { autonMs: 500 },
     );
     expect(rec.error).toBeNull();
     const text = rec.events.map((e) => e.message).join('\n');
-    expect(text).toMatch(/optical_get_hue\(\) is not supported/);
+    expect(text).toMatch(/vision_get_object_count\(\) is not supported/);
     expect(text).toMatch(/motor on port 15, but the robot profile has nothing/);
   });
 

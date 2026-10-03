@@ -6,6 +6,7 @@ import type { World } from '../../sim/world.ts';
 import type { Piece, PinColor } from './elements.ts';
 import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS } from './physics.ts';
+import { installSensors } from './sensors.ts';
 import { inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type Violation } from './rules.ts';
 import { autonomousBonus, awp, score, type AwpCheck, type Mode, type ScoreBreakdown } from './scoring.ts';
 import { initialState, type FloorStack, type OverrideState } from './state.ts';
@@ -89,6 +90,7 @@ export class OverrideGame implements GameOps {
     }
     this.notes = [];
     this.manipulators = new Manipulators(this, world);
+    installSensors(world, field, this.state);
     this.rec = {
       id: 'override',
       layout,

@@ -71,7 +71,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-toggle-bot',
     name: 'Override: Toggle control (PROS)',
-    description: 'Plain PROS. Turns both red-side Toggles red with a roller, so the yellow Pins already on the neutral Goals score for red.',
+    description: 'Plain PROS. Turns both red-side Toggles red with a roller, stopping when an optical sensor sees the red face, so the yellow Pins already on the neutral Goals score for red.',
     robot: 'override-toggle-bot',
     field: 'override',
     start: 'red1_s',
@@ -98,7 +98,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-skills',
     name: 'Override Skills: Match Load tower (LemLib)',
-    description: 'LemLib, 60 s Autonomous Coding Skills. Builds Pin + Cup combos from the red Loader through the intake and staging tray, stacks a tower on Goal R1 and parks in the Midfield.',
+    description: 'LemLib, 60 s Autonomous Coding Skills. Starts from a GPS reading, builds Pin + Cup combos from the red Loader through the intake and staging tray, stacks a tower on Goal R1 and parks in the Midfield.',
     robot: 'override-intake-staging',
     field: 'override',
     start: 'red1_s',

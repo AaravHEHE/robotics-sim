@@ -57,9 +57,11 @@
           "mechanism": { "type": "string" },
           "mount": {
             "type": "object",
-            "required": ["x", "y", "heading"],
-            "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "heading": { "type": "number" } }
-          }
+            "description": "Sensor position, robot frame (inches): x right, y forward, z up (distance/optical), heading clockwise from forward (required for distance)",
+            "required": ["x", "y"],
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" }, "heading": { "type": "number" } }
+          },
+          "watches": { "type": "string", "description": "optical: a claw, intake or staging mechanism it looks into" }
         }
       }
     },

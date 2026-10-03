@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "override-intake-staging",
   "name": "Override: intake -> staging -> claw",
-  "description": "A front roller intake (port 10) feeds a staging tray that assembles a Pin + Cup combo; a 4-bar (port 7, 1:5) with a pneumatic claw (ADI A) picks the combo up and stacks it. The Preload starts in the staging tray. Good for Skills Match Loads.",
+  "description": "A front roller intake (port 10) feeds a staging tray that assembles a Pin + Cup combo; a 4-bar (port 7, 1:5) with a pneumatic claw (ADI A) picks the combo up and stacks it. The Preload starts in the staging tray. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor watching the tray (port 9). Good for Skills Match Loads.",
   "size": {
     "width": 15,
     "length": 15,
@@ -41,6 +41,22 @@
       "type": "adi_digital_out",
       "port": "A",
       "name": "Claw"
+    },
+    {
+      "type": "gps",
+      "port": 12,
+      "name": "GPS",
+      "mount": {
+        "x": 0,
+        "y": -6,
+        "heading": 180
+      }
+    },
+    {
+      "type": "optical",
+      "port": 9,
+      "name": "Tray eye",
+      "watches": "Stage"
     }
   ],
   "mechanisms": [

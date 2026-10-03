@@ -40,7 +40,7 @@ export function setColor(def: ToggleDef, angle: number, touched: boolean): Toggl
 }
 
 /** Inward unit normal of the Toggle's wall and its along-wall direction. */
-function wallFrame(def: ToggleDef): { n: Vec2; u: Vec2 } {
+export function wallFrame(def: ToggleDef): { n: Vec2; u: Vec2 } {
   switch (def.wall) {
     case 'left': return { n: [1, 0], u: [0, 1] };
     case 'right': return { n: [-1, 0], u: [0, 1] };

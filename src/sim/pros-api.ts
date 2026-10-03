@@ -5,7 +5,7 @@
 
 import { dcos, dsin } from './dmath.ts';
 import type { Scheduler } from './scheduler.ts';
-import type { MotorState, World } from './world.ts';
+import type { MotorState, OpticalReading, World } from './world.ts';
 
 export const PROS_ERR = 2147483647;
 export const PROS_ERR_F = Infinity;
@@ -578,6 +578,211 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.distance_get_confidence = (port: number) => (dist(port) ? 63 : PROS_ERR);
   f.distance_get_object_size = (port: number) => (dist(port) ? 400 : PROS_ERR);
   f.distance_get_object_velocity = (port: number) => (dist(port) ? 0 : PROS_ERR_F);
+
+  // ======================= GPS =======================
+  // The GPS reads the field code strip; idealized, it reports where the robot's turning
+  // center is: the sensor's real position minus the offset the code declares (meters,
+  // robot frame). A wrong offset in code gives wrong positions, as on a real robot.
+  const M_PER_IN = 0.0254;
+  type GpsSpec = Extract<(typeof world.profile.devices)[number], { type: 'gps' }>;
+  const gpsState = new Map<number, { offset: [number, number]; rate: number }>();
+  const gps = (port: number) => {
+    if (!expectDevice(port, 'gps')) return null;
+    const spec = world.profile.devices.find((d) => d.port === Math.abs(port) && d.type === 'gps') as GpsSpec;
+    let st = gpsState.get(spec.port);
+    if (!st) gpsState.set(spec.port, (st = { offset: [0, 0], rate: 20 }));
+    return { spec, st };
+  };
+  const gpsPose = (g: NonNullable<ReturnType<typeof gps>>) => {
+    const m = g.spec.mount ?? { x: 0, y: 0 };
+    const th = world.pose.theta;
+    // sensor position (inches) -> minus the code's offset rotated into the field frame (meters)
+    const s = dsin((th * Math.PI) / 180);
+    const c = dcos((th * Math.PI) / 180);
+    const sx = world.pose.x + m.x * c + m.y * s;
+    const sy = world.pose.y - m.x * s + m.y * c;
+    const [ox, oy] = g.st.offset;
+    const x = sx * M_PER_IN - (ox * c + oy * s);
+    const y = sy * M_PER_IN - (-ox * s + oy * c);
+    const heading = ((((th + (m.heading ?? 0)) % 360) + 360) % 360);
+    return { x, y, heading, yaw: heading >= 180 ? heading - 360 : heading };
+  };
+  f.gps_initialize_full = (port: number, _x: number, _y: number, _h: number, xOffset: number, yOffset: number) => {
+    const g = gps(port);
+    if (!g) return PROS_ERR;
+    g.st.offset = [xOffset, yOffset];
+    return 1;
+  };
+  f.gps_set_offset = (port: number, xOffset: number, yOffset: number) => {
+    const g = gps(port);
+    if (!g) return PROS_ERR;
+    g.st.offset = [xOffset, yOffset];
+    return 1;
+  };
+  f.gps_get_offset = (ret: number, port: number) => {
+    const g = gps(port);
+    dv().setFloat64(ret, g ? g.st.offset[0] : PROS_ERR_F, true);
+    dv().setFloat64(ret + 8, g ? g.st.offset[1] : PROS_ERR_F, true);
+  };
+  // the starting-position guess only matters when the strip can't be seen
+  f.gps_set_position = (port: number) => (gps(port) ? 1 : PROS_ERR);
+  f.gps_set_data_rate = (port: number, rate: number) => {
+    const g = gps(port);
+    if (!g) return PROS_ERR;
+    g.st.rate = Math.max(5, rate);
+    return 1;
+  };
+  f.gps_get_error = (port: number) => (gps(port) ? 0.01 : PROS_ERR_F);
+  f.gps_get_position_and_orientation = (ret: number, port: number) => {
+    const g = gps(port);
+    const p = g ? gpsPose(g) : null;
+    const d = dv();
+    d.setFloat64(ret, p ? p.x : PROS_ERR_F, true);
+    d.setFloat64(ret + 8, p ? p.y : PROS_ERR_F, true);
+    d.setFloat64(ret + 16, p ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 24, p ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 32, p ? p.yaw : PROS_ERR_F, true);
+  };
+  f.gps_get_position = (ret: number, port: number) => {
+    const g = gps(port);
+    const p = g ? gpsPose(g) : null;
+    dv().setFloat64(ret, p ? p.x : PROS_ERR_F, true);
+    dv().setFloat64(ret + 8, p ? p.y : PROS_ERR_F, true);
+  };
+  f.gps_get_position_x = (port: number) => {
+    const g = gps(port);
+    return g ? gpsPose(g).x : PROS_ERR_F;
+  };
+  f.gps_get_position_y = (port: number) => {
+    const g = gps(port);
+    return g ? gpsPose(g).y : PROS_ERR_F;
+  };
+  f.gps_get_orientation = (ret: number, port: number) => {
+    const g = gps(port);
+    const d = dv();
+    d.setFloat64(ret, g ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 8, g ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 16, g ? gpsPose(g).yaw : PROS_ERR_F, true);
+  };
+  f.gps_get_pitch = (port: number) => (gps(port) ? 0 : PROS_ERR_F);
+  f.gps_get_roll = (port: number) => (gps(port) ? 0 : PROS_ERR_F);
+  f.gps_get_yaw = (port: number) => {
+    const g = gps(port);
+    return g ? gpsPose(g).yaw : PROS_ERR_F;
+  };
+  f.gps_get_heading = (port: number) => {
+    const g = gps(port);
+    return g ? gpsPose(g).heading : PROS_ERR_F;
+  };
+  f.gps_get_heading_raw = f.gps_get_heading;
+  f.gps_get_gyro_rate = (ret: number, port: number) => {
+    const g = gps(port);
+    const d = dv();
+    d.setFloat64(ret, g ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 8, g ? 0 : PROS_ERR_F, true);
+    d.setFloat64(ret + 16, g ? -world.omega : PROS_ERR_F, true);
+  };
+  f.gps_get_gyro_rate_x = (port: number) => (gps(port) ? 0 : PROS_ERR_F);
+  f.gps_get_gyro_rate_y = (port: number) => (gps(port) ? 0 : PROS_ERR_F);
+  f.gps_get_gyro_rate_z = (port: number) => (gps(port) ? -world.omega : PROS_ERR_F);
+  f.gps_get_accel = (ret: number, port: number) => {
+    const g = gps(port);
+    const [ax, ay, az] = g ? world.imuAccel() : [PROS_ERR_F, PROS_ERR_F, PROS_ERR_F];
+    const d = dv();
+    d.setFloat64(ret, ax, true);
+    d.setFloat64(ret + 8, ay, true);
+    d.setFloat64(ret + 16, az, true);
+  };
+  f.gps_get_accel_x = (port: number) => (gps(port) ? world.imuAccel()[0] : PROS_ERR_F);
+  f.gps_get_accel_y = (port: number) => (gps(port) ? world.imuAccel()[1] : PROS_ERR_F);
+  f.gps_get_accel_z = (port: number) => (gps(port) ? world.imuAccel()[2] : PROS_ERR_F);
+
+  // ======================= Optical sensor =======================
+  // What the sensor sees comes from the game on the field (world.sensors.optical): the
+  // color and closeness of a Pin, Cup, Goal or Toggle face in front of it, or of what a
+  // claw / intake / staging area it watches holds. Nothing in range reads as dark gray.
+  type OpticalSpec = Extract<(typeof world.profile.devices)[number], { type: 'optical' }>;
+  const opticalState = new Map<number, { led: number; integration: number; gestures: boolean }>();
+  const optical = (port: number) => {
+    if (!expectDevice(port, 'optical')) return null;
+    const spec = world.profile.devices.find((d) => d.port === Math.abs(port) && d.type === 'optical') as OpticalSpec;
+    let st = opticalState.get(spec.port);
+    if (!st) opticalState.set(spec.port, (st = { led: 0, integration: 100, gestures: false }));
+    return { spec, st };
+  };
+  const NOTHING: OpticalReading = { hue: 0, saturation: 0, brightness: 0.02, proximity: 0 };
+  const see = (port: number): OpticalReading | null => {
+    const o = optical(port);
+    if (!o) return null;
+    return world.sensors.optical?.(o.spec) ?? NOTHING;
+  };
+  const rgbOf = (r: OpticalReading): [number, number, number] => {
+    // HSV -> RGB, 0-255
+    const c = r.brightness * r.saturation;
+    const hp = (((r.hue % 360) + 360) % 360) / 60;
+    const x = c * (1 - Math.abs((hp % 2) - 1));
+    const [a, b, d] = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x] : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+    const m = r.brightness - c;
+    return [(a + m) * 255, (b + m) * 255, (d + m) * 255];
+  };
+  f.optical_get_hue = (port: number) => see(port)?.hue ?? PROS_ERR_F;
+  f.optical_get_saturation = (port: number) => see(port)?.saturation ?? PROS_ERR_F;
+  f.optical_get_brightness = (port: number) => see(port)?.brightness ?? PROS_ERR_F;
+  f.optical_get_proximity = (port: number) => {
+    const r = see(port);
+    return r ? Math.round(r.proximity) : PROS_ERR;
+  };
+  f.optical_set_led_pwm = (port: number, value: number) => {
+    const o = optical(port);
+    if (!o) return PROS_ERR;
+    o.st.led = Math.max(0, Math.min(100, value));
+    return 1;
+  };
+  f.optical_get_led_pwm = (port: number) => optical(port)?.st.led ?? PROS_ERR;
+  f.optical_get_rgb = (ret: number, port: number) => {
+    const r = see(port);
+    const [red, green, blue] = r ? rgbOf(r) : [PROS_ERR_F, PROS_ERR_F, PROS_ERR_F];
+    const d = dv();
+    d.setFloat64(ret, red, true);
+    d.setFloat64(ret + 8, green, true);
+    d.setFloat64(ret + 16, blue, true);
+    d.setFloat64(ret + 24, r ? r.brightness : PROS_ERR_F, true);
+  };
+  f.optical_get_raw = (ret: number, port: number) => {
+    const r = see(port);
+    const [red, green, blue] = r ? rgbOf(r) : [0, 0, 0];
+    const d = dv();
+    d.setUint32(ret, r ? Math.round(r.brightness * 1023) : PROS_ERR, true);
+    d.setUint32(ret + 4, r ? Math.round(red * 4) : PROS_ERR, true);
+    d.setUint32(ret + 8, r ? Math.round(green * 4) : PROS_ERR, true);
+    d.setUint32(ret + 12, r ? Math.round(blue * 4) : PROS_ERR, true);
+  };
+  // gestures are not simulated: no hand ever waves in front of the robot
+  f.optical_get_gesture = (port: number) => (optical(port) ? 0 : PROS_ERR);
+  f.optical_get_gesture_raw = (ret: number, port: number) => {
+    const ok = !!optical(port);
+    const d = dv();
+    for (let i = 0; i < 12; i++) d.setUint8(ret + i, ok ? 0 : 255);
+  };
+  f.optical_enable_gesture = (port: number) => {
+    const o = optical(port);
+    if (!o) return PROS_ERR;
+    o.st.gestures = true;
+    return 1;
+  };
+  f.optical_disable_gesture = (port: number) => {
+    const o = optical(port);
+    if (!o) return PROS_ERR;
+    o.st.gestures = false;
+    return 1;
+  };
+  f.optical_get_integration_time = (port: number) => optical(port)?.st.integration ?? PROS_ERR_F;
+  f.optical_set_integration_time = (port: number, ms: number) => {
+    const o = optical(port);
+    if (!o) return PROS_ERR;
+    o.st.integration = Math.max(3, Math.min(712, ms));
+    return 1;
+  };
 
   // ======================= Registry =======================
   f.registry_get_plugged_type = (zeroIndexed: number) => {

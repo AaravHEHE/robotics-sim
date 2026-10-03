@@ -5,7 +5,8 @@
 // Robot: "Override: intake -> staging -> claw". Start: Red 1 (left wall, south).
 //
 // In Skills the drive team keeps both red Loaders stocked with Match Loads (Pins and Cups
-// alternate in each chute). The robot builds a tower on Goal R1 out of Pin + Cup combos:
+// alternate in each chute), and the GPS code strip is up: the robot starts from a GPS
+// reading. It builds a tower on Goal R1 out of Pin + Cup combos:
 //  1. Takes a Cup from the south red Loader. The intake drops it into the staging tray,
 //     where it sits over the Preload Pin: a combo. The claw picks the combo up and sets it
 //     on Goal R1 (the Pin nests in the Goal, the Cup over the Pin).
@@ -23,6 +24,8 @@ pros::Imu imu(11);
 pros::Motor lift(7, pros::MotorGearset::green, pros::MotorUnits::degrees);  // 4-bar, 1:5
 pros::Motor intake(10, pros::MotorGearset::blue);
 pros::adi::Pneumatics claw('A', false);  // extended = closed
+// GPS 6" behind the turning center, facing backward: tell it the offset (meters)
+pros::Gps gps(12, 0, -6 * 0.0254);
 
 lemlib::Drivetrain drivetrain(&leftMotors, &rightMotors, 11.5, lemlib::Omniwheel::NEW_325, 450, 2);
 lemlib::ControllerSettings linearController(10, 0, 3, 3, 1, 100, 3, 500, 20);
@@ -86,7 +89,11 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  chassis.setPose(-60.7, -37, 90);  // Red 1 (south) start
+  // The GPS code strip is installed for Skills: start from where the GPS says the robot
+  // is (meters -> inches) instead of trusting the start position by hand.
+  const pros::gps_status_s_t g = gps.get_position_and_orientation();
+  chassis.setPose(g.x / 0.0254, g.y / 0.0254, gps.get_heading() - 180);  // the GPS faces backward
+  printf("GPS start (%.1f, %.1f) facing %.0f\n", g.x / 0.0254, g.y / 0.0254, gps.get_heading() - 180);
 
   // 1. Preload + Cup combo onto R1 (claw low: the Pin's bottom drops into the Goal)
   fetchFromLoader(1);

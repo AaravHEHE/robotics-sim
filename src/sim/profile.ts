@@ -15,12 +15,38 @@ export interface TrackingWheelSpec {
   offset: number;
 }
 
+/** A sensor's position on the robot (robot frame, inches) and the direction it faces. */
+export interface SensorMount {
+  x: number;
+  y: number;
+  /** Height above the tiles (default 3 for distance, 2 for optical). */
+  z?: number;
+  /** Degrees clockwise from the robot's forward direction. */
+  heading: number;
+}
+
 export type DeviceSpec =
   | { type: 'motor'; port: number; cartridge: Cartridge; name?: string }
   | { type: 'imu'; port: number; name?: string }
   | { type: 'rotation'; port: number; name?: string; trackingWheel?: TrackingWheelSpec; mechanism?: string }
-  | { type: 'distance'; port: number; name?: string; mount: { x: number; y: number; heading: number } }
-  | { type: 'optical' | 'gps' | 'vision' | 'ai_vision'; port: number; name?: string }
+  | { type: 'distance'; port: number; name?: string; mount: SensorMount }
+  | {
+      type: 'optical';
+      port: number;
+      name?: string;
+      /** Where it looks from (default: front center, 2" up, facing forward). */
+      mount?: SensorMount;
+      /** A claw, intake or staging area it looks into: it then reads what that holds. */
+      watches?: string;
+    }
+  | {
+      type: 'gps';
+      port: number;
+      name?: string;
+      /** Where the sensor physically sits (heading: which way it faces; default forward). */
+      mount?: { x: number; y: number; heading?: number };
+    }
+  | { type: 'vision' | 'ai_vision'; port: number; name?: string }
   | { type: 'adi_digital_out' | 'adi_digital_in'; port: string; name?: string };
 
 /**
@@ -259,6 +285,12 @@ export function validateProfile(p: unknown): string[] {
     }
   }
   e.push(...validateMechanisms(r.mechanisms));
+  for (const dev of r.devices) {
+    if (dev.type !== 'optical' || dev.watches === undefined) continue;
+    if (!r.mechanisms.some((m) => m.name === dev.watches && ['claw', 'intake', 'staging'].includes(m.kind))) {
+      e.push(`Optical sensor on port ${dev.port}: watches "${dev.watches}" must name a claw, intake or staging mechanism.`);
+    }
+  }
   return e;
 }
 

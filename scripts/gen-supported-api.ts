@@ -62,10 +62,12 @@ if (rest.length) md += `### Other\n\n**Not simulated:** ${rest.map((n) => '`' + 
 md += `### Model notes
 
 - **Motors:** speed follows the cartridge in the robot profile; the code's gearset setting scales encoder degrees and rpm like a real V5 motor (raw counts are physical ticks, the firmware default units). Brake modes: hold/brake stop at the drivetrain's full deceleration, coast at half. Temperature, power, torque and current are plausible constants.
-- **Drivetrain:** idealized tank kinematics limited by the profile's top speed and acceleration; walls stop the robot (wheels slip, encoders keep counting).
+- **Drivetrain:** idealized tank kinematics limited by the profile's top speed and acceleration; walls and field elements stop the robot and its wheels stall (encoders stop counting).
 - **IMU:** calibration takes 2 s; heading/rotation follow the robot exactly; the accelerometer reports real acceleration plus vibration while moving.
 - **Rotation sensors:** profile entries with \`trackingWheel\` read the wheel's travel; with \`mechanism\` they read that mechanism's angle.
-- **Distance sensors:** measure to the field perimeter along the mounted direction.
+- **Distance sensors:** measure along the mounted direction to the perimeter, Goals, Loaders and, on a game field, Pins and Cups at the sensor's height (\`mount.z\`, default 3").
+- **GPS:** reads the true position (meters) and heading. It reports the robot's turning center when the offset set in code (\`pros::Gps(port, xOffset, yOffset)\`, \`set_offset\`) matches where the sensor sits (profile \`mount\`); otherwise it reports where the sensor is, like a real one. Error is a constant 0.01 m; pitch and roll are 0.
+- **Optical sensors:** on a game field, see the color and closeness (\`get_proximity\`, up to 6") of the Pin, Cup, Goal or Toggle face in front of them at their height, or, with \`watches\`, what a claw, intake or staging area holds. Colors are idealized (red, blue, yellow, Cup gray / clear, black Goals); gestures never trigger.
 - **3-wire digital outputs:** drive pneumatic mechanisms in the profile (\`adi_digital_out\` devices).
 - **LLEMU (\`pros::lcd\`):** shown in the Brain screen panel. Other brain-screen drawing (\`pros::screen\`) is ignored silently.
 - **Controller:** always connected, all inputs zero (autonomous only).

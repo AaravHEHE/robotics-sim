@@ -8,11 +8,13 @@
 // red is worth 2 x 20 points without touching a single Pin.
 //
 // Every Toggle starts yellow-in with the alliance color facing out of the field. The
-// front roller spins the top of a Toggle into the field, bringing the red face in.
+// front roller spins the top of a Toggle into the field, bringing the red face in; an
+// optical sensor beside it says when red has come around.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Motor toggleRoller(8, pros::MotorGears::green);
+pros::Optical toggleEye(9);  // looks at the Toggle face in front of the roller
 pros::adi::Pneumatics plate('B', false);
 pros::Imu imu(11);
 
@@ -66,12 +68,20 @@ void turnTo(double target, int maxSpeed = 127) {
   pros::delay(100);
 }
 
-// Spin the roller against a Toggle until it has rolled one face, then stop.
+// Is the optical sensor looking at something red? (Red hues wrap around 0°.)
+bool seesRed() {
+  const double hue = toggleEye.get_hue();
+  return toggleEye.get_proximity() > 50 && toggleEye.get_saturation() > 0.5 && (hue < 20 || hue > 340);
+}
+
+// Spin the roller against a Toggle until the optical sensor sees the red face come
+// over, then stop: the Toggle settles onto that face. Gives up after a second.
 void rollToggleIn() {
+  const std::uint32_t end = pros::millis() + 1000;
   toggleRoller.move(127);
-  pros::delay(200);
+  while (!seesRed() && pros::millis() < end) pros::delay(5);
   toggleRoller.brake();
-  pros::delay(100);
+  pros::delay(150);
 }
 
 void initialize() {
