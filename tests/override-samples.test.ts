@@ -12,7 +12,7 @@ const GOLDEN: Record<string, { red: number; blue: number; toggles?: Record<strin
   'override-toggle-bot': { red: 40, blue: 0, toggles: { red1: 'red', red2: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, toggles: { red1: 'red' } },
   'override-midfield-pusher': { red: 8, blue: 0 },
-  'override-dr4b': { red: 5, blue: 0 },
+  'override-dr4b': { red: 45, blue: 0, toggles: { red1: 'red' } },
 };
 
 describe('Override sample autons', () => {

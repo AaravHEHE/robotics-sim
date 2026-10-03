@@ -602,8 +602,14 @@ $('btn-samples').onclick = () => {
         $<HTMLDialogElement>('dlg-samples').close();
         state.robotId = s.robot;
         renderRobotSelect();
-        const firstStart = (field().startPositions ?? []).find((p) => p.layouts.includes(layoutId()));
-        setStart(firstStart ?? { x: 0, y: 0, theta: 0 });
+        // a sample written for a field, start position and auto-stop opens with them
+        if (s.field && FIELDS.some((f) => f.id === s.field)) state.fieldId = s.field;
+        if (s.autonMs) state.autonMs = s.autonMs;
+        renderFieldSelect();
+        $<HTMLSelectElement>('auton-length').value = String(state.autonMs);
+        const starts = (field().startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
+        const start = starts.find((p) => p.id === s.start) ?? starts[0];
+        setStart(start ?? { x: 0, y: 0, theta: 0 });
         await applyRobot();
         loadFiles(s.id, sampleProject(s.id));
         persistSettings();

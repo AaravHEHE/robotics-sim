@@ -44,7 +44,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-dr4b',
     name: 'Override: DR4B + roller claw (LemLib)',
-    description: 'LemLib in field coordinates. Rolls the Preload into Goal R1, then stacks a Cup + yellow Pin on it with the DR4B.',
+    description: 'LemLib in field coordinates. Rolls the Preload into Goal R1, stacks a Cup + yellow Pin on it with the DR4B, then presses the Red 1 Toggle to red.',
     robot: 'override-dr4b-roller',
     field: 'override',
     start: 'red1_s',

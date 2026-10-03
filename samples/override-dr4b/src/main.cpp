@@ -7,6 +7,9 @@
 //  1. Roll the Preload (red half down) out into red Goal R1.
 //  2. Roll in the Cup + yellow Pin standing at (-47, -47), lift it with the DR4B and roll
 //     it out onto the Preload: the Cup nests over the Pin's top.
+//  3. Press the Red 1 Toggle twice with the front of the chassis (14" tall, so it reaches
+//     a Toggle on top of the wall): yellow -> blue -> red. Every visible yellow half in
+//     Red 1 is then Owned by red, including the yellow Pin on neutral Goal N_R1.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -49,7 +52,7 @@ void rollClaw(int power, int ms = 300) {
 void press() {
   leftMotors.move(80);
   rightMotors.move(80);
-  pros::delay(450);
+  pros::delay(700);
   leftMotors.move(-70);
   rightMotors.move(-70);
   pros::delay(250);
@@ -82,8 +85,18 @@ void autonomous() {
   rollClaw(-127);
   liftTo(0);
 
+  // 3. Around the east side of R1 to the Red 1 Toggle (left wall, y = 0) and press it twice.
   chassis.moveToPoint(-53.5, -38.5, 1000, {.forwards = false});
+  chassis.turnToHeading(90, 800);
+  chassis.moveToPoint(-35, -38.5, 1000);
+  chassis.turnToHeading(0, 800);
+  chassis.moveToPoint(-35, -5, 1500);
+  chassis.turnToHeading(270, 800);
+  chassis.moveToPoint(-55, -5, 1500);
+  chassis.turnToHeading(270, 500);  // square to the wall
   chassis.waitUntilDone();
+  press();  // yellow -> blue
+  press();  // blue -> red
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

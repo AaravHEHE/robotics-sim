@@ -242,7 +242,9 @@ export class Turn extends Motion {
     const vmax = (w.maxSpeed * clamp(this.p.maxSpeed, 0, 127)) / 127;
     const vmin = (w.maxSpeed * clamp(Math.abs(this.p.minSpeed), 0, 127)) / 127;
     const exitRange = vmin > 0 ? Math.max(this.p.earlyExitRange, 0.5) : 0.5;
-    if (Math.abs(remaining) < exitRange) {
+    // in-place turns (unless chaining) settle: on target with both sides (nearly) stopped, so the next
+    // motion doesn't inherit leftover wheel speed, like LemLib's small-error exit condition
+    if (Math.abs(remaining) < exitRange && (vmin > 0 || this.locked !== null || (Math.abs(w.vL) < 2 && Math.abs(w.vR) < 2))) {
       this.done = true;
       return [0, 0];
     }
