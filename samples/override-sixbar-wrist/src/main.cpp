@@ -64,11 +64,11 @@ void autonomous() {
 
   // 1. Flip the Preload red end down and raise it while turning toward R1 (-47.1, -23.5).
   wristTo(180);
-  liftTo(20);
+  liftTo(10);  // the flipped Pin hangs ~3.5" below the claw: just clear of the Goal
   chassis.pid_turn_set(45_deg, TURN_SPEED);
   chassis.pid_wait();
-  // stop 11.5" from the Goal's center: the raised claw reaches ~11" ahead
-  chassis.pid_odom_set({{-55.22_in, -31.68_in}, fwd, DRIVE_SPEED});
+  // stop 11.1" from the Goal's center: the slightly raised claw reaches ~10.6" ahead
+  chassis.pid_odom_set({{-54.94_in, -31.40_in}, fwd, DRIVE_SPEED});
   chassis.pid_wait();
   claw.retract();  // the Pin drops into the Goal
   pros::delay(200);

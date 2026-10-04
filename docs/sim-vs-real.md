@@ -36,7 +36,7 @@ Severity says how much a difference can change the outcome of an autonomous rout
 |---|---|
 | A claw grabbed anything within 2″ of its grip point, including a Pin already Placed on a nearby Goal (an accidental SG10). | Only what is between the jaws is grabbed (1.25″ to the side at most). Loose pieces are taken before Placed ones, and a Goal's pieces only when the claw is centered on them. |
 | A Pin could be stacked on a Pin, and a Cup on a Cup. | A stack alternates Pin, Cup, Pin…; anything else falls off. |
-| A motor claw's Preload fell out at power-on, because the claw read "open" at encoder 0. | A claw starts closed on the Preload, as when it's loaded by hand. |
+| A motor claw's Preload fell out at power-on, because the claw read "open" at encoder 0. Preloaded, staged and intake-fed pieces were held by their very tip, floating above the tiles. | A claw starts closed on the Preload, as when it's loaded by hand, and holds every piece where it actually closed on it. |
 | An open claw kept holding a stack it had gripped. | An open claw holds nothing it gripped. Pieces an intake feeds into an open claw rest there until it closes, and fall out if it is raised first. |
 | An intake swallowed one piece every 350 ms at any roller speed, Loaders refilled their opening instantly, and a closed claw still accepted pieces. | Pieces come in one piece-length apart at the rollers' surface speed. A Loader's next piece needs 0.2 s to drop into the opening, and a closed claw blocks the hand-off. |
 | A piece pressed against the bumper in front of an intake wasn't picked up. | Pieces that touch the capture zone are picked up. |

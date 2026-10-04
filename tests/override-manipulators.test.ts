@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -5,8 +6,8 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
 import { loaderMouth } from '../src/games/override/manipulators.ts';
 import type { FieldDef } from '../src/sim/field.ts';
-import { liftEffector, toRobot } from '../src/sim/lift.ts';
-import { validateProfile, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
+import { clawEffector, liftEffector, toRobot } from '../src/sim/lift.ts';
+import { validateProfile, type ClawSpec, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
 import { World } from '../src/sim/world.ts';
 import { prosProject, robot, simulate } from './helpers.ts';
 
@@ -362,6 +363,21 @@ describe('manipulators behave like the real mechanisms', () => {
 });
 
 describe('each robot type works like its real counterpart', () => {
+  it('a claw holds pieces where it closes on them: a Preload stands on the tiles, gripped above its tip', async () => {
+    const f = await field();
+    for (const id of readdirSync(path.join(repoRoot, 'data/robots')).filter((n) => n.startsWith('override-')).map((n) => n.replace(/.json$/, ''))) {
+      const r = await robot(id);
+      const c = r.mechanisms.find((m): m is ClawSpec => m.kind === 'claw' && !!m.preload);
+      if (!c) continue;
+      const world = new World(r, f, { x: -30, y: -50, theta: 90 });
+      const game = await OverrideGame.create(f, 'h2h', world);
+      for (let t = 0; t < 5; t++) game.step(1); // manipulators update every physics step (5 ms)
+      const z = clawEffector(r, c, (m) => world.mechanismState(m)).z;
+      expect(game.state.grip[c.name], id).toBeGreaterThanOrEqual(1);
+      expect(z - game.state.grip[c.name], id).toBeCloseTo(0, 6); // its bottom on the tiles
+    }
+  });
+
   it('a rear-facing bar lift swings its claw out behind the robot as it rises', () => {
     const rear: LiftSpec = { ...LIFT, facing: 'rear', home: { y: -10, z: 3 } };
     const up = liftEffector(rear, 30); // -30° -> 0°: the bar is horizontal, at full reach

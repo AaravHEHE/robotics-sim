@@ -28,6 +28,8 @@ const SPIN_RPM = 10;
 const INTAKE_SPACING = PIN.length;
 /** Intake roller diameter when the profile doesn't give one (in): a 2.75" flex wheel. */
 const ROLLER_DIAMETER = 2.75;
+/** A claw closes at least this far from either end of the piece it grips (in). */
+const GRIP_MARGIN = 1;
 /** Half the width between a claw's jaws (in): what is further to the side isn't gripped. */
 const JAW_HALF_WIDTH = 1.25;
 /** A Placed piece is only taken off a Goal when centered in the jaws (in). */
@@ -116,6 +118,15 @@ function slotAt(pieces: Piece[], base: number, onGoal: boolean, z: number): { in
     if (z >= slots[i].bottom - 0.5 && z <= slots[i].top + 0.5) return { index: i, bottom: slots[i].bottom };
   }
   return null;
+}
+
+/**
+ * Where a claw holds a piece (in above the piece's bottom): where it closed on it, but never
+ * on the very tip of either end (the jaws need something to close around).
+ */
+export function gripOn(piece: Piece, along: number): number {
+  const h = piece.kind === 'pin' ? PIN.length : CUP.height;
+  return Math.max(GRIP_MARGIN, Math.min(h - GRIP_MARGIN, along));
 }
 
 /** Footprint radius of a standing stack: its widest piece (Cup rim or Pin collar). */
@@ -209,6 +220,9 @@ export class Manipulators {
         for (const port of c.spec.motors) world.motor(Math.abs(port)).angle = (c.spec.closedAt ?? 0) / (c.spec.ratio ?? 1);
       }
       c.closed = this.isClosed(c) || (c.spec.grip === 'motor' && ops.state.held[c.spec.name]?.length > 0);
+      // the Preload stands on the tiles in the claw: held where the claw meets it
+      const held = ops.state.held[c.spec.name];
+      if (held?.length) c.grip = gripOn(held[0], this.effector(c.spec).z);
     }
     this.checkPossession();
   }
@@ -334,7 +348,7 @@ export class Manipulators {
       const d = dhypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
       if (d <= reach && Math.abs(e.robot.z - s.at.z) <= 1.5 && ok(items)) {
         const [sx, sy] = toField(this.world.pose, { x: s.at.x ?? 0, y: s.at.y });
-        cands.push({ d, pieces: items, from: { x: sx, y: sy, z: s.at.z }, take: () => this.receive(c, state.held[s.name].splice(0), 0) });
+        cands.push({ d, pieces: items, from: { x: sx, y: sy, z: s.at.z }, take: () => this.receive(c, state.held[s.name].splice(0), e.robot.z - s.at.z) });
       }
     }
     if (e.z <= LOW_REACH) {
@@ -387,7 +401,7 @@ export class Manipulators {
   /** Put pieces into a claw; `grip` = how far above the stack bottom it holds them. */
   private receive(c: ClawRuntime, pieces: Piece[], grip: number): void {
     const held = this.ops.state.held[c.spec.name];
-    if (!held.length) c.grip = Math.max(0, grip);
+    if (!held.length) c.grip = gripOn(pieces[0], grip);
     this.ops.state.held[c.spec.name] = merge(held, pieces);
   }
 
@@ -464,7 +478,7 @@ export class Manipulators {
       for (const batch of batches) {
         if (!batch.length || !fits(destSpec.capacity, state.held[spec.into], batch)) continue;
         const claw = this.claws.find((c) => c.spec.name === spec.into);
-        if (claw && !state.held[spec.into].length) claw.grip = 0;
+        if (claw && !state.held[spec.into].length) claw.grip = gripOn(batch[0], this.effector(claw.spec).z);
         if (claw && claw.spec.grip !== 'roller') claw.cradled = true;
         for (const p of batch) {
           mine.splice(mine.indexOf(p), 1);
