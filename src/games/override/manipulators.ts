@@ -29,6 +29,8 @@ const SPIN_RPM = 10;
 const INTAKE_SPACING = PIN.length;
 /** Intake roller diameter when the profile doesn't give one (in): a 2.75" flex wheel. */
 const ROLLER_DIAMETER = 2.75;
+/** How close a claw must be to its intake's hand-off point to take pieces from it (in). */
+const HANDOFF_REACH = 2.5;
 /** A claw closes at least this far from either end of the piece it grips (in). */
 const GRIP_MARGIN = 1;
 /** Half the width between a claw's jaws (in): what is further to the side isn't gripped. */
@@ -40,7 +42,7 @@ export const MAX_TILT = 20;
 /** A motor wrist flips past 90° ± this (degrees), so it doesn't chatter around 90°. */
 const WRIST_HYSTERESIS = 5;
 /** Pieces a Loader chute holds, and how often the drive team adds one (Skills). */
-const LOADER_CAPACITY = 2;
+const LOADER_CAPACITY = 4; // two loaded stacks
 const LOADER_REFILL_MS = 1000;
 /** After the bottom piece is pulled out, the next one falls into a Loader's opening (ms). */
 const LOADER_DROP_MS = 200;
@@ -151,6 +153,7 @@ export function preloadFor(field: FieldDef, mode: 'h2h' | 'skills', alliance: Al
  */
 export function startingState(field: FieldDef, layout: 'h2h' | 'skills', profile: RobotProfile, start: { x: number; y: number }): OverrideState {
   const state = initialState(field, layout);
+  for (const m of profile.mechanisms) if (m.kind === 'claw' || m.kind === 'intake' || m.kind === 'staging') state.held[m.name] = [];
   const alliance: Alliance = layout === 'skills' || sideOf([start.x, start.y]) !== 'blue' ? 'red' : 'blue';
   const p = preloadFor(field, layout, alliance, profile);
   if (p && p !== 'no-holder') {
@@ -159,6 +162,14 @@ export function startingState(field: FieldDef, layout: 'h2h' | 'skills', profile
     if (claw) state.grip[claw.name] = gripOn(p.pin, clawEffector(profile, claw, () => 0).z);
   }
   return state;
+}
+
+/**
+ * What comes out of a Loader's bottom opening at once: a loaded stack (a Pin with a Cup
+ * nested over it) together, or else a single piece.
+ */
+export function loaderUnit(items: Piece[]): Piece[] {
+  return items[0]?.kind === 'pin' && items[1]?.kind === 'cup' ? items.slice(0, 2) : items.slice(0, 1);
 }
 
 /** Footprint radius of a standing stack: its widest piece (Cup rim or Pin collar). */
@@ -226,8 +237,6 @@ export class Manipulators {
   /** Current time (ms) and when each Loader's bottom piece is next within reach. */
   private now = 0;
   private readonly loaderReady = new Map<string, number>();
-  /** Kind of the piece last put in each Loader. */
-  private readonly lastLoaded = new Map<string, Piece['kind']>();
 
   constructor(ops: GameOps, world: World) {
     this.ops = ops;
@@ -278,7 +287,9 @@ export class Manipulators {
 
   /** Robot parts that can touch a Toggle: the chassis box plus Toggle tools. */
   contactShapes(): ContactShape[] {
-    const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height }];
+    // how fast the robot is moving: a passive toggler hit fast turns a Toggle two faces
+    const speed = Math.abs(this.world.speed);
+    const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height, speed }];
     for (const tool of this.tools) {
       // a plate or jammer only reaches out while its piston is extended
       if ((tool.tool === 'plate' || tool.tool === 'jammer') && this.world.mechanismState(tool) < 0.5) continue;
@@ -288,7 +299,7 @@ export class Manipulators {
       );
       // roller: + output with inward = 1 rolls the Toggle's top into the field (negative angle)
       const spin = tool.tool === 'roller' ? -(tool.inward ?? 1) * this.world.mechanismRpm(tool) * 4.4 : undefined;
-      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined });
+      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined, speed });
     }
     return shapes;
   }
@@ -381,7 +392,7 @@ export class Manipulators {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
         const d = dhypot(e.x - mx, e.y - my);
-        if (items.length && this.loaderOpen(l.id) && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), from: { x: mx, y: my, z: 0 }, take: () => this.receive(c, this.takeFromLoader(l.id), e.z) });
+        if (items.length && this.loaderOpen(l.id) && d <= reach + 1 && ok(loaderUnit(items))) cands.push({ d, pieces: loaderUnit(items), from: { x: mx, y: my, z: 0 }, take: () => this.receive(c, this.takeFromLoader(l.id), e.z) });
       }
       for (const l of state.lying) {
         const [a, b] = pinEnds(l);
@@ -547,11 +558,20 @@ export class Manipulators {
     return this.lowered(dest);
   }
 
-  /** Is a claw down where its intake hands pieces over (its lift near home)? */
+  /**
+   * Is a claw where its intake hands pieces over: at the intake's `handoff` point (e.g. an
+   * arm folded back over the intake), or else with its lift down near home?
+   */
   private lowered(dest: ClawSpec): boolean {
+    const e = clawEffector(this.profile, dest, (m) => this.world.mechanismState(m));
+    const feeder = this.intakes.find((i) => i.into === dest.name && i.handoff);
+    if (feeder?.handoff) {
+      const h = feeder.handoff;
+      return dhypot(e.y - h.y, e.z - h.z) <= HANDOFF_REACH && Math.abs(e.x - (h.x ?? 0)) <= HANDOFF_REACH;
+    }
     if (!dest.lift) return true;
     const lift = this.profile.mechanisms.find((m) => m.name === dest.lift);
-    return !lift || clawEffector(this.profile, dest, (m) => this.world.mechanismState(m)).z <= (lift as { home: Point3 }).home.z + 2;
+    return !lift || e.z <= (lift as { home: Point3 }).home.z + 2;
   }
 
   private inZone(spec: IntakeSpec, fx: number, fy: number, margin: number): boolean {
@@ -568,7 +588,7 @@ export class Manipulators {
     for (const l of field.loaders ?? []) {
       const items = state.loaders[l.id];
       const [mx, my] = loaderMouth(field, l);
-      if (items.length && this.loaderOpen(l.id) && this.inZone(spec, mx, my, 0.5) && accepted(items.slice(0, 1))) return { pieces: this.takeFromLoader(l.id), from: { x: mx, y: my, z: 0 } };
+      if (items.length && this.loaderOpen(l.id) && this.inZone(spec, mx, my, 0.5) && accepted(loaderUnit(items))) return { pieces: this.takeFromLoader(l.id), from: { x: mx, y: my, z: 0 } };
     }
     for (const s of state.floor) {
       if (!this.inZone(spec, s.x, s.y, stackRadius(s.pieces)) || !accepted(s.pieces)) continue;
@@ -601,7 +621,8 @@ export class Manipulators {
   /** The bottom piece of a Loader; the one above it then drops into the opening. */
   private takeFromLoader(id: string): Piece[] {
     this.loaderReady.set(id, this.now + LOADER_DROP_MS);
-    return this.ops.state.loaders[id].splice(0, 1);
+    const items = this.ops.state.loaders[id];
+    return items.splice(0, loaderUnit(items).length);
   }
 
   /** A lying pin picked up stands with the end nearer the robot at the bottom. */
@@ -705,7 +726,10 @@ export class Manipulators {
     if (n.pins > 1 || n.cups > 1) this.ops.violation('SG6', `The robot possesses ${n.pins} Pins and ${n.cups} Cups (limit: 1 Pin and 1 Cup).`);
   }
 
-  /** Skills: the drive team keeps the red Loaders stocked from the Match Loads (Pins and Cups alternate in each). */
+  /**
+   * Skills: the drive team keeps the red Loaders stocked from the Match Loads, as "loaded
+   * stacks": a Pin with a Cup nested over it (<SG11> b), ready to go onto a Goal.
+   */
   private refillLoaders(t: number): void {
     const { state, field, mode } = this.ops;
     if (mode !== 'skills' || t < this.nextRefill) return;
@@ -714,13 +738,13 @@ export class Manipulators {
     const loaders = (field.loaders ?? []).filter((l) => l.alliance === 'red' && state.loaders[l.id].length < LOADER_CAPACITY);
     if (!loaders.length) return;
     loaders.sort((a, b) => state.loaders[a.id].length - state.loaders[b.id].length);
-    // each chute alternates Pins and Cups, so a robot can build combos from one Loader
     const id = loaders[0].id;
-    const i = Math.max(0, pool.findIndex((p) => p.kind !== this.lastLoaded.get(id)));
-    const [piece] = pool.splice(i, 1);
-    state.loaders[id].push(piece);
-    this.lastLoaded.set(id, piece.kind);
-    this.nextRefill = t + LOADER_REFILL_MS / 2; // two Loaders, each refilled about once a second
+    const pin = pool.findIndex((p) => p.kind === 'pin');
+    const load: Piece[] = pin >= 0 ? pool.splice(pin, 1) : [];
+    const cup = pool.findIndex((p) => p.kind === 'cup');
+    if (cup >= 0) load.push(...pool.splice(cup, 1));
+    state.loaders[id].push(...load);
+    this.nextRefill = t + LOADER_REFILL_MS / 2; // two Loaders, each restocked about once a second
     this.ops.changed();
   }
 }

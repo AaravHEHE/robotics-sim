@@ -711,12 +711,15 @@ export function satMtv(a: Vec2[], b: Vec2[]): Vec2 | null {
         bMin = Math.min(bMin, d);
         bMax = Math.max(bMax, d);
       }
-      const overlap = Math.min(aMax, bMax) - Math.max(aMin, bMin);
-      if (overlap <= 0) return null;
-      if (overlap < best) {
-        best = overlap;
-        // push a away from b
-        const sign = (aMin + aMax) / 2 < (bMin + bMax) / 2 ? -1 : 1;
+      if (Math.min(aMax, bMax) - Math.max(aMin, bMin) <= 0) return null;
+      // how far a has to move along this axis to get clear of b, each way: when one contains
+      // the other this is more than the overlap of the two intervals
+      const back = aMax - bMin; // moving a toward -axis
+      const fwd = bMax - aMin; // moving a toward +axis
+      const depth = Math.min(back, fwd);
+      if (depth < best) {
+        best = depth;
+        const sign = back < fwd ? -1 : 1;
         axis = [nx * sign, ny * sign];
       }
     }

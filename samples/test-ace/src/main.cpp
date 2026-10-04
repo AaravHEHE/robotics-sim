@@ -1,17 +1,18 @@
 #include "main.h"
 
-// Mechanism test for the "Override: DR4B + roller claw" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: ACE (cascade + chain bar + lobster claw)" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the DR4B to three heights, then the roller claw spits the Preload out and pulls it back in. Each check prints PASS or FAIL with what it measured
+// its range: the cascade to three heights, the chain bar over the top and back, and the lobster claw drops and re-grabs the Preload. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
-pros::MotorGroup lift({7, 8}, pros::MotorGears::green, pros::MotorUnits::degrees);  // DR4B, 1:5
-pros::Motor rollers(9, pros::MotorGears::blue);                                      // roller claw
+pros::MotorGroup cascade({7, 8}, pros::MotorGears::blue, pros::MotorUnits::degrees);  // 1:3 to the spool
+pros::Motor chainBar(9, pros::MotorGears::green, pros::MotorUnits::degrees);           // 1:3
+pros::adi::Pneumatics claw('A', true);  // extended = closed (on the Preload)
 
 // ---------------- checks ----------------
 int passed = 0, failed = 0;
@@ -104,23 +105,27 @@ void driveBack() {
 
 // ---------------- mechanisms ----------------
 void mechanismTest() {
-  printf("-- DR4B (1:5) --\n");
-  for (double deg : {20.0, 50.0, 80.0, 0.0}) {
-    lift.move_absolute(deg * 5, 200);
-    checkNear("DR4B to %g deg", deg, settle(lift, deg * 5, 15.0) / 5, 3);
+  printf("-- cascade (1:3 to a 1.375\" spool, 3 stages) --\n");
+  for (double spool : {300.0, 700.0, 1100.0, 0.0}) {
+    cascade.move_absolute(spool * 3, 600);
+    checkNear("spool to %g deg", spool, settle(cascade, spool * 3, 15) / 3, 5);
   }
-  printf("-- roller claw: out, then back in --\n");
-  rollers.move(-127);  // spit the Preload out (one piece at a time, bottom first)
+  printf("-- chain bar (1:3): the claw stays level as it swings over the top --\n");
+  for (double deg : {90.0, 180.0, 0.0}) {
+    chainBar.move_absolute(deg * 3, 200);
+    checkNear("chain bar to %g deg", deg, settle(chainBar, deg * 3, 9) / 3, 3);
+  }
+  printf("-- lobster claw: lets go of the Preload, then picks it up off the floor --\n");
+  claw.retract();
+  pros::delay(400);  // the Preload falls over in front of the robot
+  check("claw open", !claw.is_extended(), claw.is_extended());
+  chainBar.move_absolute(-25 * 3, 200);  // down to the floor in front
+  settle(chainBar, -75, 9);
+  claw.extend();
   pros::delay(300);
-  check("rollers spinning out (rpm)", rollers.get_actual_velocity() < -400, rollers.get_actual_velocity());
-  pros::delay(300);
-  rollers.brake();
-  pros::delay(300);
-  rollers.move(127);   // pull it back in from the floor in front
-  pros::delay(300);
-  check("rollers spinning in (rpm)", rollers.get_actual_velocity() > 400, rollers.get_actual_velocity());
-  pros::delay(500);
-  rollers.brake();
+  check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
+  chainBar.move_absolute(0, 200);
+  settle(chainBar, 0, 9);
 }
 
 void initialize() {
@@ -128,11 +133,12 @@ void initialize() {
   imu.reset(true);  // blocks ~2 s while the IMU calibrates
   leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
   rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
-  lift.set_brake_mode_all(pros::MotorBrake::hold);
+  cascade.set_brake_mode_all(pros::MotorBrake::hold);
+  chainBar.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: DR4B + roller claw\n");
+  printf("Mechanism test: Override: ACE (cascade + chain bar + lobster claw)\n");
   driveTest();
   mechanismTest();
   driveBack();

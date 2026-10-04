@@ -81,7 +81,7 @@ export interface RobotRect {
   length: number;
 }
 
-export type LiftType = 'arm' | 'fourbar' | 'sixbar' | 'dr4b' | 'cascade' | 'piston';
+export type LiftType = 'arm' | 'fourbar' | 'sixbar' | 'dr4b' | 'cascade' | 'piston' | 'chainbar';
 
 /** A lift. Its end effector sits at `home` when the lift's output is 0. */
 export interface LiftSpec extends MechanismDrive {
@@ -99,6 +99,11 @@ export interface LiftSpec extends MechanismDrive {
   stages?: number;
   /** Rise when extended (piston), inches. */
   travel?: number;
+  /**
+   * Another lift this one rides on (e.g. a chain bar on a cascade's carriage): its `home` is
+   * then where it sits with that lift at 0, and it moves with that lift's carriage.
+   */
+  base?: string;
   /**
    * Which way a bar lift (arm, fourbar, sixbar) reaches as it rises: 'front' (default) or
    * 'rear' for a lift that scores out of the back of the robot (its home y is then behind
@@ -150,6 +155,11 @@ export interface IntakeSpec extends MechanismDrive {
   transferMs?: number;
   /** Diameter of the rollers that pull pieces in (default 2.75 in): sets how fast pieces pass. */
   rollerDiameter?: number;
+  /**
+   * Where the intake hands pieces to its claw (robot frame): the claw takes them when it is
+   * there (within 2.5 in) and open. Default: whenever the claw's lift is down.
+   */
+  handoff?: RobotPoint;
   capacity?: Capacity;
   preload?: PreloadOrientation;
 }
@@ -303,7 +313,7 @@ export function validateProfile(p: unknown): string[] {
 }
 
 const KINDS = ['roller', 'arm', 'flywheel', 'piston', 'lift', 'claw', 'intake', 'staging', 'wrist', 'toggleTool'];
-const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'piston'];
+const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'piston', 'chainbar'];
 const isPoint = (p: RobotPoint | undefined) => !!p && isNum(p.y, -40, 40) && isNum(p.z, -5, 80) && (p.x === undefined || isNum(p.x, -40, 40));
 const isRect = (r: RobotRect | undefined) => !!r && isNum(r.x, -40, 40) && isNum(r.y, -40, 40) && isNum(r.width, 0.1, 40) && isNum(r.length, 0.1, 40);
 
@@ -349,7 +359,13 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         if (!LIFTS.includes(m.lift)) e.push(`Lift ${m.name}: lift must be one of ${LIFTS.join(', ')}.`);
         drive(m, m.lift === 'piston' ? 'adi' : 'motors');
         if (!isPoint(m.home)) e.push(`Lift ${m.name}: home {y, z} is required (inches).`);
-        if (['arm', 'fourbar', 'sixbar', 'dr4b'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
+        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'chainbar'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
+        if (m.base !== undefined) {
+          ref(m, m.base, ['lift'], 'base');
+          if (m.base === m.name) e.push(`Lift ${m.name}: base can't be itself.`);
+          const b = names.get(m.base);
+          if (b && b.kind === 'lift' && b.base) e.push(`Lift ${m.name}: base ${m.base} rides on another lift itself (one level of mounting only).`);
+        }
         if (m.lift === 'cascade' && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
         if (m.lift === 'piston' && !isNum(m.travel, 0.1, 60)) e.push(`Lift ${m.name}: travel is required.`);
         if (m.facing !== undefined && m.facing !== 'front' && m.facing !== 'rear') e.push(`Lift ${m.name}: facing must be front or rear.`);
@@ -367,6 +383,7 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         if (!isRect(m.zone)) e.push(`Intake ${m.name}: zone {x, y, width, length} is required.`);
         ref(m, m.into, ['claw', 'staging'], 'into');
         if (m.rollerDiameter !== undefined && !(m.rollerDiameter > 0)) e.push(`Intake ${m.name}: rollerDiameter must be a positive number of inches.`);
+        if (m.handoff !== undefined && !isPoint(m.handoff)) e.push(`Intake ${m.name}: handoff must be {y, z} (inches).`);
         cap(m);
         break;
       case 'staging':

@@ -62,8 +62,8 @@ describe('Override optical sensor', () => {
     expect(far.reading.proximity).toBe(0);
   });
 
-  it('a sensor watching the staging tray reads the Preload', async () => {
-    const r = await withDevices('override-intake-staging', [{ type: 'optical', port: 12, watches: 'Stage' }]);
+  it('a sensor watching the DR4B chamber reads the Preload', async () => {
+    const r = await withDevices('override-dr4b-intake', [{ type: 'optical', port: 13, watches: 'Chamber' }]);
     const { reading } = await look(r, { x: 0, y: -40, theta: 0 }, r.devices.at(-1) as Optical);
     expect(isHue(reading.hue, 'red')).toBe(true); // red half down, the sensor sits low
     expect(reading.proximity).toBeGreaterThan(200);

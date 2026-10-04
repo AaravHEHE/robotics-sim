@@ -46,9 +46,10 @@ describe('Override sample autons', () => {
  */
 const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean }> = {
   'test-flex': { checks: 13, holder: 'Claw', regrab: true },
-  'test-dr4b-roller': { checks: 13, holder: 'Roller claw', regrab: true },
-  'test-cascade': { checks: 15, holder: 'Claw', regrab: true },
-  'test-intake-staging': { checks: 17, holder: 'Claw', fromTray: true },
+  'test-banshee': { checks: 18, holder: 'Roller claw', regrab: true },
+  'test-dr4b-intake': { checks: 18, holder: 'Chamber', regrab: true },
+  'test-claw-gate': { checks: 17, holder: 'Claw', regrab: true },
+  'test-ace': { checks: 16, holder: 'Lobster claw', regrab: true },
   'test-sixbar-wrist': { checks: 15, holder: 'Claw', regrab: true, flips: true },
   'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },
   'test-toggle-bot': { checks: 14 },

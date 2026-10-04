@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "id": "override-claw-gate",
+  "name": "Override: Claw Gate (cascade + chain-bar claw + intake), approximate",
+  "description": "Approximates the top-ranked \"Claw Gate / Clawscade\" design from 99182E and CPSLO (no reveal of the original was found). A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 18
+  },
+  "mass": 16,
+  "drivetrain": {
+    "type": "tank",
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "blue",
+      "name": "Cascade L"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "blue",
+      "name": "Cascade R"
+    },
+    {
+      "type": "motor",
+      "port": 9,
+      "cartridge": "green",
+      "name": "Chain bar"
+    },
+    {
+      "type": "motor",
+      "port": 10,
+      "cartridge": "blue",
+      "name": "Intake"
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "A",
+      "name": "Claw"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "lift",
+      "name": "Cascade",
+      "lift": "cascade",
+      "motors": [
+        7,
+        8
+      ],
+      "ratio": 0.3333,
+      "range": [
+        0,
+        1150
+      ],
+      "home": {
+        "y": 0,
+        "z": 6
+      },
+      "spoolDiameter": 1.375,
+      "stages": 3
+    },
+    {
+      "kind": "lift",
+      "name": "Chain bar",
+      "lift": "chainbar",
+      "base": "Cascade",
+      "motors": [
+        9
+      ],
+      "ratio": 0.3333,
+      "range": [
+        -25,
+        190
+      ],
+      "home": {
+        "y": 11,
+        "z": 6
+      },
+      "length": 11,
+      "startAngle": 0
+    },
+    {
+      "kind": "claw",
+      "name": "Claw",
+      "lift": "Chain bar",
+      "grip": "piston",
+      "adi": "A",
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "intake",
+      "name": "Intake",
+      "motors": [
+        10
+      ],
+      "ratio": 1,
+      "zone": {
+        "x": 0,
+        "y": 8.25,
+        "width": 8,
+        "length": 1.5
+      },
+      "into": "Claw",
+      "handoff": {
+        "y": 9.97,
+        "z": 1.35
+      },
+      "transferMs": 300,
+      "rollerDiameter": 2.75
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Toggle bumper",
+      "tool": "bumper",
+      "box": {
+        "x": 0,
+        "y": 7.75,
+        "width": 12,
+        "length": 0.5
+      },
+      "bottom": 11,
+      "top": 13.5
+    }
+  ]
+}

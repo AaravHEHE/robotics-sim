@@ -1,20 +1,19 @@
 #include "main.h"
 
-// Mechanism test for the "Override: intake -> rear staging -> rear DR4B" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: Banshee (intake + arm + roller claw)" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the GPS and tray sensor are read, the rear claw takes the Preload from the tray, the DR4B lifts it to three heights, and the intake spins both ways. Each check prints PASS or FAIL with what it measured
+// its range: the arm to three angles with the wrist keeping the claw upright, the roller claw rolls the Preload out and back in, and the intake spins. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
-pros::Motor lift(7, pros::MotorGears::green, pros::MotorUnits::degrees);  // rear DR4B, 1:5
-pros::Motor intake(10, pros::MotorGears::blue);
-pros::adi::Pneumatics claw('A', false);  // extended = closed
-pros::Optical trayEye(9);                // looks down into the tray
-pros::Gps gps(12, 0, -6 * 0.0254);       // 6" behind the center, facing backward
+pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);     // 1:5 to the arm
+pros::Motor wrist(8, pros::MotorGears::green, pros::MotorUnits::degrees);   // 12:48 to the claw
+pros::Motor rollers(9, pros::MotorGears::green);                            // roller claw
+pros::Motor intake(10, pros::MotorGears::green);
 
 // ---------------- checks ----------------
 int passed = 0, failed = 0;
@@ -106,29 +105,35 @@ void driveBack() {
 }
 
 // ---------------- mechanisms ----------------
+// The claw turns with the arm, so the wrist turns back by the same angle to keep it upright.
+void armTo(double deg) {
+  arm.move_absolute(deg * 5, 200);
+  wrist.move_absolute(-deg * 4, 200);
+}
+
 void mechanismTest() {
-  printf("-- sensors --\n");
-  const pros::gps_status_s_t g = gps.get_position_and_orientation();
-  // the start is (-37, -60.7); LANE inches up the lane is (-37, -36.2)
-  checkNear("GPS x %g in", -37, g.x / 0.0254, 1.5);
-  checkNear("GPS y %g in", -60.705 + LANE, g.y / 0.0254, 1.5);
-  check("tray eye sees the Preload's yellow top", trayEye.get_proximity() > 50 && std::fabs(trayEye.get_hue() - 52) < 15, trayEye.get_hue());
-  printf("-- rear claw takes the Pin from the tray --\n");
-  claw.extend();
-  pros::delay(300);
-  check("tray empty (proximity)", trayEye.get_proximity() < 10, trayEye.get_proximity());
-  printf("-- DR4B (1:5) --\n");
-  for (double deg : {20.0, 40.0, 60.0, 0.0}) {
-    lift.move_absolute(deg * 5, 200);
-    checkNear("DR4B to %g deg", deg, settle(lift, deg * 5, 15.0) / 5, 3);
+  printf("-- arm (1:5) with the wrist (12:48) keeping the claw upright --\n");
+  for (double deg : {30.0, 60.0, 90.0, 0.0}) {
+    armTo(deg);
+    checkNear("arm to %g deg", deg, settle(arm, deg * 5, 15) / 5, 3);
+    checkNear("wrist at %g deg (claw upright)", -deg, settle(wrist, -deg * 4, 12) / 4, 3);
   }
+  printf("-- roller claw: out, then back in --\n");
+  rollers.move(-127);  // spit the Preload out
+  pros::delay(300);
+  check("rollers spinning out (rpm)", rollers.get_actual_velocity() < -150, rollers.get_actual_velocity());
+  pros::delay(300);
+  rollers.brake();
+  pros::delay(300);
+  rollers.move(127);   // pull it back in from the floor in front
+  pros::delay(300);
+  check("rollers spinning in (rpm)", rollers.get_actual_velocity() > 150, rollers.get_actual_velocity());
+  pros::delay(500);
+  rollers.brake();
   printf("-- intake --\n");
   intake.move(127);
   pros::delay(400);
-  check("intake spinning in (rpm)", intake.get_actual_velocity() > 500, intake.get_actual_velocity());
-  intake.move(-127);
-  pros::delay(400);
-  check("intake spinning out (rpm)", intake.get_actual_velocity() < -500, intake.get_actual_velocity());
+  check("intake spinning in (rpm)", intake.get_actual_velocity() > 150, intake.get_actual_velocity());
   intake.brake();
 }
 
@@ -137,11 +142,12 @@ void initialize() {
   imu.reset(true);  // blocks ~2 s while the IMU calibrates
   leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
   rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
-  lift.set_brake_mode(pros::MotorBrake::hold);
+  arm.set_brake_mode(pros::MotorBrake::hold);
+  wrist.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: intake -> rear staging -> rear DR4B\n");
+  printf("Mechanism test: Override: Banshee (intake + arm + roller claw)\n");
   driveTest();
   mechanismTest();
   driveBack();

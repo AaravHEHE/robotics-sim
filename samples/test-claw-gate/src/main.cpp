@@ -1,16 +1,17 @@
 #include "main.h"
 
-// Mechanism test for the "Override: cascade lift + claw + intake" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: Claw Gate (cascade + chain-bar claw + intake)" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the cascade to three heights, the claw drops and re-grabs the Preload, and the intake spins both ways. Each check prints PASS or FAIL with what it measured
+// its range: the cascade to three heights, the chain bar over the top and back, the claw drops and re-grabs the Preload, and the intake spins. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
-pros::Motor cascade(7, pros::MotorGears::blue, pros::MotorUnits::degrees);  // 1:6 to the spool
+pros::MotorGroup cascade({7, 8}, pros::MotorGears::blue, pros::MotorUnits::degrees);  // 1:3 to the spool
+pros::Motor chainBar(9, pros::MotorGears::green, pros::MotorUnits::degrees);           // 1:3
 pros::Motor intake(10, pros::MotorGears::blue);
 pros::adi::Pneumatics claw('A', true);  // extended = closed (on the Preload)
 
@@ -105,27 +106,31 @@ void driveBack() {
 
 // ---------------- mechanisms ----------------
 void mechanismTest() {
-  // the spool (1.375" diameter, 2 stages) turns a sixth of the motor
-  printf("-- cascade (1:6 to the spool) --\n");
-  for (double spool : {400.0, 800.0, 1200.0, 0.0}) {
-    cascade.move_absolute(spool * 6, 600);
-    checkNear("spool to %g deg", spool, settle(cascade, spool * 6, 30) / 6, 5);
-    printf("      carriage up %.1f in\n", cascade.get_position() / 6 / 360 * M_PI * 1.375 * 2);
+  printf("-- cascade (1:3 to a 1.375\" spool, 3 stages) --\n");
+  for (double spool : {300.0, 700.0, 1100.0, 0.0}) {
+    cascade.move_absolute(spool * 3, 600);
+    checkNear("spool to %g deg", spool, settle(cascade, spool * 3, 15) / 3, 5);
   }
-  printf("-- claw: lets go of the Preload, then grabs it again --\n");
+  printf("-- chain bar (1:3): the claw stays level as it swings over the top --\n");
+  for (double deg : {90.0, 180.0, 0.0}) {
+    chainBar.move_absolute(deg * 3, 200);
+    checkNear("chain bar to %g deg", deg, settle(chainBar, deg * 3, 9) / 3, 3);
+  }
+  printf("-- claw: lets go of the Preload, then picks it up off the floor --\n");
   claw.retract();
   pros::delay(400);  // the Preload falls over in front of the robot
   check("claw open", !claw.is_extended(), claw.is_extended());
+  chainBar.move_absolute(-25 * 3, 200);  // down to the floor in front
+  settle(chainBar, -75, 9);
   claw.extend();
   pros::delay(300);
   check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
+  chainBar.move_absolute(0, 200);
+  settle(chainBar, 0, 9);
   printf("-- intake --\n");
   intake.move(127);
   pros::delay(400);
   check("intake spinning in (rpm)", intake.get_actual_velocity() > 500, intake.get_actual_velocity());
-  intake.move(-127);
-  pros::delay(400);
-  check("intake spinning out (rpm)", intake.get_actual_velocity() < -500, intake.get_actual_velocity());
   intake.brake();
 }
 
@@ -134,11 +139,12 @@ void initialize() {
   imu.reset(true);  // blocks ~2 s while the IMU calibrates
   leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
   rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
-  cascade.set_brake_mode(pros::MotorBrake::hold);
+  cascade.set_brake_mode_all(pros::MotorBrake::hold);
+  chainBar.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: cascade lift + claw + intake\n");
+  printf("Mechanism test: Override: Claw Gate (cascade + chain-bar claw + intake)\n");
   driveTest();
   mechanismTest();
   driveBack();

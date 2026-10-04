@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { layoutStack, type Piece } from '../games/override/elements.ts';
 import { clawClosed } from '../games/override/manipulators.ts';
 import type { OverrideState, Transit } from '../games/override/state.ts';
-import { clawEffector, liftEffector, toRobot, type Point3 } from '../sim/lift.ts';
+import { baseOffset, clawEffector, liftEffector, liftPosition, toRobot, type Point3 } from '../sim/lift.ts';
 import type { ClawSpec, IntakeSpec, LiftSpec, MechanismSpec, RobotProfile, StagingSpec } from '../sim/profile.ts';
 import { cupMesh, pinMesh } from './override-meshes.ts';
 
@@ -223,6 +223,7 @@ export class ManipulatorVisuals {
 
   /** Where an intake's path ends: its destination's receiving point, or behind the zone. */
   private endOf(spec: IntakeSpec, dest: ClawSpec | StagingSpec | null, v: ValueOf): THREE.Vector3 {
+    if (spec.handoff) return local({ x: spec.handoff.x ?? 0, y: spec.handoff.y, z: spec.handoff.z });
     if (dest?.kind === 'staging') return local({ x: dest.at.x ?? 0, y: dest.at.y, z: dest.at.z });
     if (dest?.kind === 'claw') return local(clawEffector(this.profile, dest, v));
     return local({ x: spec.zone.x, y: spec.zone.y - spec.zone.length / 2 - 2, z: 0.5 });
@@ -233,18 +234,31 @@ export class ManipulatorVisuals {
     const a0 = (m.startAngle ?? 0) * DEG;
     const out = m.facing === 'rear' ? -1 : 1;
     const x0 = m.home.x ?? 0;
-    if (m.lift === 'arm' || m.lift === 'fourbar' || m.lift === 'sixbar') {
-      // bars from a fixed tower pivot to the end effector (a 6-bar's second stage drawn as one)
-      const pivot = local({ x: x0, y: m.home.y - out * L * Math.cos(a0), z: m.home.z - (m.lift === 'sixbar' ? 2 : 1) * L * Math.sin(a0) });
-      const tower = bar(0x8a9099, 1);
-      root.add(tower.mesh);
-      tower.set(new THREE.Vector3(pivot.x, 0.5, pivot.z), pivot);
-      const bars = [-1.5, 1.5].map(() => bar(0xb9bec5));
+    if (m.lift === 'arm' || m.lift === 'fourbar' || m.lift === 'sixbar' || m.lift === 'chainbar') {
+      // bars from a pivot to the end effector (a 6-bar's second stage drawn as one). A chain bar
+      // pivots on its base lift's carriage and rides up with it; the others on a fixed tower.
+      const pivot0 = local({ x: x0, y: m.home.y - out * L * Math.cos(a0), z: m.home.z - (m.lift === 'sixbar' ? 2 : 1) * L * Math.sin(a0) });
+      if (!m.base) {
+        const tower = bar(0x8a9099, 1);
+        root.add(tower.mesh);
+        tower.set(new THREE.Vector3(pivot0.x, 0.5, pivot0.z), pivot0);
+      }
+      const chain = m.lift === 'chainbar';
+      const bars = (chain ? [-2.2, 2.2] : [-1.5, 1.5]).map(() => bar(chain ? 0xd8343a : 0xb9bec5, chain ? 0.7 : 0.8));
       for (const b of bars) root.add(b.mesh);
+      // a chain bar's sprocket at the pivot
+      const hub = chain ? new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5.4, 16), new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.5, roughness: 0.4 })) : null;
+      if (hub) {
+        hub.rotation.z = Math.PI / 2;
+        root.add(hub);
+      }
       this.updates.push((v) => {
-        const e = local(liftEffector(m, v(m)));
+        const pivot = pivot0.clone().add(local(baseOffset(this.profile, m, v)));
+        const e = local(liftPosition(this.profile, m, v));
+        hub?.position.copy(pivot);
         bars.forEach((b, i) => {
-          const dx = new THREE.Vector3(i ? 1.5 : -1.5, 0, 0);
+          const off = chain ? 2.2 : 1.5; // either side of the claw
+          const dx = new THREE.Vector3(i ? off : -off, 0, 0);
           b.set(pivot.clone().add(dx), e.clone().add(dx));
         });
       });

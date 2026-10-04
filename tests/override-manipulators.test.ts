@@ -6,7 +6,7 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
 import { loaderMouth, startingState } from '../src/games/override/manipulators.ts';
 import type { FieldDef } from '../src/sim/field.ts';
-import { clawEffector, liftEffector, toRobot } from '../src/sim/lift.ts';
+import { clawEffector, clawTilt, liftEffector, toRobot } from '../src/sim/lift.ts';
 import { validateProfile, type ClawSpec, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
 import { World } from '../src/sim/world.ts';
 import { prosProject, robot, simulate } from './helpers.ts';
@@ -348,20 +348,22 @@ describe('manipulators behave like the real mechanisms', () => {
     expect(game.state.held.Claw.length).toBe(2);
   });
 
-  it('a Loader feeds one piece at a time: the next one drops into the opening ~0.2 s later', async () => {
+  it('a Loader gives out one loaded stack (Pin + nested Cup) at a time, ~0.2 s apart', async () => {
     const r = await testRobot([{ ...intake, capacity: { pins: 5, cups: 5 } }]);
     const f = await field();
     const L = f.loaders!.find((l) => l.id === 'L_red_s')!;
     const [mx, my] = loaderMouth(f, L);
     const { game, run, world } = await setup(r, { x: mx + 9, y: my, theta: 270 }, 'skills');
-    run(1100); // the drive team stocks the chute
-    const times: number[] = [];
+    run(1100); // the drive team stocks the chute with loaded stacks
+    expect(game.state.loaders.L_red_s.map((p) => p.kind)).toEqual(['pin', 'cup']);
+    const got: Array<{ t: number; n: number; kinds: string }> = [];
     world.motor(10).cmd = 127;
-    run(700, (t) => {
-      if (game.state.held.Intake.length > times.length) times.push(t);
+    run(1500, (t) => {
+      const n = game.state.held.Intake.length;
+      if (n > (got.at(-1)?.n ?? 0)) got.push({ t, n, kinds: game.state.held.Intake.map((p) => p.kind).join() });
     });
-    expect(times.length).toBeGreaterThanOrEqual(2);
-    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(200);
+    expect(got[0]).toMatchObject({ n: 2, kinds: 'pin,cup' }); // the Pin and its Cup come out together
+    for (let i = 1; i < got.length; i++) expect(got[i].t - got[i - 1].t).toBeGreaterThanOrEqual(200);
   });
 
   it('a motor wrist flips once past 90 degrees, without chattering around it', async () => {
@@ -393,8 +395,41 @@ describe('each robot type works like its real counterpart', () => {
       for (let t = 0; t < 5; t++) game.step(1); // manipulators update every physics step (5 ms)
       const z = clawEffector(r, c, (m) => world.mechanismState(m)).z;
       expect(game.state.grip[c.name], id).toBeGreaterThanOrEqual(1);
-      expect(z - game.state.grip[c.name], id).toBeCloseTo(0, 6); // its bottom on the tiles
+      // its bottom on the tiles (or just above them, held near its top by a high claw)
+      expect(z - game.state.grip[c.name], id).toBeGreaterThanOrEqual(-1e-9);
+      expect(z - game.state.grip[c.name], id).toBeLessThanOrEqual(1);
     }
+  });
+
+  it('a chain bar riding a cascade: the carriage sets the height, the bar swings the level claw front to back', async () => {
+    const r = await robot('tank-6m-450');
+    const cascade: LiftSpec = { kind: 'lift', name: 'Cascade', lift: 'cascade', motors: [7], ratio: 1, home: { y: 0, z: 6 }, spoolDiameter: 1.5, stages: 2 };
+    const bar: LiftSpec = { kind: 'lift', name: 'Chain bar', lift: 'chainbar', base: 'Cascade', motors: [8], ratio: 1, home: { y: 11, z: 6 }, length: 11, startAngle: 0 };
+    const c: ClawSpec = { kind: 'claw', name: 'Claw', lift: 'Chain bar', grip: 'piston', adi: 'B' };
+    r.mechanisms = [cascade, bar, c];
+    const at = (spool: number, swing: number) => clawEffector(r, c, (m) => (m.name === 'Cascade' ? spool : m.name === 'Chain bar' ? swing : 0));
+    expect(at(0, 0)).toMatchObject({ y: 11, z: 6 }); // out front, low
+    const up = at(360, 0);
+    expect(up.z).toBeCloseTo(6 + Math.PI * 1.5 * 2, 6); // the carriage carried it up
+    const over = at(360, 180);
+    expect(over.y).toBeCloseTo(-11, 6); // swung over the top to the back
+    expect(over.z).toBeCloseTo(up.z, 6);
+    expect(clawTilt(r, c, () => 90)).toBe(0); // chained level all the way round
+  });
+
+  it('a Toggle pressed at speed turns two faces; a gentle press, one', async () => {
+    const bumper: MechanismSpec = { kind: 'toggleTool', name: 'Bumper', tool: 'bumper', box: { x: 0, y: 7.75, width: 12, length: 0.5 }, bottom: 11, top: 13.5 };
+    const run = async (power: number) => {
+      const r = await testRobot([bumper]);
+      const { game, run: go, drive } = await setup(r, { x: -55, y: 0, theta: 270 });
+      drive(power);
+      go(900);
+      drive(-60);
+      go(400);
+      return game.state.toggles.find((x) => x.id === 'T_red1')!.angle;
+    };
+    expect(await run(30)).toBe(120);
+    expect(await run(127)).toBe(240);
   });
 
   it('a rear-facing bar lift swings its claw out behind the robot as it rises', () => {
@@ -453,7 +488,7 @@ describe('each robot type works like its real counterpart', () => {
 describe('the field shown before a run', () => {
   it('is the starting layout with the Preload in the robot, in the starting alliance color', async () => {
     const f = await field();
-    const r = await robot('override-dr4b-roller');
+    const r = await robot('override-banshee');
     const red = startingState(f, 'h2h', r, { x: -60.705, y: -37 });
     expect(red.held['Roller claw']).toEqual([{ kind: 'pin', id: 'preload', colors: ['red', 'yellow'] }]);
     expect(Object.values(red.goals).every((g) => g.length <= 1)).toBe(true); // nothing scored yet

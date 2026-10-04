@@ -20,11 +20,11 @@ function emptyState(): OverrideState {
 describe('animated transit (viewer)', () => {
   const pose = { x: -55.5, y: -58.6, theta: 270 };
 
-  it('a piece rides through the intake: up from the floor, over the deck, into the rear tray', async () => {
-    const r = await robot('override-intake-staging');
+  it('a piece rides through the intake: up from the floor, over the deck, into the chamber on the rear DR4B', async () => {
+    const r = await robot('override-dr4b-intake');
     const vis = new ManipulatorVisuals(r, new THREE.Group(), true);
     const st = emptyState();
-    st.held = { Intake: [{ kind: 'cup', id: 'c1', up: 'clear' }], Stage: [], Claw: [] };
+    st.held = { Intake: [{ kind: 'cup', id: 'c1', up: 'clear' }], Chamber: [] };
     st.transit = { c1: { from: { x: -65, y: -58.8, z: 0 }, t0: 1000, t1: 1500 } };
     vis.setHeld(st);
     const at = (t: number) => {
@@ -37,12 +37,12 @@ describe('animated transit (viewer)', () => {
     expect(ys[0].forward).toBeCloseTo(9.5, 0); // where it was on the floor (the Loader's opening)
     for (let k = 1; k < ys.length; k++) expect(ys[k].forward).toBeLessThan(ys[k - 1].forward + 1e-9); // only ever rearward
     expect(ys[3].up).toBeGreaterThan(r.drivetrain.wheelDiameter / 2 + 2.5); // over the deck and the Brain
-    expect(ys[5].forward).toBeCloseTo(-11, 6); // at the tray
+    expect(ys[5].forward).toBeCloseTo(-11, 6); // at the chamber
     expect(at(2000).forward).toBeCloseTo(-11, 6); // waits there
   });
 
   it('a lying Pin is turned upright as the intake takes it', async () => {
-    const r = await robot('override-cascade');
+    const r = await robot('override-claw-gate');
     const vis = new ManipulatorVisuals(r, new THREE.Group(), true);
     const st = emptyState();
     st.held = { Intake: [{ kind: 'pin', id: 'p1', colors: ['red', 'yellow'] }], Claw: [] };
@@ -75,7 +75,7 @@ describe('animated transit (viewer)', () => {
 describe('transit records (simulator)', () => {
   it('intake pickups record their ride; drops record their fall', async () => {
     const f = await field();
-    const r = await robot('override-cascade');
+    const r = await robot('override-claw-gate');
     const world = new World(r, f, { x: -23.548, y: -40, theta: 0 });
     const game = await OverrideGame.create(f, 'h2h', world);
     for (const p of [...r.drivetrain.left, ...r.drivetrain.right]) world.motor(p).cmd = 40 * Math.sign(p);

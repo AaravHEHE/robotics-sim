@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "id": "override-banshee",
+  "name": "Override: Banshee (intake + arm + roller claw)",
+  "description": "Modelled on the Banshee design (Joseph973). A 200 rpm floor intake (port 10) brings pieces up to an arm-mounted roller claw (port 9: two flex-wheel rollers that hold a Pin, banded for Cups). The arm (port 7, 1:5) folds back over the intake to take them, then swings forward to set them down; a 12:48 geared wrist (port 8) keeps the claw upright as the arm moves. It reaches Goals up to about three Pins high (it has to go up and over the stack). Passive front Toggle bumper. Starts holding the Preload.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 14
+  },
+  "mass": 15,
+  "drivetrain": {
+    "type": "tank",
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "green",
+      "name": "Arm"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "green",
+      "name": "Wrist"
+    },
+    {
+      "type": "motor",
+      "port": 9,
+      "cartridge": "green",
+      "name": "Roller claw"
+    },
+    {
+      "type": "motor",
+      "port": 10,
+      "cartridge": "green",
+      "name": "Intake"
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "intake",
+      "name": "Intake",
+      "motors": [
+        10
+      ],
+      "ratio": 1,
+      "zone": {
+        "x": 0,
+        "y": 8.25,
+        "width": 8,
+        "length": 1.5
+      },
+      "into": "Roller claw",
+      "handoff": {
+        "y": 6.3,
+        "z": 1
+      },
+      "transferMs": 350,
+      "rollerDiameter": 2.75
+    },
+    {
+      "kind": "lift",
+      "name": "Arm",
+      "lift": "arm",
+      "motors": [
+        7
+      ],
+      "ratio": 0.2,
+      "range": [
+        0,
+        120
+      ],
+      "home": {
+        "y": 6.3,
+        "z": 1
+      },
+      "length": 11,
+      "startAngle": -55
+    },
+    {
+      "kind": "claw",
+      "name": "Roller claw",
+      "lift": "Arm",
+      "grip": "roller",
+      "motors": [
+        9
+      ],
+      "ratio": 1,
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "wrist",
+      "name": "Wrist",
+      "claw": "Roller claw",
+      "motors": [
+        8
+      ],
+      "ratio": 0.25,
+      "range": [
+        -180,
+        180
+      ]
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Toggle bumper",
+      "tool": "bumper",
+      "box": {
+        "x": 0,
+        "y": 7.75,
+        "width": 12,
+        "length": 0.5
+      },
+      "bottom": 11,
+      "top": 13.5
+    }
+  ]
+}

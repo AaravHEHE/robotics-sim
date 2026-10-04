@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "id": "override-intake-staging",
-  "name": "Override: intake -> rear staging -> rear DR4B",
-  "description": "A front roller intake (port 10) carries pieces over the deck into a staging tray at the back, which assembles a Pin + Cup combo. A rear DR4B (port 7, 1:5) with a pneumatic claw (ADI A) hanging 3.5\" past the rear bumper takes the combo from the tray and stacks it out of the back of the robot, with the same reach at every height. The Preload starts in the tray. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking at the tray from above (port 9). Good for Skills Match Loads.",
+  "id": "override-dr4b-intake",
+  "name": "Override: DR4B + intake chamber (8059A-style)",
+  "description": "Modelled on 8059A. A 3-stage 600 rpm front intake (port 10) carries pieces over the robot into a chamber on a standoff-linkage DR4B at the back (ports 7 and 8, red, 12:84: 14 rpm, motors low). A piston clamp (ADI A) holds them; the chamber floor lets the Pin drop onto a Goal behind the robot. 360 rpm traction drive. Passive rubber-band toggler on the front: driven into a Toggle fast, it turns it two faces. The Preload starts in the chamber. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking down into the chamber (port 9) for Skills.",
   "size": {
     "width": 15,
     "length": 15,
-    "height": 13
+    "height": 15
   },
   "mass": 16,
   "drivetrain": {
@@ -23,9 +23,9 @@
     ],
     "cartridge": "blue",
     "wheelDiameter": 3.25,
-    "wheelRpm": 450,
+    "wheelRpm": 360,
     "trackWidth": 11.5,
-    "maxAccel": 180
+    "maxAccel": 170
   },
   "devices": [
     {
@@ -36,8 +36,14 @@
     {
       "type": "motor",
       "port": 7,
-      "cartridge": "green",
-      "name": "Lift"
+      "cartridge": "red",
+      "name": "DR4B L"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "red",
+      "name": "DR4B R"
     },
     {
       "type": "motor",
@@ -48,7 +54,7 @@
     {
       "type": "adi_digital_out",
       "port": "A",
-      "name": "Claw"
+      "name": "Chamber clamp"
     },
     {
       "type": "gps",
@@ -63,8 +69,8 @@
     {
       "type": "optical",
       "port": 9,
-      "name": "Tray eye",
-      "watches": "Stage",
+      "name": "Chamber eye",
+      "watches": "Chamber",
       "mount": {
         "x": 0,
         "y": -11,
@@ -87,44 +93,50 @@
         "width": 8,
         "length": 1.5
       },
-      "into": "Stage",
-      "transferMs": 500,
+      "into": "Chamber",
+      "transferMs": 450,
       "rollerDiameter": 2.75
-    },
-    {
-      "kind": "staging",
-      "name": "Stage",
-      "at": {
-        "y": -11,
-        "z": 2
-      },
-      "preload": "alliance-down"
     },
     {
       "kind": "lift",
       "name": "DR4B",
       "lift": "dr4b",
       "motors": [
-        7
+        7,
+        8
       ],
-      "ratio": 0.2,
+      "ratio": 0.1429,
       "range": [
         0,
-        100
+        110
       ],
       "home": {
         "y": -11,
         "z": 2
       },
       "length": 10,
-      "startAngle": -40
+      "startAngle": -45
     },
     {
       "kind": "claw",
-      "name": "Claw",
+      "name": "Chamber",
       "lift": "DR4B",
       "grip": "piston",
-      "adi": "A"
+      "adi": "A",
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Toggler",
+      "tool": "bumper",
+      "box": {
+        "x": 0,
+        "y": 7.75,
+        "width": 12,
+        "length": 0.5
+      },
+      "bottom": 11,
+      "top": 13.5
     }
   ]
 }

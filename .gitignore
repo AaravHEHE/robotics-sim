@@ -9,3 +9,4 @@ public/sim/
 dist/
 tools/last-build.wasm
 docs/manual/
+docs/reference/vex-cad/

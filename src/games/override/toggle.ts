@@ -22,6 +22,8 @@ const PRESS_RATE = 480;
 const SETTLE_RATE = 360;
 /** Fraction of the overhang a robot must press into to roll the Toggle. */
 const PRESS_DEPTH = 0.6;
+/** A press faster than this (in/s) turns a Toggle two faces, not one (8059's toggler, used in autonomous). */
+const FAST_PRESS = 40;
 
 export type ToggleColor = 'red' | 'blue' | 'yellow';
 
@@ -64,6 +66,8 @@ export interface ContactShape {
   spin?: number;
   /** A jammer: wedged against a Toggle, it stops it turning either way. */
   lock?: boolean;
+  /** How fast the robot is moving (in/s): a press at speed carries a Toggle two faces. */
+  speed?: number;
 }
 
 /**
@@ -119,6 +123,7 @@ export class ToggleSim {
       let pressing = false;
       let spin = 0;
       let locked = false;
+      let fast = false;
       s.touched = false;
       for (const shape of shapes) {
         const depth = contactDepth(def, shape);
@@ -126,7 +131,10 @@ export class ToggleSim {
         s.touched = true;
         if (shape.lock) locked = true;
         if (shape.spin !== undefined) spin += shape.spin; // rollers roll it, never shove it
-        else if (depth >= PRESS_DEPTH * overhang(def)) pressing = true;
+        else if (depth >= PRESS_DEPTH * overhang(def)) {
+          pressing = true;
+          if ((shape.speed ?? 0) > FAST_PRESS) fast = true;
+        }
       }
       if (locked) {
         // jammed: nothing turns it (not even our own presses) until the jammer lets go
@@ -141,7 +149,7 @@ export class ToggleSim {
         continue;
       }
       if (pressing && !this.latched.get(def.id)) {
-        const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + 120;
+        const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + (fast ? 240 : 120);
         this.target.set(def.id, goal);
         s.angle = Math.min(goal, s.angle + PRESS_RATE * dt);
         if (s.angle >= goal) {
