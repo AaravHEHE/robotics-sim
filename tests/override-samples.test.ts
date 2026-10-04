@@ -51,7 +51,7 @@ const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean;
   'test-intake-staging': { checks: 17, holder: 'Claw', fromTray: true },
   'test-sixbar-wrist': { checks: 15, holder: 'Claw', regrab: true, flips: true },
   'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },
-  'test-toggle-bot': { checks: 12 },
+  'test-toggle-bot': { checks: 14 },
   'test-midfield-pusher': { checks: 10 },
 };
 

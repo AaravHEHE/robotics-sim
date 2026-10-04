@@ -62,6 +62,8 @@ export interface ContactShape {
   top: number;
   /** A roller (set even when stopped): the Toggle roll rate it imposes (deg/s, + = top outward). */
   spin?: number;
+  /** A jammer: wedged against a Toggle, it stops it turning either way. */
+  lock?: boolean;
 }
 
 /**
@@ -116,13 +118,20 @@ export class ToggleSim {
       if (!s) continue;
       let pressing = false;
       let spin = 0;
+      let locked = false;
       s.touched = false;
       for (const shape of shapes) {
         const depth = contactDepth(def, shape);
         if (depth <= 0) continue;
         s.touched = true;
+        if (shape.lock) locked = true;
         if (shape.spin !== undefined) spin += shape.spin; // rollers roll it, never shove it
         else if (depth >= PRESS_DEPTH * overhang(def)) pressing = true;
+      }
+      if (locked) {
+        // jammed: nothing turns it (not even our own presses) until the jammer lets go
+        this.target.delete(def.id);
+        continue;
       }
       if (spin) {
         // a roller drives it continuously, either way; no detent latching

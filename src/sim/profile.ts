@@ -177,7 +177,7 @@ export interface WristSpec extends MechanismDrive {
 export interface ToggleToolSpec extends MechanismDrive {
   kind: 'toggleTool';
   name: string;
-  tool: 'bumper' | 'plate' | 'roller';
+  tool: 'bumper' | 'plate' | 'roller' | 'jammer';
   /** Footprint, robot frame (the plate's extended position). */
   box: RobotRect;
   /** Height range it covers above the tiles. */
@@ -379,8 +379,8 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         ref(m, m.claw, ['claw'], 'claw');
         break;
       case 'toggleTool':
-        if (!['bumper', 'plate', 'roller'].includes(m.tool)) e.push(`Toggle tool ${m.name}: tool must be bumper, plate or roller.`);
-        drive(m, m.tool === 'plate' ? 'adi' : m.tool === 'roller' ? 'motors' : 'none');
+        if (!['bumper', 'plate', 'roller', 'jammer'].includes(m.tool)) e.push(`Toggle tool ${m.name}: tool must be bumper, plate, roller or jammer.`);
+        drive(m, m.tool === 'plate' || m.tool === 'jammer' ? 'adi' : m.tool === 'roller' ? 'motors' : 'none');
         if (!isRect(m.box)) e.push(`Toggle tool ${m.name}: box {x, y, width, length} is required.`);
         if (!isNum(m.bottom, 0, 80) || !isNum(m.top, 0, 80) || m.top <= m.bottom) e.push(`Toggle tool ${m.name}: needs bottom < top heights.`);
         break;

@@ -188,12 +188,12 @@ export class ManipulatorVisuals {
         const h = m.top - m.bottom;
         const box = new THREE.Mesh(
           new THREE.BoxGeometry(m.box.width, h, m.box.length),
-          new THREE.MeshStandardMaterial({ color: m.tool === 'roller' ? 0x2d6cdf : 0x8a5cf6, roughness: 0.5, transparent: true, opacity: 0.9 }),
+          new THREE.MeshStandardMaterial({ color: m.tool === 'roller' ? 0x2d6cdf : m.tool === 'jammer' ? 0xe0662a : 0x8a5cf6, roughness: 0.5, transparent: true, opacity: 0.9 }),
         );
         const at = local({ x: m.box.x, y: m.box.y, z: m.bottom + h / 2 });
         box.position.copy(at);
         root.add(box);
-        if (m.tool === 'plate') {
+        if (m.tool === 'plate' || m.tool === 'jammer') {
           // retracted, the plate sits back toward the robot's center (front or rear plate)
           const inward = m.box.y >= 0 ? 1 : -1;
           this.updates.push((v) => {

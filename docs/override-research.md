@@ -223,7 +223,7 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
 | Intake→staging | front `intake` (pass-through over the deck) + rear `staging` + rear `lift: dr4b` + `claw`: scores out of the back |
 | 6-bar wrist | `lift: sixbar` + motor `wrist` + `claw`; places only with the wrist upright (0° or 180°) |
 | Workhorse | rear `lift: fourbar` (`facing: rear`) + rear `claw` (piston) + front Toggle `bumper`: scores reversing, presses Toggles driving forward |
-| Toggle bot | `toggleRoller` / `togglePlate` |
+| Toggle bot | `toggleTool`s: front `roller` + optical sensor, rear `plate`, `jammer` (wedges a Toggle; must let go before the end) |
 | Midfield pusher | none: a full-size 18″ × 18″, heavy traction drive that bulldozes stacks |
 
 ## 4. Sources

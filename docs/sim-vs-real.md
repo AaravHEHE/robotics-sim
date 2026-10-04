@@ -79,7 +79,7 @@ Runs now freeze their settings, and stale results are dropped. Errors are report
 | **Medium** | Floor physics is 2D. Pieces slide and spin on the floor, but stacks never tip over and pieces never bounce or roll. | A stack knocked hard falls over; a Pin can roll away. |
 | **Low** | Grip strength isn't modelled. A closed claw holds whatever it closed on, and a motor claw is "closed" past an angle, whatever the force. | A weak claw drops pieces when the robot jolts. |
 | **Low** | The drive team restocks the Skills Loaders about once a second, Pins and Cups alternating. | A person loads them, as fast as they can. |
-| **Medium** | Toggles move one face per press, plus a roller that can turn them either way. | The real mechanism's feel, and how far a hard press turns it, may differ. |
+| **Medium** | Toggles move one face per press, a roller can turn them either way, and a jammer locks them completely. | The real mechanism's feel, and how far a hard press turns it, may differ. |
 
 ### Sensors
 

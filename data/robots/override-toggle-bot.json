@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "override-toggle-bot",
   "name": "Override: Toggle control bot",
-  "description": "A zoning robot: a front roller at Toggle height (port 8) that spins a Toggle either way, an optical sensor (port 9) that sees the Toggle face in front of the roller, and a rear fold-out plate (ADI B) that presses a Toggle one face per push. No game-piece manipulators.",
+  "description": "A zoning robot: a front roller at Toggle height (port 8) that spins a Toggle either way, an optical sensor (port 9) that sees the Toggle face in front of the roller, and a rear fold-out plate (ADI B) that presses a Toggle one face per push. No game-piece manipulators. A pneumatic C-channel jammer (ADI C) beside the roller wedges a Toggle so it cannot turn; it must let go before the end, or the Toggle counts as neutral.",
   "size": {
     "width": 15,
     "length": 15,
@@ -11,8 +11,16 @@
   "mass": 13,
   "drivetrain": {
     "type": "tank",
-    "left": [-1, -2, -3],
-    "right": [4, 5, 6],
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
     "cartridge": "blue",
     "wheelDiameter": 3.25,
     "wheelRpm": 450,
@@ -46,6 +54,11 @@
         "z": 12.5,
         "heading": 0
       }
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "C",
+      "name": "Jammer"
     }
   ],
   "mechanisms": [
@@ -53,7 +66,9 @@
       "kind": "toggleTool",
       "name": "Toggle roller",
       "tool": "roller",
-      "motors": [8],
+      "motors": [
+        8
+      ],
       "ratio": 1,
       "box": {
         "x": 0,
@@ -77,6 +92,20 @@
       },
       "bottom": 11,
       "top": 13.5
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Jammer",
+      "tool": "jammer",
+      "adi": "C",
+      "box": {
+        "x": -3.5,
+        "y": 8.75,
+        "width": 1,
+        "length": 2
+      },
+      "bottom": 11,
+      "top": 13
     }
   ]
 }

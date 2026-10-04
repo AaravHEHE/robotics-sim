@@ -4,7 +4,7 @@
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the Toggle roller spins both ways, the rear plate goes out and back, and the optical sensor is read. Each check prints PASS or FAIL with what it measured
+// its range: the Toggle roller spins both ways, the rear plate and the jammer go out and back, and the optical sensor is read. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
@@ -12,6 +12,7 @@ pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits:
 pros::Imu imu(11);
 pros::Motor toggleRoller(8, pros::MotorGears::green);
 pros::adi::Pneumatics plate('B', false);
+pros::adi::Pneumatics jammer('C', false);  // C-channel that wedges a Toggle
 pros::Optical toggleEye(9);  // at Toggle height, beside the roller
 
 // ---------------- checks ----------------
@@ -120,6 +121,13 @@ void mechanismTest() {
   plate.retract();
   pros::delay(300);
   check("plate back in", !plate.is_extended(), plate.is_extended());
+  printf("-- jammer (must be back in before the end: a touched Toggle is neutral) --\n");
+  jammer.extend();
+  pros::delay(300);
+  check("jammer out", jammer.is_extended(), jammer.is_extended());
+  jammer.retract();
+  pros::delay(300);
+  check("jammer back in", !jammer.is_extended(), jammer.is_extended());
   printf("-- optical sensor --\n");
   // in the open, nothing is within its 6" range at Toggle height
   check("optical: nothing close (proximity)", toggleEye.get_proximity() < 20, toggleEye.get_proximity());

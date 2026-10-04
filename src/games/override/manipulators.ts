@@ -256,14 +256,15 @@ export class Manipulators {
   contactShapes(): ContactShape[] {
     const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height }];
     for (const tool of this.tools) {
-      if (tool.tool === 'plate' && this.world.mechanismState(tool) < 0.5) continue;
+      // a plate or jammer only reaches out while its piston is extended
+      if ((tool.tool === 'plate' || tool.tool === 'jammer') && this.world.mechanismState(tool) < 0.5) continue;
       const { x, y, width, length } = tool.box;
       const poly = ([[x - width / 2, y - length / 2], [x + width / 2, y - length / 2], [x + width / 2, y + length / 2], [x - width / 2, y + length / 2]] as Vec2[]).map(
         ([px, py]) => toField(this.world.pose, { x: px, y: py }),
       );
       // roller: + output with inward = 1 rolls the Toggle's top into the field (negative angle)
       const spin = tool.tool === 'roller' ? -(tool.inward ?? 1) * this.world.mechanismRpm(tool) * 4.4 : undefined;
-      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin });
+      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined });
     }
     return shapes;
   }

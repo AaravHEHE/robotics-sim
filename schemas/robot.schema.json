@@ -100,7 +100,7 @@
           "facing": { "enum": ["front", "rear"], "description": "lift: which way a bar lift reaches (default front)" },
           "rollerDiameter": { "type": "number", "exclusiveMinimum": 0, "description": "intake: roller diameter (in), default 2.75" },
           "claw": { "type": "string", "description": "wrist: the claw it flips" },
-          "tool": { "enum": ["bumper", "plate", "roller"], "description": "toggleTool: kind" },
+          "tool": { "enum": ["bumper", "plate", "roller", "jammer"], "description": "toggleTool: kind" },
           "box": { "$ref": "#/$defs/rect", "description": "toggleTool: footprint" },
           "bottom": { "type": "number" },
           "top": { "type": "number" }

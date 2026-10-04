@@ -231,6 +231,25 @@ describe('Override Toggle tools', () => {
     expect(r1.color).toBe('red');
   });
 
+  it('a jammer wedged against a Toggle stops it turning, and a Toggle still jammed at the end is neutral', async () => {
+    const roller: MechanismSpec = { kind: 'toggleTool', name: 'Roller', tool: 'roller', motors: [8], ratio: 1, box: { x: 0, y: 8.5, width: 10, length: 2 }, bottom: 10.5, top: 14 };
+    const jammer: MechanismSpec = { kind: 'toggleTool', name: 'Jammer', tool: 'jammer', adi: 'C', box: { x: -3.5, y: 9, width: 1, length: 2 }, bottom: 11, top: 13 };
+    const r = await testRobot([roller, jammer]);
+    const { game, run, world, drive } = await setup(r, { x: -55, y: 0, theta: 270 });
+    const angle = () => game.state.toggles.find((x) => x.id === 'T_red1')!.angle;
+    drive(30);
+    run(800);
+    world.adiOut.set('C', true); // wedge it
+    run(300);
+    world.motor(8).cmd = 127;
+    run(800);
+    expect(angle()).toBe(0); // the roller can't turn it
+    expect(game.score().score.toggles.find((x) => x.id === 'T_red1')!.color).toBe('yellow'); // touched: neutral (SC4)
+    world.adiOut.set('C', false); // let go: now the roller turns it
+    run(800);
+    expect(angle()).toBeLessThan(-30);
+  });
+
   it('a pneumatic plate only touches the Toggle while extended', async () => {
     const plate: MechanismSpec = { kind: 'toggleTool', name: 'Plate', tool: 'plate', adi: 'C', box: { x: 0, y: 8.5, width: 10, length: 2 }, bottom: 11, top: 14 };
     const r = await testRobot([plate]);

@@ -10,12 +10,19 @@
 // Every Toggle starts yellow-in with the alliance color facing out of the field. The
 // front roller spins the top of a Toggle into the field, bringing the red face in; an
 // optical sensor beside it says when red has come around.
+//
+// The robot also has a C-channel jammer (ADI C) that wedges a Toggle so the other
+// alliance can't turn it back. It is for the end of driver control: a Toggle a robot is
+// still touching when the Match ends counts as neutral, so jam it, then let go just before
+// the buzzer. This 15 s routine needs all its time for the two Toggles, so it leaves the
+// jammer in.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Motor toggleRoller(8, pros::MotorGears::green);
 pros::Optical toggleEye(9);  // looks at the Toggle face in front of the roller
 pros::adi::Pneumatics plate('B', false);
+pros::adi::Pneumatics jammer('C', false);  // retracted: not touching anything
 pros::Imu imu(11);
 
 // 3.25" wheels geared 36:48 (450 rpm from 600 rpm motors)

@@ -124,6 +124,6 @@ export const SAMPLES: SampleMeta[] = [
   test('test-intake-staging', 'override-intake-staging', 'intake -> rear staging -> rear DR4B', 'reads the GPS and tray sensor, takes the Preload from the tray with the rear claw, lifts it to three heights and spins the intake'),
   test('test-sixbar-wrist', 'override-sixbar-wrist', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),
   test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the rear 4-bar to three heights and drops and re-grabs the Preload behind the robot'),
-  test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and reads the optical sensor'),
+  test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and the jammer and reads the optical sensor'),
   test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),
 ];
