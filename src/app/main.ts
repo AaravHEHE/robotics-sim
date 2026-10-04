@@ -776,20 +776,33 @@ async function openSample(s: SampleMeta) {
 // samples dialog
 $('btn-samples').onclick = () => {
   const list = $('sample-list');
+  // grouped: starters on the empty field, Override autons, then the robots' mechanism tests
+  const groups: Array<[string, SampleMeta[]]> = [
+    ['Starters (empty 12 ft field)', SAMPLES.filter((s) => !s.field)],
+    ['V5RC Override autons', SAMPLES.filter((s) => s.field && s.kind !== 'test')],
+    ['Mechanism tests: one per Override robot (PASS / FAIL in the Console)', SAMPLES.filter((s) => s.kind === 'test')],
+  ];
+  const card = (s: SampleMeta) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'card';
+    b.innerHTML = '<strong></strong><span></span>';
+    b.querySelector('strong')!.textContent = s.name;
+    b.querySelector('span')!.textContent = `${s.description} Robot: ${PRESETS.find((p) => p.id === s.robot)?.name ?? s.robot}.`;
+    b.onclick = async () => {
+      $<HTMLDialogElement>('dlg-samples').close();
+      await openSample(s);
+      setStatus(`Opened “${s.name}”. Press Run.`);
+    };
+    return b;
+  };
   list.replaceChildren(
-    ...SAMPLES.map((s) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'card';
-      b.innerHTML = '<strong></strong><span></span>';
-      b.querySelector('strong')!.textContent = s.name;
-      b.querySelector('span')!.textContent = `${s.description} Robot: ${PRESETS.find((p) => p.id === s.robot)?.name ?? s.robot}.`;
-      b.onclick = async () => {
-        $<HTMLDialogElement>('dlg-samples').close();
-        await openSample(s);
-        setStatus(`Opened “${s.name}”. Press Run.`);
-      };
-      return b;
+    ...groups.flatMap(([title, items]) => {
+      if (!items.length) return [];
+      const h = document.createElement('h3');
+      h.className = 'cards-title';
+      h.textContent = title;
+      return [h, ...items.map(card)];
     }),
   );
   $<HTMLDialogElement>('dlg-samples').showModal();

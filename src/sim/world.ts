@@ -519,7 +519,9 @@ export class World {
     if (maxX > half) { this.pose.x -= maxX - half; wall = 'right'; }
     if (minY < -half) { this.pose.y += -half - minY; wall = 'near'; }
     if (maxY > half) { this.pose.y -= maxY - half; wall = 'far'; }
-    if (wall && wall !== this.lastCollisionWall) this.collisions.push({ t: this.time, wall });
+    // pressing on a wall reports it once, not on every step the contact flickers
+    if (wall && wall !== this.lastCollisionWall && !(this.time - (this.lastContact.get(wall) ?? -Infinity) < 500)) this.collisions.push({ t: this.time, wall });
+    if (wall) this.lastContact.set(wall, this.time);
     this.lastCollisionWall = wall;
   }
 

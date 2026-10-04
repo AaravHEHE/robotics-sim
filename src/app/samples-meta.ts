@@ -11,7 +11,21 @@ export interface SampleMeta {
   start?: string;
   /** Auto-stop (ms): 15000 = head-to-head autonomous, 60000 = Skills. */
   autonMs?: number;
+  /** 'test': a mechanism test for a robot preset (prints PASS / FAIL); default: an example or auton. */
+  kind?: 'test';
 }
+
+/** A mechanism test for an Override robot preset: runs from Red 2 (west) with a 60 s auto-stop. */
+const test = (id: string, robot: string, name: string, what: string): SampleMeta => ({
+  id,
+  name: `Test: ${name}`,
+  description: `Plain PROS mechanism test (prints PASS / FAIL for each check): drives a lane and turns a full circle, then ${what}.`,
+  robot,
+  field: 'override',
+  start: 'red2_w',
+  autonMs: 60000,
+  kind: 'test',
+});
 
 export const SAMPLES: SampleMeta[] = [
   {
@@ -104,4 +118,12 @@ export const SAMPLES: SampleMeta[] = [
     start: 'red1_s',
     autonMs: 60000,
   },
+  test('test-flex', 'override-flex', 'Flex (Hero Bot)', 'moves the arm to three heights and drops and re-grabs the Preload with the claw'),
+  test('test-dr4b-roller', 'override-dr4b-roller', 'DR4B + roller claw', 'moves the DR4B to three heights and rolls the Preload out and back in'),
+  test('test-cascade', 'override-cascade', 'cascade + claw + intake', 'moves the cascade to three heights, drops and re-grabs the Preload and spins the intake both ways'),
+  test('test-intake-staging', 'override-intake-staging', 'intake -> rear staging -> rear DR4B', 'reads the GPS and tray sensor, takes the Preload from the tray with the rear claw, lifts it to three heights and spins the intake'),
+  test('test-sixbar-wrist', 'override-sixbar-wrist', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),
+  test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the 4-bar to three heights and drops and re-grabs the Preload'),
+  test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and reads the optical sensor'),
+  test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),
 ];
