@@ -206,7 +206,10 @@ describe('LemLib motions', () => {
     const swing = rec.lcd.find((l) => l.text.startsWith('swing'))!;
     expect(Math.abs(Number(swing.text.split(' ')[1]) - 90)).toBeLessThan(2);
     const p = finalPose(rec);
-    expect(Math.abs(((p.theta % 360) + 360) % 360 - 270)).toBeLessThan(3); // facing (0, 48) = west
+    // the swing pivots on the right wheels, so the robot ends a little off (24, 48): it must face (0, 48)
+    const bearing = (Math.atan2(0 - p.x, 48 - p.y) * 180) / Math.PI;
+    expect(Math.abs(((p.theta - bearing + 540) % 360) - 180)).toBeLessThan(2);
+    expect(Math.hypot(p.x - 24, p.y - 48)).toBeLessThan(8);
     expect(rec.motions.map((m) => m.label)).toEqual(['swingToHeading', 'moveToPoint', 'moveToPoint', 'swingToPoint']);
   });
 });

@@ -471,7 +471,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   }
   if (marker && marker.t1 === null) marker.t1 = sched.now;
   for (const c of world.collisions) {
-    events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : `Robot hit the ${c.wall} wall.` });
+    events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : /^piece /.test(c.wall) ? `Robot pushed a Scoring Object (${c.wall.slice(6)}) that couldn't move out of the way.` : /^(near|far|left|right)$/.test(c.wall) ? `Robot hit the ${c.wall} wall.` : `Robot hit ${c.wall}.` });
   }
   let gameRec: OverrideRecording | null = null;
   try {

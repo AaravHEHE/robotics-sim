@@ -15,6 +15,8 @@ import type { DriveController, Pose, World } from './world.ts';
 const HEADING_GAIN = 8;
 /** Distance at which point/pose motions stop steering and settle (LemLib uses 7.5 in). */
 const CLOSE_DIST = 7.5;
+/** Share of the braking budget kept while steering: heading corrections use the rest. */
+const STEER_RESERVE = 0.8;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const headingTo = (from: Pose, x: number, y: number) => datan2(x - from.x, y - from.y) / RAD;
@@ -37,6 +39,7 @@ export abstract class Motion implements DriveController {
     if (this.done) return [0, 0];
     this.track(w);
     this.elapsed += dt * 1000;
+    this.dt = dt;
     if (this.elapsed >= this.timeout) {
       this.done = true;
       return [0, 0];
@@ -54,9 +57,41 @@ export abstract class Motion implements DriveController {
 
   protected abstract control(w: World, dt: number): [number, number];
 
-  /** Ideal speed limit to stop exactly after `dist` inches, never below `floor`. */
-  protected stopLimit(w: World, dist: number, floor = 0): number {
-    return Math.max(floor, Math.sqrt(2 * w.accel * Math.max(0, dist)));
+  /** Length of the current control step (s). */
+  protected dt = 0.001;
+
+  /**
+   * Speed limit to stop exactly after `dist` inches braking at `share` of the drivetrain's
+   * deceleration, never below `floor`. Discrete: the world applies a command one step
+   * later, so the continuous sqrt(2ad) would always overshoot a little.
+   */
+  protected stopLimit(w: World, dist: number, floor = 0, share = 1): number {
+    const a = w.accel * share;
+    const adt = a * this.dt;
+    const v = adt * (Math.sqrt((2 * Math.max(0, dist)) / (a * this.dt * this.dt) + 0.25) - 0.5);
+    return Math.max(floor, v);
+  }
+
+  /**
+   * Turn rate (rad/s) toward a heading error (deg), never faster than the robot can stop
+   * from in the remaining angle using `share` of each wheel's acceleration, so heading
+   * corrections don't swing past and come back.
+   */
+  protected steer(w: World, errDeg: number, vmax: number, share = 0.5): number {
+    const omegaMax = (2 * vmax) / w.trackWidth;
+    const alpha = (2 * w.accel * share) / w.trackWidth;
+    const e = Math.abs(errDeg) * RAD;
+    return Math.sign(errDeg) * Math.min(omegaMax, Math.sqrt(2 * alpha * e), HEADING_GAIN * e);
+  }
+
+  /**
+   * Fastest speed for following an arc toward a point `dist` inches away at heading error
+   * `errDeg`: the sideways (centripetal) acceleration v^2/r can't exceed what the wheels'
+   * traction gives, like LemLib's horizontal-drift slip limit.
+   */
+  protected cornerLimit(w: World, errDeg: number, dist: number): number {
+    const curvature = (2 * Math.abs(dsin(errDeg * RAD))) / Math.max(dist, 1e-6);
+    return curvature < 1e-9 ? Infinity : Math.sqrt(w.accel / curvature);
   }
 
   /** Scale (v, omega) to wheel speeds within vmax. omega is rad/s, clockwise positive. */
@@ -83,6 +118,8 @@ export interface PointParams {
 export class MoveToPoint extends Motion {
   private close = false;
   private prevSide: boolean | null = null;
+  /** Direction from the start toward the target (LemLib fixes it when the motion starts). */
+  private approach: number | null = null;
   readonly x: number;
   readonly y: number;
   readonly p: PointParams;
@@ -102,8 +139,9 @@ export class MoveToPoint extends Motion {
 
     // motion chaining: with minSpeed, exit once the robot crosses the line through the
     // target perpendicular to the approach (LemLib's "side" test), offset by earlyExitRange
+    this.approach ??= headingTo(pose, this.x, this.y) * RAD;
     if (vmin > 0) {
-      const s = this.sideOf(pose, headingTo(pose, this.x, this.y) * RAD);
+      const s = this.sideOf(pose, this.approach);
       if (this.prevSide === null) this.prevSide = s;
       if (s !== this.prevSide) {
         this.done = true;
@@ -124,12 +162,14 @@ export class MoveToPoint extends Motion {
         this.done = true;
         return [0, 0];
       }
-      const v = Math.sign(along) * Math.min(vmax, this.stopLimit(w, Math.abs(along), vmin));
+      // chaining (minSpeed) keeps going the way it was until it crosses the line
+      const sign = vmin > 0 ? dir : Math.sign(along);
+      const v = sign * Math.min(vmax, this.stopLimit(w, Math.abs(along), vmin));
       return this.wheels(w, v, 0, vmax);
     }
-    const v = dir * Math.min(vmax, this.stopLimit(w, dist, vmin)) * Math.max(0, dcos(err * RAD));
-    const omega = HEADING_GAIN * err * RAD;
-    return this.wheels(w, v, clamp(omega, -(2 * vmax) / w.trackWidth, (2 * vmax) / w.trackWidth), vmax);
+    const limit = Math.min(vmax, this.stopLimit(w, dist, vmin, STEER_RESERVE), Math.max(vmin, this.cornerLimit(w, err, dist)));
+    const v = dir * limit * Math.max(0, dcos(err * RAD));
+    return this.wheels(w, v, this.steer(w, err, vmax), vmax);
   }
 
   private sideOf(pose: Pose, approachRad: number): boolean {
@@ -167,8 +207,15 @@ export class MoveToPose extends Motion {
     if (this.close) {
       // settle: drive the remaining along-track distance while turning to the final heading
       const along = dist * dcos(wrap180(headingTo(pose, this.x, this.y) - pose.theta) * RAD);
-      const herr = wrap180(this.theta - pose.theta);
-      if (Math.abs(along) < 0.25 && Math.abs(herr) < 0.5 && vmin === 0) {
+      // still aim at the target point while it is ahead, so a sideways offset left by the
+      // boomerang closes up instead of staying; fades to the final heading at the end
+      const ex = this.x - pose.x;
+      const ey = this.y - pose.y;
+      const alongT = ex * dsin(targetHeading * RAD) + ey * dcos(targetHeading * RAD);
+      const latT = ex * dcos(targetHeading * RAD) - ey * dsin(targetHeading * RAD);
+      const aim = alongT > 1 ? datan2(latT, Math.max(alongT, 3)) / RAD : 0;
+      const herr = wrap180(this.theta + aim - pose.theta);
+      if (Math.abs(along) < 0.25 && Math.abs(herr) < 0.5 && Math.abs(w.vL) < 3 && Math.abs(w.vR) < 3 && vmin === 0) {
         this.done = true;
         return [0, 0];
       }
@@ -176,22 +223,23 @@ export class MoveToPose extends Motion {
         this.done = true;
         return [0, 0];
       }
-      const v = Math.sign(along) * Math.min(vmax, this.stopLimit(w, Math.abs(along), vmin));
-      const omegaMax = (2 * vmax) / w.trackWidth;
-      const alpha = (2 * w.accel) / w.trackWidth;
-      const omega = Math.sign(herr) * Math.min(omegaMax, Math.sqrt(2 * alpha * Math.abs(herr) * RAD), HEADING_GAIN * Math.abs(herr) * RAD);
-      return this.wheels(w, v, omega, vmax);
+      // braking and turning share each wheel's acceleration, half each
+      const v = Math.sign(along) * Math.min(vmax, this.stopLimit(w, Math.abs(along), vmin, 0.5));
+      return this.wheels(w, v, this.steer(w, herr, vmax, 0.5), vmax);
     }
 
-    // boomerang carrot point behind the target along its final heading
-    const carrotX = this.x - dist * this.p.lead * dsin(targetHeading * RAD) * dir;
-    const carrotY = this.y - dist * this.p.lead * dcos(targetHeading * RAD) * dir;
+    // boomerang carrot point behind the target along the direction of travel at the end
+    // (targetHeading is already reversed for backwards moves)
+    const carrotX = this.x - dist * this.p.lead * dsin(targetHeading * RAD);
+    const carrotY = this.y - dist * this.p.lead * dcos(targetHeading * RAD);
     let desired = headingTo(pose, carrotX, carrotY);
     if (!this.p.forwards) desired += 180;
     const err = wrap180(desired - pose.theta);
-    const v = dir * Math.min(vmax, this.stopLimit(w, dist, vmin)) * Math.max(0, dcos(err * RAD));
-    const omega = clamp(HEADING_GAIN * err * RAD, -(2 * vmax) / w.trackWidth, (2 * vmax) / w.trackWidth);
-    return this.wheels(w, v, omega, vmax);
+    const carrotDist = dhypot(carrotX - pose.x, carrotY - pose.y);
+    // same braking budget as the settle phase, so entering it doesn't overshoot
+    const limit = Math.min(vmax, this.stopLimit(w, dist, vmin, 0.5), Math.max(vmin, this.cornerLimit(w, err, carrotDist)));
+    const v = dir * limit * Math.max(0, dcos(err * RAD));
+    return this.wheels(w, v, this.steer(w, err, vmax), vmax);
   }
 }
 
@@ -242,9 +290,10 @@ export class Turn extends Motion {
     const vmax = (w.maxSpeed * clamp(this.p.maxSpeed, 0, 127)) / 127;
     const vmin = (w.maxSpeed * clamp(Math.abs(this.p.minSpeed), 0, 127)) / 127;
     const exitRange = vmin > 0 ? Math.max(this.p.earlyExitRange, 0.5) : 0.5;
-    // in-place turns (unless chaining) settle: on target with both sides (nearly) stopped, so the next
-    // motion doesn't inherit leftover wheel speed, like LemLib's small-error exit condition
-    if (Math.abs(remaining) < exitRange && (vmin > 0 || this.locked !== null || (Math.abs(w.vL) < 2 && Math.abs(w.vR) < 2))) {
+    // turns and swings (unless chaining) settle: on target with both sides (nearly) stopped, so the
+    // robot doesn't coast on and the next motion doesn't inherit leftover wheel speed, like
+    // LemLib's / EZ-Template's small-error exit conditions
+    if (Math.abs(remaining) < exitRange && (vmin > 0 || (Math.abs(w.vL) < 2 && Math.abs(w.vR) < 2))) {
       this.done = true;
       return [0, 0];
     }
@@ -368,13 +417,13 @@ export class DriveDistance extends Motion {
     const h = this.heading * RAD;
     const progressed = (w.pose.x - this.startX) * dsin(h) + (w.pose.y - this.startY) * dcos(h);
     const remaining = this.distance - progressed;
-    if (Math.abs(remaining) < 0.25) {
+    if (Math.abs(remaining) < 0.25 && Math.abs(w.speed) < 3) {
       this.done = true;
       return [0, 0];
     }
     const vmax = (w.maxSpeed * clamp(Math.abs(this.maxSpeed127), 0, 127)) / 127;
     const v = Math.sign(remaining) * Math.min(vmax, this.stopLimit(w, Math.abs(remaining)));
     const err = wrap180(this.heading - w.pose.theta);
-    return this.wheels(w, v, HEADING_GAIN * err * RAD, vmax);
+    return this.wheels(w, v, this.steer(w, err, vmax), vmax);
   }
 }

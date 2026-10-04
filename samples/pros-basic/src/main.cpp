@@ -28,12 +28,16 @@ void drive(double inches, int speed = 100) {
   pros::delay(250);
 }
 
-// Turn in place to an absolute IMU heading (degrees, clockwise positive).
+// Turn in place to an absolute IMU heading (degrees, clockwise positive): a PD loop.
+// The D term uses the IMU's gyro rate so the robot eases into the target instead of
+// swinging past it; the turn ends once it is on target and has stopped (or after 2 s).
 void turnTo(double target) {
-  while (true) {
+  const std::uint32_t end = pros::millis() + 2000;
+  while (pros::millis() < end) {
     const double error = target - imu.get_rotation();
-    if (std::fabs(error) < 1.5) break;
-    const int power = std::clamp(error * 2.0, -80.0, 80.0);
+    const double rate = -imu.get_gyro_rate().z;  // deg/s, clockwise positive
+    if (std::fabs(error) < 1.0 && std::fabs(rate) < 5.0) break;
+    const double power = std::clamp(error * 2.0 - rate * 0.2, -80.0, 80.0);
     leftDrive.move(power);
     rightDrive.move(-power);
     pros::delay(10);

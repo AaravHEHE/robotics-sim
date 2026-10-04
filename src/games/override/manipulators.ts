@@ -5,6 +5,7 @@
 // over a Goal or stack, at the right height, nests what it holds; anywhere else it drops
 // to the floor.
 
+import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
 import { clawEffector, toField, toRobot, type Point3 } from '../../sim/lift.ts';
 import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
@@ -101,15 +102,15 @@ function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const k = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
-  return Math.hypot(p[0] - a[0] - k * dx, p[1] - a[1] - k * dy);
+  return dhypot(p[0] - a[0] - k * dx, p[1] - a[1] - k * dy);
 }
 
 const RAD = Math.PI / 180;
 /** End points of a lying pin: [colors[0] end, colors[1] end]. */
 function pinEnds(l: LyingPin): [Vec2, Vec2] {
   const h = PIN.length / 2;
-  const ux = Math.sin(l.heading * RAD);
-  const uy = Math.cos(l.heading * RAD);
+  const ux = dsin(l.heading * RAD);
+  const uy = dcos(l.heading * RAD);
   return [
     [l.x - ux * h, l.y - uy * h],
     [l.x + ux * h, l.y + uy * h],
@@ -158,8 +159,15 @@ export class Manipulators {
     this.wrists = of('wrist');
     this.tools = of('toggleTool');
     for (const m of [...of('claw'), ...this.intakes, ...this.stagings]) ops.state.held[m.name] = [];
-    for (const c of this.claws) c.closed = this.isClosed(c);
     this.loadPreload();
+    // a piston claw that holds the Preload was closed on it by hand before the match: the
+    // cylinder starts there (if the code then leaves the solenoid off, it opens and drops it)
+    for (const c of this.claws) {
+      if (c.spec.grip === 'piston' && c.spec.adi && ops.state.held[c.spec.name]?.length) {
+        world.pistons.set(c.spec.adi.toUpperCase(), (c.spec.closedWhen ?? 'extended') === 'extended' ? 1 : 0);
+      }
+      c.closed = this.isClosed(c) || (c.spec.grip === 'motor' && ops.state.held[c.spec.name]?.length > 0);
+    }
   }
 
   private loadPreload(): void {
@@ -247,7 +255,7 @@ export class Manipulators {
 
     for (const s of this.stagings) {
       const items = state.held[s.name];
-      const d = Math.hypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
+      const d = dhypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
       if (d <= reach && Math.abs(e.robot.z - s.at.z) <= 1.5 && ok(items)) {
         cands.push({ d, pieces: items, take: () => this.receive(c, state.held[s.name].splice(0), 0) });
       }
@@ -256,7 +264,7 @@ export class Manipulators {
       for (const l of field.loaders ?? []) {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
-        const d = Math.hypot(e.x - mx, e.y - my);
+        const d = dhypot(e.x - mx, e.y - my);
         if (items.length && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), take: () => this.receive(c, items.splice(0, 1), e.z) });
       }
       for (const l of state.lying) {
@@ -268,7 +276,7 @@ export class Manipulators {
     }
     for (const g of field.goals ?? []) {
       const pieces = state.goals[g.id];
-      const d = Math.hypot(e.x - g.x, e.y - g.y);
+      const d = dhypot(e.x - g.x, e.y - g.y);
       if (!pieces.length || d > reach) continue;
       const slot = slotAt(pieces, g.height, true, e.z);
       if (slot && ok(pieces.slice(slot.index))) {
@@ -276,7 +284,7 @@ export class Manipulators {
       }
     }
     for (const s of state.floor) {
-      const d = Math.hypot(e.x - s.x, e.y - s.y);
+      const d = dhypot(e.x - s.x, e.y - s.y);
       if (d > reach) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
       if (slot && ok(s.pieces.slice(slot.index))) {
@@ -310,7 +318,7 @@ export class Manipulators {
     const pieces = held.splice(0);
     c.grip = 0;
     for (const g of field.goals ?? []) {
-      if (Math.hypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE || !nests(state.goals[g.id], g.height, true)) continue;
+      if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE || !nests(state.goals[g.id], g.height, true)) continue;
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
         this.ops.violation('SG9', `The robot added Scoring Objects to opponent Goal ${g.id}.`);
       }
@@ -319,7 +327,7 @@ export class Manipulators {
       return;
     }
     for (const s of state.floor) {
-      if (Math.hypot(e.x - s.x, e.y - s.y) > PLACE_TOLERANCE || !nests(s.pieces, 0, false)) continue;
+      if (dhypot(e.x - s.x, e.y - s.y) > PLACE_TOLERANCE || !nests(s.pieces, 0, false)) continue;
       s.pieces.push(...pieces);
       this.ops.rebuildFloor(s);
       this.ops.changed();
@@ -439,7 +447,7 @@ export class Manipulators {
   private uprightColors(l: LyingPin): [PinColor, PinColor] {
     const [a, b] = pinEnds(l);
     const { x, y } = this.world.pose;
-    return Math.hypot(a[0] - x, a[1] - y) <= Math.hypot(b[0] - x, b[1] - y) ? [l.colors[0], l.colors[1]] : [l.colors[1], l.colors[0]];
+    return dhypot(a[0] - x, a[1] - y) <= dhypot(b[0] - x, b[1] - y) ? [l.colors[0], l.colors[1]] : [l.colors[1], l.colors[0]];
   }
 
   private takeLying(l: LyingPin, into: (p: Piece) => void): void {
@@ -476,8 +484,8 @@ export class Manipulators {
     let py = Math.max(-half, Math.min(half, y));
     // something dropped onto a Goal's body slides off it
     for (const g of this.ops.field.goals ?? []) {
-      const clear = g.baseWidth / 2 / Math.cos(22.5 * RAD) + CUP.rimDiameter / 2 + 0.2;
-      const d = Math.hypot(px - g.x, py - g.y);
+      const clear = g.baseWidth / 2 / dcos(22.5 * RAD) + CUP.rimDiameter / 2 + 0.2;
+      const d = dhypot(px - g.x, py - g.y);
       if (d >= clear) continue;
       const k = d > 1e-6 ? clear / d : 1;
       px = g.x + (d > 1e-6 ? (px - g.x) * k : clear);

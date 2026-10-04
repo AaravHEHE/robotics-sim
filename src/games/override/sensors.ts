@@ -3,6 +3,7 @@
 // Installed into the World's sensor hooks by the game. Idealized: exact colors, no
 // ambient light, no noise.
 
+import { dcos, dsin } from '../../sim/dmath.ts';
 import type { FieldDef } from '../../sim/field.ts';
 import { clawEffector } from '../../sim/lift.ts';
 import type { ClawSpec, DeviceSpec, IntakeSpec, StagingSpec } from '../../sim/profile.ts';
@@ -81,8 +82,8 @@ export function installSensors(world: World, field: FieldDef, state: OverrideSta
     // lying Pins: a row of discs along the axis, each half its own color
     for (const l of state.lying) {
       if (b.z > PIN.collarDiameter) continue;
-      const ux = Math.sin((l.heading * Math.PI) / 180);
-      const uy = Math.cos((l.heading * Math.PI) / 180);
+      const ux = dsin((l.heading * Math.PI) / 180);
+      const uy = dcos((l.heading * Math.PI) / 180);
       for (const k of [-2, -1, 1, 2]) {
         const d = (k / 2.5) * (PIN.length / 2);
         hits.push({ t: rayCircle(b, l.x + ux * d, l.y + uy * d, PIN.coneDiameter / 2), color: l.colors[k < 0 ? 0 : 1] });

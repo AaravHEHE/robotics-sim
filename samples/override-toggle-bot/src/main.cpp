@@ -50,15 +50,17 @@ void drive(double inches, int maxSpeed = 127, int timeoutMs = 2500) {
   pros::delay(100);
 }
 
-// Turn in place to a field heading (degrees, clockwise from the top wall): a P loop that
-// waits until the robot has settled on the target.
+// Turn in place to a field heading (degrees, clockwise from the top wall): a PD loop.
+// The D term uses the IMU's gyro rate, so the robot eases into the target instead of
+// swinging past it, and the turn ends only once the robot is on target AND has stopped.
 void turnTo(double target, int maxSpeed = 127) {
+  constexpr double kP = 2.5, kD = 0.2;
   const std::uint32_t end = pros::millis() + 2000;
-  int settled = 0;
-  while (pros::millis() < end && settled < 3) {
+  while (pros::millis() < end) {
     const double error = std::remainder(target - fieldHeading(), 360.0);
-    settled = std::fabs(error) < 1.5 ? settled + 1 : 0;
-    const double power = std::clamp(error * 2.5, -double(maxSpeed), double(maxSpeed));
+    const double rate = -imu.get_gyro_rate().z;  // deg/s, clockwise positive like the heading
+    if (std::fabs(error) < 1.0 && std::fabs(rate) < 5.0) break;
+    const double power = std::clamp(error * kP - rate * kD, -double(maxSpeed), double(maxSpeed));
     leftDrive.move(power);
     rightDrive.move(-power);
     pros::delay(10);

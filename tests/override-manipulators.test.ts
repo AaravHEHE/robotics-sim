@@ -49,6 +49,7 @@ async function setup(r: RobotProfile, start: { x: number; y: number; theta: numb
   /** Put a lift at an output angle (degrees). */
   const lift = (out: number) => {
     world.motor(7).angle = out / 0.2;
+    world.motor(7).brakeMode = 2; // hold: an unpowered lift would sag under its weight
   };
   return { f, world, game, run, drive, lift };
 }
@@ -94,9 +95,9 @@ describe('Override claws', () => {
     // robot facing +x, its claw (10" ahead) over Goal R1
     const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
     expect(game.state.held.Claw.map((p) => p.kind === 'pin' && p.colors)).toEqual([['red', 'yellow']]);
-    run(20);
+    run(250);
     world.adiOut.set('B', false); // open
-    run(20);
+    run(250);
     expect(game.state.held.Claw).toEqual([]);
     expect(game.state.goals.R1.map((p) => p.id)).toEqual(['preload']);
     expect(game.score().score.red).toBe(5); // red half visible; yellow half unowned (neutral Toggle)
@@ -107,13 +108,13 @@ describe('Override claws', () => {
     const a = await setup(r, { x: -30, y: -50, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
     const lying = a.game.state.lying.length;
     a.world.adiOut.set('B', false);
-    a.run(10);
+    a.run(250);
     expect(a.game.state.lying.length).toBe(lying + 1);
     const b = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
     b.lift(100); // claw ~ 20" up, far above the Goal
-    b.run(10);
+    b.run(250);
     b.world.adiOut.set('B', false);
-    b.run(10);
+    b.run(250);
     expect(b.game.state.goals.R1).toEqual([]);
     const d = b.game.state.lying.at(-1)!;
     expect(Math.hypot(d.x - R1.x, d.y - R1.y)).toBeGreaterThan(2.8); // dropped beside it, not Placed
@@ -125,16 +126,16 @@ describe('Override claws', () => {
     const { game, run, world, lift } = await setup(r, { x: -23.548, y: -23.548 - 10, theta: 0 });
     const n = game.state.floor.length;
     world.adiOut.set('B', true);
-    run(10);
+    run(250);
     expect(game.state.floor.length).toBe(n - 1);
     expect(game.state.held.Claw.map((p) => p.kind)).toEqual(['cup', 'pin']); // taken whole, in order
     // carry it over R1 and lower it in: a Cup can't be Placed directly in a Goal (SC2)
     world.pose = { x: R1.x - 10.3, y: R1.y, theta: 90 };
     game.robotTeleported();
     lift(10); // cup bottom ~2" up, just above the Goal top
-    run(10);
+    run(250);
     world.adiOut.set('B', false);
-    run(10);
+    run(250);
     expect(game.state.goals.R1.map((p) => p.kind)).toEqual(['cup', 'pin']);
     expect(game.score().score.goals.find((g) => g.goal === 'R1')!.placedPins).toBe(0);
   });
@@ -143,7 +144,7 @@ describe('Override claws', () => {
     const r = await testRobot([LIFT, claw, { kind: 'wrist', name: 'Wrist', claw: 'Claw', adi: 'C' }]);
     const { game, run, world } = await setup(r, { x: -30, y: -50, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
     world.adiOut.set('C', true);
-    run(10);
+    run(250);
     expect(game.state.held.Claw.map((p) => p.kind === 'pin' && p.colors)).toEqual([['yellow', 'red']]);
   });
 
@@ -152,9 +153,9 @@ describe('Override claws', () => {
     // neutral Goal N_R1 at (-47.091, 23.547), 5.77" tall, holding a yellow Pin
     const { game, run, world, lift } = await setup(r, { x: -47.091 - 10.3, y: 23.547, theta: 90 });
     lift(25); // grip height ~ 8": inside the Placed Pin
-    run(5);
+    run(250);
     world.adiOut.set('B', true);
-    run(10);
+    run(250);
     expect(game.state.goals.N_R1).toEqual([]);
     expect(game.rules.violations.map((v) => v.rule)).toContain('SG10');
   });

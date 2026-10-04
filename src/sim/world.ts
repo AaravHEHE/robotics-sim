@@ -16,6 +16,24 @@ export interface Pose {
 const CARTRIDGE_BY_GEARSET: Cartridge[] = ['red', 'green', 'blue'];
 /** Seconds for a free-spinning mechanism motor to reach full speed. */
 const MOTOR_SPINUP_S = 0.15;
+/**
+ * Drivetrain motor torque at stall, as a multiple of the traction limit (maxAccel): torque
+ * falls linearly to zero at free speed, so a robot speeds up at the traction limit until
+ * about 2/3 of top speed, then more and more slowly; braking from speed stays strong.
+ */
+const STALL_ACCEL_FACTOR = 3;
+/** Seconds for a pneumatic cylinder to stroke fully. */
+const PISTON_STROKE_S = 0.15;
+/** Share of a lift motor's speed lost to the lift's weight going up. */
+const LIFT_LOAD = 0.2;
+/** An unpowered lift falls at this share of free speed (coast), or creeps down (brake). */
+const LIFT_SAG = 0.25;
+const LIFT_CREEP = 0.02;
+/** Unpowered, coasting: rolling friction plus back-driving the gearboxes (in/s^2); a robot
+ * coasting from full speed rolls on for about a foot. */
+const COAST_DECEL = 150;
+/** Friction that brings a braking robot to a final stop (in/s^2). */
+const FRICTION_DECEL = 40;
 
 export type MotorMode = 'voltage' | 'velocity' | 'position';
 
@@ -48,6 +66,13 @@ export class MotorState {
   driveMount = 1;
   voltageLimit = 0;
   currentLimit = 2500;
+  /**
+   * Acceleration of position moves (move_absolute/relative), deg/s^2 of the output shaft.
+   * Free-spinning motors: full speed in MOTOR_SPINUP_S; drive motors: the drivetrain's.
+   */
+  positionAccel: number | null = null;
+  /** Lift motors: sign of the motor direction that raises the lift (0 = not a lift). */
+  liftUp = 0;
 
   constructor(port: number, cartridge: Cartridge | null) {
     this.port = port;
@@ -84,7 +109,7 @@ export class MotorState {
         return Math.max(-free, Math.min(free, this.cmd / this.codeRpmPerPhysRpm));
       case 'position': {
         const err = this.cmd - this.angle;
-        const accel = (free / MOTOR_SPINUP_S) * 6; // deg/s^2 (rpm/s * 6)
+        const accel = this.positionAccel ?? (free / MOTOR_SPINUP_S) * 6; // deg/s^2 (rpm/s * 6)
         const vmax = Math.min(Math.abs(this.profileRpm / this.codeRpmPerPhysRpm), free) * 6; // deg/s
         const v = Math.min(vmax, Math.sqrt(2 * accel * Math.abs(err)));
         return (Math.sign(err) * v) / 6;
@@ -183,16 +208,21 @@ export class World {
   readonly imus = new Map<number, ImuState>();
   readonly rotations = new Map<number, RotationState>();
   readonly adiOut = new Map<string, boolean>();
+  /** Stroke position (0 retracted .. 1 extended) of each solenoid that drives a mechanism. */
+  readonly pistons = new Map<string, number>();
   readonly adiConfig = new Map<string, number>();
   /** Drive controller of the active idealized motion, if any. */
   controller: DriveController | null = null;
   readonly collisions: Collision[] = [];
   private lastCollisionWall = '';
   private lastObstacle = '';
+  private readonly lastContact = new Map<string, number>();
   /** What a game adds to the robot's sensors (game objects, colors). */
   sensors: SensorHooks = {};
   /** Static convex obstacles (goals, loaders, field objects) in the field frame. */
   readonly obstacles: Obstacle[];
+  /** Movable objects that currently can't move out of the robot's way (set by a game). */
+  pinnedObstacles: Obstacle[] = [];
   time = 0;
   /** Total distance driven by each side, in (for tracking/drive encoders). */
   private readonly maxV: number;
@@ -209,13 +239,26 @@ export class World {
         const m = new MotorState(Math.abs(p), dt.cartridge);
         m.driveSide = side;
         m.driveMount = Math.sign(p) || 1;
+        // in/s^2 at the wheel -> deg/s^2 at the motor
+        m.positionAccel = (dt.maxAccel / (Math.PI * dt.wheelDiameter)) * 360 * (CARTRIDGE_RPM[dt.cartridge] / dt.wheelRpm);
         this.motors.set(m.port, m);
       }
+    }
+    for (const mech of profile.mechanisms) {
+      if (isPneumatic(mech)) this.pistons.set(mech.adi!.toUpperCase(), 0);
     }
     for (const d of profile.devices) {
       if (d.type === 'motor') this.motors.set(d.port, new MotorState(d.port, d.cartridge));
       if (d.type === 'imu') this.imus.set(d.port, { port: d.port, calibratingUntil: 0, rotationOffset: 0, headingOffset: 0, pitchOffset: 0, rollOffset: 0, yawOffset: 0 });
       if (d.type === 'rotation') this.rotations.set(d.port, { port: d.port, spec: d, raw: 0, velocity: 0, zero: 0, reversed: false });
+    }
+    // lift motors carry the lift's weight (a positive output raises a lift)
+    for (const mech of profile.mechanisms) {
+      if (mech.kind !== 'lift' || !isMotorized(mech)) continue;
+      for (const port of mech.motors!) {
+        const m = this.motors.get(port);
+        if (m) m.liftUp = Math.sign(mech.ratio ?? 1) || 1;
+      }
     }
   }
 
@@ -263,10 +306,40 @@ export class World {
     return [side(dt.left), side(dt.right)];
   }
 
-  private sideBrakeFactor(ports: number[]): number {
-    // coast brakes at half the drivetrain deceleration; brake/hold at full
-    const coast = ports.every((p) => this.motors.get(Math.abs(p))!.brakeMode === 0);
-    return coast ? 0.5 : 1;
+  /**
+   * A side whose motors are told to stop (move(0), brake(), velocity 0) isn't driven: it
+   * slows by the motors' brake mode (all of a side's motors are set alike in practice).
+   */
+  private sideUnpowered(ports: number[]): boolean {
+    return ports.every((p) => {
+      const m = this.motors.get(Math.abs(p))!;
+      return m.mode !== 'position' && m.targetRpm() === 0;
+    });
+  }
+
+  /**
+   * Change of one side's surface speed over dt toward `target`.
+   * - Powered: the motors' velocity loop pushes toward the target with the torque the DC
+   *   motor has left at this speed (stall torque falling linearly to zero at free speed),
+   *   limited by wheel traction (the profile's maxAccel).
+   * - Unpowered, by brake mode: coast rolls on against friction; brake shorts the windings
+   *   (back-EMF braking, strong at speed, weak when slow); hold stops at full strength.
+   */
+  private sideAccel(v: number, target: number, ports: number[], dt: number): number {
+    const traction = this.accel;
+    const vmax = this.maxV;
+    if (!this.controller && this.sideUnpowered(ports)) {
+      if (v === 0) return 0;
+      const brake = Math.min(...ports.map((p) => this.motors.get(Math.abs(p))!.brakeMode));
+      const decel = brake === 2 ? traction : brake === 1 ? Math.min(traction, STALL_ACCEL_FACTOR * traction * (Math.abs(v) / vmax) + FRICTION_DECEL) : COAST_DECEL;
+      return -Math.sign(v) * Math.min(Math.abs(v), decel * dt);
+    }
+    const err = target - v;
+    // torque available in the direction of the error: + toward free speed, back-EMF helps braking
+    const dir = Math.sign(err);
+    const motorMax = STALL_ACCEL_FACTOR * traction * Math.max(0, 1 - (dir * v) / vmax);
+    // the motor's velocity loop reaches the target as fast as torque and traction allow
+    return dir * Math.min(Math.abs(err), Math.min(traction, motorMax) * dt);
   }
 
   step(dtMs: number): void {
@@ -276,19 +349,30 @@ export class World {
     const vmax = this.maxV;
     tL = Math.max(-vmax, Math.min(vmax, tL));
     tR = Math.max(-vmax, Math.min(vmax, tR));
-    const ramp = (v: number, target: number, ports: number[]) => {
-      const braking = Math.abs(target) < Math.abs(v) || Math.sign(target) !== Math.sign(v);
-      const a = this.accel * dt * (braking && target === 0 ? this.sideBrakeFactor(ports) : 1);
-      return v + Math.max(-a, Math.min(a, target - v));
-    };
     const vPrev = (this.vL + this.vR) / 2;
-    this.vL = ramp(this.vL, tL, d.left);
-    this.vR = ramp(this.vR, tR, d.right);
-    this.accelForward = ((this.vL + this.vR) / 2 - vPrev) / dt;
+    let dL = this.sideAccel(this.vL, tL, d.left, dt);
+    let dR = this.sideAccel(this.vR, tR, d.right, dt);
+    const eL = tL - this.vL;
+    const eR = tR - this.vR;
+    // Each side's motors follow their own command. A side that can reach its target this step
+    // does; when both sides are flat out, their torques follow their voltages, so each speeds
+    // up in proportion to how far it has to go. A difference between the sides' commands then
+    // always turns the robot (a leftover spin dies out instead of persisting while both sides
+    // accelerate), and a swing's locked side stays locked.
+    if ((this.controller || (!this.sideUnpowered(d.left) && !this.sideUnpowered(d.right))) && Math.abs(dL) < Math.abs(eL) && Math.abs(dR) < Math.abs(eR)) {
+      const f = Math.min(dL / eL, dR / eR);
+      dL = f * eL;
+      dR = f * eR;
+    }
+    this.vL += dL;
+    this.vR += dR;
 
     // kinematics (midpoint integration)
     const v = (this.vL + this.vR) / 2;
     const w = (this.vL - this.vR) / this.trackWidth; // rad/s, clockwise positive
+    const x0 = this.pose.x;
+    const y0 = this.pose.y;
+    const th0 = this.pose.theta;
     const thMid = (this.pose.theta + (w * dt * 0.5) / RAD) * RAD;
     this.pose.x += v * dsin(thMid) * dt;
     this.pose.y += v * dcos(thMid) * dt;
@@ -297,6 +381,7 @@ export class World {
     const by = this.pose.y;
     this.resolveObstacles();
     this.resolveWalls();
+    this.squareToWalls(v, dt);
     // Blocked by a wall or field element: the wheels stall instead of spinning on at the
     // commanded speed, so the forward speed drops to what the robot actually achieved.
     const pushed = (this.pose.x - bx) * dsinDeg(this.pose.theta) + (this.pose.y - by) * dcosDeg(this.pose.theta);
@@ -305,6 +390,15 @@ export class World {
       this.vL += achieved - v;
       this.vR += achieved - v;
     }
+    // after the stall: hitting something shows up on the IMU's accelerometer
+    this.accelForward = ((this.vL + this.vR) / 2 - vPrev) / dt;
+    // what the robot really did this step (after collisions), robot frame
+    const dTurn = (this.pose.theta - th0) * RAD;
+    const thStep = th0 * RAD + dTurn / 2;
+    const dx = this.pose.x - x0;
+    const dy = this.pose.y - y0;
+    const stepForward = dx * dsin(thStep) + dy * dcos(thStep);
+    const stepRight = dx * dcos(thStep) - dy * dsin(thStep);
 
     // motors: drive motors follow their side; others ramp toward their target
     const wheelToMotor = CARTRIDGE_RPM[d.cartridge] / d.wheelRpm;
@@ -314,7 +408,14 @@ export class World {
         const sideV = m.driveSide === 'left' ? this.vL : this.vR;
         m.rpm = sideV * inPerSecToWheelRpm * wheelToMotor * m.driveMount;
       } else if (m.cartridge) {
-        const target = m.targetRpm();
+        let target = m.targetRpm();
+        if (m.liftUp) {
+          // a lift motor works against the lift's weight: slower going up, and with no
+          // power it sags (coast) or creeps down (brake); hold keeps it where it is
+          const unpowered = m.mode !== 'position' && target === 0;
+          if (unpowered) target = m.brakeMode === 0 ? -m.liftUp * LIFT_SAG * m.freeRpm : m.brakeMode === 1 ? -m.liftUp * LIFT_CREEP * m.freeRpm : 0;
+          else if (target * m.liftUp > 0) target *= 1 - LIFT_LOAD;
+        }
         const a = (m.freeRpm / MOTOR_SPINUP_S) * dt;
         m.rpm += Math.max(-a, Math.min(a, target - m.rpm));
       } else {
@@ -323,14 +424,20 @@ export class World {
       m.angle += m.rpm * 6 * dt;
     }
     this.applyMechanismLimits();
+    // pistons take a moment to stroke
+    for (const [port, pos] of this.pistons) {
+      const goal = this.adiOut.get(port) ? 1 : 0;
+      this.pistons.set(port, pos + Math.max(-dt / PISTON_STROKE_S, Math.min(dt / PISTON_STROKE_S, goal - pos)));
+    }
 
     // tracking wheels
     for (const r of this.rotations.values()) {
       const tw = r.spec.trackingWheel;
       let rate = 0; // deg/s of the sensor
       if (tw) {
-        const surface = tw.axis === 'vertical' ? v - w * tw.offset : w * tw.offset;
-        rate = (surface / (Math.PI * tw.wheelDiameter)) * 360;
+        // the wheel rolls with the robot's real motion, including being pushed sideways
+        const travel = tw.axis === 'vertical' ? stepForward - dTurn * tw.offset : stepRight + dTurn * tw.offset;
+        rate = (travel / dt / (Math.PI * tw.wheelDiameter)) * 360;
       } else if (r.spec.mechanism) {
         const mech = this.profile.mechanisms.find((m) => m.name === r.spec.mechanism);
         if (mech && isMotorized(mech)) rate = this.mechanismRpm(mech) * 6;
@@ -375,7 +482,7 @@ export class World {
     let hit = '';
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
-      for (const ob of this.obstacles) {
+      for (const ob of this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles) {
         const mtv = satMtv(this.footprint(), ob.poly);
         if (!mtv) continue;
         this.pose.x += mtv[0];
@@ -385,7 +492,9 @@ export class World {
       }
       if (!moved) break;
     }
-    if (hit && hit !== this.lastObstacle) this.collisions.push({ t: this.time, wall: hit });
+    // pressing on something reports it once, not on every step the contact flickers
+    if (hit && hit !== this.lastObstacle && !(this.time - (this.lastContact.get(hit) ?? -Infinity) < 500)) this.collisions.push({ t: this.time, wall: hit });
+    if (hit) this.lastContact.set(hit, this.time);
     this.lastObstacle = hit;
   }
 
@@ -412,6 +521,34 @@ export class World {
     if (maxY > half) { this.pose.y -= maxY - half; wall = 'far'; }
     if (wall && wall !== this.lastCollisionWall) this.collisions.push({ t: this.time, wall });
     this.lastCollisionWall = wall;
+  }
+
+  /**
+   * Driving into a wall at a small angle: the leading corner touches first and the robot
+   * pivots about it until its face sits flush, which is how teams square against walls.
+   * The rate follows the drive speed over half the robot's width (the wheels slip sideways).
+   */
+  private squareToWalls(v: number, dt: number): void {
+    if (Math.abs(v) < 1e-6) return;
+    const half = this.field.perimeter.inside / 2;
+    const fp = this.footprint();
+    const xs = fp.map((p) => p[0]);
+    const ys = fp.map((p) => p[1]);
+    const touching: number[] = []; // outward normal headings of the walls touched
+    if (Math.max(...xs) >= half - 1e-6) touching.push(90);
+    if (Math.min(...xs) <= -half + 1e-6) touching.push(-90);
+    if (Math.max(...ys) >= half - 1e-6) touching.push(0);
+    if (Math.min(...ys) <= -half + 1e-6) touching.push(180);
+    if (!touching.length) return;
+    const drive = v > 0 ? this.pose.theta : this.pose.theta + 180;
+    const rate = Math.abs(v) / (this.profile.size.width / 2) / RAD; // deg/s
+    for (const n of touching) {
+      const d = wrap180(drive - n);
+      if (Math.abs(d) >= 45 || Math.abs(d) < 1e-9) continue;
+      this.pose.theta -= Math.sign(d) * Math.min(Math.abs(d), rate * dt);
+      this.resolveWalls();
+      return;
+    }
   }
 
   // ---------------- sensors ----------------
@@ -487,7 +624,10 @@ export class World {
 
   /** Output angle (deg) of a mechanism, or extension 0..1 for pistons. */
   mechanismState(mech: MechanismSpec): number {
-    if (isPneumatic(mech)) return this.adiOut.get(mech.adi!.toUpperCase()) ? 1 : 0;
+    if (isPneumatic(mech)) {
+      const port = mech.adi!.toUpperCase();
+      return this.pistons.get(port) ?? (this.adiOut.get(port) ? 1 : 0);
+    }
     if (!isMotorized(mech)) return 0;
     const m = this.motors.get(mech.motors![0]);
     return m ? m.angle * (mech.ratio ?? 1) : 0;
@@ -518,7 +658,7 @@ export function octagon(cx: number, cy: number, acrossFlats: number): Vec2[] {
   return pts;
 }
 
-function box(cx: number, cy: number, w: number, l: number, heading = 0): Vec2[] {
+export function box(cx: number, cy: number, w: number, l: number, heading = 0): Vec2[] {
   const s = dsinDeg(heading);
   const c = dcosDeg(heading);
   return ([[-w / 2, -l / 2], [w / 2, -l / 2], [w / 2, l / 2], [-w / 2, l / 2]] as Vec2[]).map(([lx, ly]): Vec2 => [cx + lx * c + ly * s, cy - lx * s + ly * c]);

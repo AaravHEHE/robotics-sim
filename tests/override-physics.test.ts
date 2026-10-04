@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { CUP } from '../src/games/override/elements.ts';
 import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
@@ -31,6 +32,15 @@ describe('Override floor physics', () => {
     expect(corner).toBeDefined();
     // it started at y = -23.55; the robot pushed it north
     expect(corner.y).toBeGreaterThan(-20);
+  });
+
+  it('a stack jammed against the center Goal stops the robot instead of being driven through', async () => {
+    const { world, game } = await plow(1500);
+    const stack = game.state.floor.find((s) => Math.abs(s.x) < 6 && s.y > -30 && s.y < 0 && s.pieces.length === 2)!;
+    const front = world.pose.y + world.profile.size.length / 2;
+    expect(world.speed).toBeCloseTo(0, 3);
+    // the stack (radius = the Cup's rim) is still in front of the robot, not inside it
+    expect(stack.y - front).toBeGreaterThan(CUP.rimDiameter / 2 - 0.5);
   });
 
   it('objects never leave the field', async () => {
@@ -66,13 +76,13 @@ pros::MotorGroup right({4, 5, 6}, pros::MotorGears::blue);
 void autonomous() { left.move(127); right.move(127); pros::delay(800); left.brake(); right.brake(); }
 `),
       'tank-6m-450',
-      { field: await field(), start: { x: 0, y: -33, theta: 0 } },
+      { field: await field(), start: { x: 12, y: -33, theta: 0 } },
     );
     expect(rec.error).toBeNull();
     expect(rec.game?.id).toBe('override');
     expect(rec.game?.layout).toBe('h2h');
     expect(rec.game?.snapshots[0].state.floor.length).toBe(36); // 24 wall-group cups + 4 cross + 4 corner + 4 diagonal
-    // nothing scored, but driving north from (0, -33) crosses the Autonomous Line (SG7)
+    // nothing scored, but driving north from (12, -33) crosses the Autonomous Line (SG7)
     expect(rec.game?.alliance).toBe('red');
     expect(rec.game?.result?.score).toMatchObject({ red: 0, blue: 0 });
     expect(rec.game?.violations.map((v) => v.rule)).toContain('SG7');

@@ -7,7 +7,7 @@
 
 import RAPIER from '@dimforge/rapier2d-deterministic-compat';
 import type { FieldDef } from '../../sim/field.ts';
-import { fieldObstacles } from '../../sim/world.ts';
+import { box, fieldObstacles, octagon, type Obstacle } from '../../sim/world.ts';
 import { CUP, PIN, type Piece } from './elements.ts';
 import type { FloorStack, LyingPin } from './state.ts';
 
@@ -21,6 +21,12 @@ export const initPhysics = (): Promise<void> => (ready ??= RAPIER.init());
 
 const PIECE_MASS = { cup: 0.077, pin: 0.072 }; // kg (community-measured)
 const FLOOR_DAMPING = 6; // 1/s: objects slide a few inches after a push, then stop
+/** Overlap (in) at which a piece the robot pushes counts as stuck (against a wall, goal, ...). */
+const PINNED_DEPTH = 0.1;
+/** A stuck piece keeps blocking the robot until they are this far apart (in). */
+const PINNED_RELEASE = 0.05;
+/** ...and it isn't moving away faster than this (in/s). */
+const PINNED_SPEED = 2;
 
 /** Footprint radius of a standing stack: the widest piece (cup rim or pin collar). */
 function stackRadius(pieces: Piece[]): number {
@@ -37,6 +43,12 @@ export class FloorPhysics {
   private readonly world: RAPIER.World;
   private readonly robot: RAPIER.RigidBody;
   private readonly bodies = new Map<string, RAPIER.RigidBody>();
+  /** Collision outline of each body for blocking the robot: a disc radius or a pin capsule. */
+  private readonly outline = new Map<string, { r: number; length?: number }>();
+  /** Pieces stuck between the robot and something fixed: the robot can't drive through them. */
+  private readonly pinned = new Set<string>();
+  /** Overlap with the robot at the previous physics step (in), for pieces overlapping it. */
+  private readonly lastGap = new Map<string, number>();
 
   constructor(field: FieldDef, robotSize: { width: number; length: number }, start: BodyPose) {
     this.world = new RAPIER.World({ x: 0, y: 0 });
@@ -86,6 +98,7 @@ export class FloorPhysics {
     const mass = s.pieces.reduce((m, p) => m + PIECE_MASS[p.kind], 0);
     this.world.createCollider(RAPIER.ColliderDesc.ball(r).setMass(mass).setFriction(0.4).setRestitution(0.1), body);
     this.bodies.set(s.id, body);
+    this.outline.set(s.id, { r: r / M });
   }
 
   addLying(p: LyingPin, asleep = true): void {
@@ -95,6 +108,7 @@ export class FloorPhysics {
     const halfLen = (PIN.length / 2) * M - r;
     this.world.createCollider(RAPIER.ColliderDesc.capsule(halfLen, r).setMass(PIECE_MASS.pin).setFriction(0.4).setRestitution(0.1), body);
     this.bodies.set(p.id, body);
+    this.outline.set(p.id, { r: r / M, length: PIN.length });
   }
 
   remove(id: string): void {
@@ -102,6 +116,9 @@ export class FloorPhysics {
     if (!b) return;
     this.world.removeRigidBody(b);
     this.bodies.delete(id);
+    this.outline.delete(id);
+    this.pinned.delete(id);
+    this.lastGap.delete(id);
   }
 
   has(id: string): boolean {
@@ -128,6 +145,46 @@ export class FloorPhysics {
     if (!b) return null;
     const t = b.translation();
     return { x: t.x / M, y: t.y / M, heading: -b.rotation() / RAD };
+  }
+
+  /** Closest contact distance (in, negative = overlapping) between a body and the robot. */
+  private robotGap(b: RAPIER.RigidBody): number {
+    let gap = Infinity;
+    for (let i = 0; i < b.numColliders(); i++) {
+      for (let j = 0; j < this.robot.numColliders(); j++) {
+        this.world.contactPair(b.collider(i), this.robot.collider(j), (m) => {
+          for (let k = 0; k < m.numContacts(); k++) gap = Math.min(gap, m.contactDist(k) / M);
+        });
+      }
+    }
+    return gap;
+  }
+
+  /**
+   * Pieces the robot is pressing that could not get out of the way (pinned against a wall,
+   * a Goal or another piece), as obstacles: a real robot stops against them instead of
+   * driving through. They stay obstacles until the robot moves off them.
+   */
+  pinnedObstacles(): Obstacle[] {
+    const out: Obstacle[] = [];
+    for (const [id, b] of this.bodies) {
+      const gap = this.robotGap(b);
+      // a pushed piece speeds up and gets out of the way; a stuck one stays put, as deep in
+      const prev = this.lastGap.get(id);
+      const v = b.linvel();
+      const still = Math.sqrt(v.x * v.x + v.y * v.y) / M < PINNED_SPEED;
+      if (gap < -PINNED_DEPTH && still && prev !== undefined && prev < -PINNED_DEPTH && gap <= prev + 0.01) this.pinned.add(id);
+      else if (gap > PINNED_RELEASE) this.pinned.delete(id);
+      if (gap < 0) this.lastGap.set(id, gap);
+      else this.lastGap.delete(id);
+      if (!this.pinned.has(id)) continue;
+      const t = b.translation();
+      const o = this.outline.get(id)!;
+      const x = t.x / M;
+      const y = t.y / M;
+      out.push({ id: `piece ${id}`, poly: o.length ? box(x, y, 2 * o.r, o.length, -b.rotation() / RAD) : octagon(x, y, 2 * o.r) });
+    }
+    return out;
   }
 
   /** Is an object's body touching the robot right now? */
