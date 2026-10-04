@@ -1,10 +1,12 @@
 // Golden scores of the Override sample autons: each runs exactly as the app opens it.
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readProjectDir } from '../scripts/node-bundle.ts';
 import { repoRoot } from '../scripts/node-toolchain.ts';
 import { runSample } from '../scripts/sample-run.ts';
 import { SAMPLES } from '../src/app/samples-meta.ts';
+import type { FieldDef } from '../src/sim/field.ts';
 import { build } from './helpers.ts';
 
 const GOLDEN: Record<string, { red: number; blue: number; toggles?: Record<string, string> }> = {
@@ -52,6 +54,17 @@ const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean;
   'test-toggle-bot': { checks: 12 },
   'test-midfield-pusher': { checks: 10 },
 };
+
+describe('Override sample settings', () => {
+  it("each sample starts where its mode allows (the app would move it on reload otherwise)", async () => {
+    const field = JSON.parse(await readFile(path.join(repoRoot, 'data/fields/override.json'), 'utf8')) as FieldDef;
+    for (const s of SAMPLES.filter((x) => x.field === 'override')) {
+      const layout = (s.autonMs ?? 15000) >= 60000 ? 'skills' : 'h2h';
+      const sp = field.startPositions!.find((p) => p.id === s.start)!;
+      expect(sp.layouts, `${s.id}: ${s.start}`).toContain(layout);
+    }
+  });
+});
 
 describe('Override mechanism tests', () => {
   it('every robot preset for Override has a mechanism test', () => {

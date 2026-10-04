@@ -12,7 +12,9 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
   kernel underneath. See [docs/supported-api.md](docs/supported-api.md).
 - **Idealized motion.** No PID is simulated. LemLib and EZ-Template motions drive the
   intended path as fast as your robot's real motors, gearing and wheels allow. Library
-  tuning constants are accepted and ignored.
+  tuning constants are accepted and ignored. Motors, brake modes, pistons, wall contact
+  and grip are modelled on real hardware. Everything that still differs from a real robot,
+  and what to expect there, is listed in [docs/sim-vs-real.md](docs/sim-vs-real.md).
 - **Deterministic replays.** A run is simulated in milliseconds, then replayed with a
   count-up match timer, auto-stop at 15 s or 60 s, scrubbing and slow motion. The same
   code always produces the same run, in every browser.
@@ -25,10 +27,12 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
     checklist and Skills scoring.
   - **Robots:** lifts, claws, intakes, staging trays, wrists and Toggle tools in the
     profile turn your code's motor and piston commands into picking up, stacking and
-    dropping. There are 8 presets for the common robot designs (see
+    dropping. Pieces visibly ride through intakes into trays and claws. There are 8
+    presets for the common robot designs, each working like its real counterpart (see
     [docs/override-research.md](docs/override-research.md)).
-  - **Samples:** 8 Override samples covering PROS, LemLib and EZ-Template, head-to-head
-    autonomous and Skills.
+  - **Samples:** 8 Override autons covering PROS, LemLib and EZ-Template, head-to-head
+    autonomous and Skills. There is also a **mechanism test** for every robot, which
+    drives, turns and works each mechanism, printing PASS / FAIL per check.
 
 Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safari 27+.
 
@@ -83,11 +87,16 @@ After changing anything in `shim/` or `src/compiler/flags.ts`, run
 
 ## Status
 
-Milestone 1 covers: the generic empty field, tank drivetrains, PROS, LemLib 0.5 and
-EZ-Template 3.2 autonomous code, robot profiles with GLB models, and replay. Next up are
-game-specific fields with game objects and scoring, more drivetrains, and driver
-control. See [docs/prototype-report.md](docs/prototype-report.md) for the feasibility
-study behind the in-browser compiler.
+- **Milestone 1:** the generic empty field, tank drivetrains, PROS, LemLib 0.5 and
+  EZ-Template 3.2 autonomous code, robot profiles with GLB models, and replay.
+- **Milestone 2:** the V5RC Override field, game objects, scoring, rules, manipulators,
+  sensors, robot presets and samples.
+- **Milestone 3:** reliability fixes, realistic motion (no turn swing), correct and
+  distinct mechanisms, animated pieces, and mechanism tests.
+
+Next up are more drivetrains and driver control. See
+[docs/prototype-report.md](docs/prototype-report.md) for the feasibility study behind the
+in-browser compiler.
 
 ## Licenses
 

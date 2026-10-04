@@ -213,6 +213,8 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
 | `override-midfield-pusher` | Midfield pusher | PROS | 60 s Skills | Parks in the Midfield | 8 |
 | `override-skills` | Intake → rear staging → rear DR4B | LemLib | 60 s Skills | A 3-combo tower on R1 from Match Loads, stacked out of the back of the robot, then parks in the Midfield | 23 |
 
+**Milestone 3 (mechanism tests)** adds `samples/test-<robot>`: one plain-PROS test per preset. Each drives up the lane from Red 2 (west), turns a full circle, works every mechanism and prints PASS / FAIL per check. Its golden test also checks that the pieces really moved (the dropped Preload was picked up again, the tray emptied, the wrist flipped the stack). Differences between the simulator and a real robot are listed in [sim-vs-real.md](sim-vs-real.md).
+
 | Archetype | Simulator mechanisms |
 |---|---|
 | Flex | `lift: arm` + `claw` (motor); the claw tilts with the arm, so it scores low |

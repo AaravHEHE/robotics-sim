@@ -15,15 +15,15 @@ export interface SampleMeta {
   kind?: 'test';
 }
 
-/** A mechanism test for an Override robot preset: runs from Red 2 (west) with a 60 s auto-stop. */
+/** A mechanism test for an Override robot preset: runs from Red 2 (west), head-to-head (15 s). */
 const test = (id: string, robot: string, name: string, what: string): SampleMeta => ({
   id,
   name: `Test: ${name}`,
   description: `Plain PROS mechanism test (prints PASS / FAIL for each check): drives a lane and turns a full circle, then ${what}.`,
   robot,
   field: 'override',
-  start: 'red2_w',
-  autonMs: 60000,
+  start: 'red2_w', // a head-to-head start: the tests take under 15 s
+  autonMs: 15000,
   kind: 'test',
 });
 
