@@ -111,13 +111,13 @@ void autonomous() {
   turnTo(270);
   drive(8, 60, 500);       // roller against the Toggle (the wall stops the robot)
   rollToggleIn();     // yellow -> red
-  drive(-4.2);        // back off: a touched Toggle counts as neutral
+  drive(-5);          // back off (a touched Toggle counts as neutral) to the middle of the lane
 
   // Red 2 Toggle: bottom wall, centered on x = 0. Around Goal R2 and along the bottom wall.
   turnTo(180);
   drive(37);          // back to y = -37
   turnTo(90);
-  drive(22.5);        // x = -36
+  drive(22);          // x = -36
   turnTo(180);
   drive(22);          // y = -59
   turnTo(90);

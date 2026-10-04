@@ -66,9 +66,11 @@ void competition_initialize() {}
 
 void autonomous() {
   chassis.setPose(-60.7, -37, 90);  // Red 1 (south) start
+  // 2" out from the wall first: turning in place right against it would swing a corner into it
+  chassis.moveToPoint(-58.7, -37, 800);
 
   // 1. Preload into R1 (-47.1, -23.5); the claw is 9.5" ahead of the robot's center.
-  approach(-47.09, -23.55, 10.4);
+  approach(-47.09, -23.55, 10.6);  // the bumper just clear of the Goal, the claw over it
   claw.retract();  // open: the Pin drops into the Goal
   pros::delay(200);
 
@@ -80,7 +82,7 @@ void autonomous() {
   intake.brake();
   claw.extend();  // grip it
   liftTo(2);      // the Cup's bottom 2" above the Preload's collar
-  approach(-47.09, -23.55, 10.4, 60);
+  approach(-47.09, -23.55, 10.6, 60);
   claw.retract();
   pros::delay(200);
   liftTo(0);

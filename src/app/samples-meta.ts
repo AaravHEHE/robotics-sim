@@ -9,6 +9,8 @@ export interface SampleMeta {
   field?: string;
   /** Start position preset id on that field. */
   start?: string;
+  /** An exact start pose inside that preset's zone, for a robot that doesn't fit the preset's spot. */
+  startAt?: { x: number; y: number; theta: number };
   /** Auto-stop (ms): 15000 = head-to-head autonomous, 60000 = Skills. */
   autonMs?: number;
   /** 'test': a mechanism test for a robot preset (prints PASS / FAIL); default: an example or auton. */
@@ -107,6 +109,7 @@ export const SAMPLES: SampleMeta[] = [
     robot: 'override-midfield-pusher',
     field: 'override',
     start: 'red1_s',
+    startAt: { x: -60.705, y: -38, theta: 90 }, // 18" wide: 1" south, clear of the wall Cups
     autonMs: 60000,
   },
   {
@@ -125,5 +128,9 @@ export const SAMPLES: SampleMeta[] = [
   test('test-sixbar-wrist', 'override-sixbar-wrist', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),
   test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the rear 4-bar to three heights and drops and re-grabs the Preload behind the robot'),
   test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and the jammer and reads the optical sensor'),
-  test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),
+  {
+    ...test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),
+    // 18" wide: 1" west of the preset, so it starts clear of the wall Cups
+    startAt: { x: -38, y: -60.705, theta: 0 },
+  },
 ];

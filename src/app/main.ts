@@ -767,7 +767,7 @@ async function openSample(s: SampleMeta) {
   $<HTMLSelectElement>('auton-length').value = String(state.autonMs);
   const starts = (field().startPositions ?? []).filter((p) => p.layouts.includes(layoutId()));
   const start = starts.find((p) => p.id === s.start) ?? starts[0];
-  setStart(start ?? { x: 0, y: 0, theta: 0 });
+  setStart(s.startAt ?? start ?? { x: 0, y: 0, theta: 0 });
   await applyRobot();
   loadFiles(s.id, sampleProject(s.id));
   persistSettings();

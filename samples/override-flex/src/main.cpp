@@ -93,17 +93,19 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  // 1. Preload into R1 (-47.1, -23.5), approached on the diagonal, stopping 10.5" from
-  //    the Goal's center so the claw (10" ahead of the robot's center) is over it.
-  turnTo(45);
-  drive(8.6, 80);
+  // 1. Preload into R1 (-47.1, -23.5). First 2" out from the wall: turning in place right
+  //    against it would swing a corner into it. Then straight at R1 (40.8° from there),
+  //    stopping 10.5" from the Goal's center so the claw (10" ahead) is over it.
+  drive(2);
+  turnTo(40.8);
+  drive(7.27, 80);
   claw.move_absolute(0, 100);  // open: the Pin drops into the Goal
   pros::delay(300);
 
   // 2. Back off, then up the lane x = -57.5 to the Red 1 Toggle (left wall, y = 0).
-  drive(-4.5);
+  drive(-5.5);
   turnTo(0);
-  drive(28);
+  drive(29);
   turnTo(270);
   press();  // yellow -> blue
   press();  // blue -> red

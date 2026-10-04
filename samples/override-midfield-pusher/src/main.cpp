@@ -76,11 +76,12 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  // Along y = -37 (clear of Goal R1 above and the diagonal stack below), then
-  // diagonally into the Midfield, nose first: any part of the robot inside counts.
-  drive(26);
+  // Along y = -38 (between Goal R1 above and the diagonal stack below, which this 18"
+  // robot shoves aside), stopping short of Goal R2, then diagonally into the Midfield,
+  // nose first: any part of the robot inside counts.
+  drive(24);
   turnTo(45);
-  drive(28);
+  drive(32);
   printf("Parked at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

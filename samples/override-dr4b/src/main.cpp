@@ -70,6 +70,8 @@ void competition_initialize() {}
 
 void autonomous() {
   chassis.setPose(-60.7, -37, 90);  // Red 1 (south) start
+  // 2" out from the wall first: turning in place right against it would swing a corner into it
+  chassis.moveToPoint(-58.7, -37, 800);
 
   // 1. Preload into R1 (-47.1, -23.5): the straight line from the start is clear. Stop 11"
   //    from its center (not touching it) with the claw (10" ahead) over it.

@@ -125,7 +125,7 @@ export class OverrideGame implements GameOps {
       this.physics.setRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
       this.physics.step();
       this.syncFromPhysics();
-      this.world.pinnedObstacles = this.physics.pinnedObstacles();
+      this.world.pinnedObstacles = this.physics.pinnedObstacles(this.world.footprint());
       this.manipulators.step(this.clock);
       for (const id of this.opponentSide) {
         if (!this.physics.touchingRobot(id)) continue;

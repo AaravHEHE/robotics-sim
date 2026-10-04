@@ -76,7 +76,6 @@ constexpr double CLAW_BEHIND = 11;
 // back up the lane. (Turning in place sweeps the robot's corners 10.6" around its center:
 // it only turns where that circle is clear of Goal R1.)
 void fetchFromLoader(int pieces) {
-  goTo(LANE_X, -37.5);
   goTo(LANE_X, LOADER_Y);
   goTo(LOADER_X, LOADER_Y);
   chassis.turnToHeading(270, 500);  // square to the Loader
@@ -123,6 +122,7 @@ void autonomous() {
   printf("GPS start (%.1f, %.1f) facing %.0f\n", g.x / 0.0254, g.y / 0.0254, gps.get_heading() - 180);
 
   // 1. Preload + Cup combo onto R1, lift down (the Pin's bottom drops into the Goal)
+  goTo(LANE_X, -37.5);  // into the lane
   fetchFromLoader(1);
   placeOnR1();
 

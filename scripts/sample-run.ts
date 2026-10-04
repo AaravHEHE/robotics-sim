@@ -17,7 +17,7 @@ export async function runSample(meta: SampleMeta, wasm: WebAssembly.Module): Pro
   return runProgram(wasm, {
     profile,
     field,
-    start: sp ? { x: sp.x, y: sp.y, theta: sp.theta } : { x: 0, y: 0, theta: 0 },
+    start: meta.startAt ?? (sp ? { x: sp.x, y: sp.y, theta: sp.theta } : { x: 0, y: 0, theta: 0 }),
     autonMs: meta.autonMs ?? 15000,
   });
 }
