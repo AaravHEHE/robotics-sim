@@ -30,6 +30,20 @@ export interface ToggleState {
   touched: boolean;
 }
 
+/**
+ * A piece on its way somewhere, for the viewer to animate: it left `from` at t0 and gets
+ * where the state says it is at t1 (ms). Keyed by piece id (riding through an intake),
+ * `claw:<name>` (what a claw just picked up) or a floor stack / lying Pin id (falling).
+ */
+export interface Transit {
+  /** Field position it started from, and the height of its bottom (in). */
+  from: { x: number; y: number; z: number };
+  /** It started out lying, pointing this way (degrees): it is turned upright on the way. */
+  lying?: number;
+  t0: number;
+  t1: number;
+}
+
 export interface OverrideState {
   floor: FloorStack[];
   lying: LyingPin[];
@@ -44,6 +58,10 @@ export interface OverrideState {
   held: Record<string, Piece[]>;
   /** Claw name -> height of its grip point above the bottom of what it holds. */
   grip: Record<string, number>;
+  /** Pieces in motion (see Transit). */
+  transit: Record<string, Transit>;
+  /** Claw name -> its wrist has turned what it holds upside down. */
+  flipped: Record<string, boolean>;
 }
 
 let counter = 0;
@@ -67,6 +85,8 @@ export function initialState(field: FieldDef, layoutId: string): OverrideState {
     loaders: Object.fromEntries((field.loaders ?? []).map((l) => [l.id, [] as Piece[]])),
     held: {},
     grip: {},
+    transit: {},
+    flipped: {},
   };
   if (!layout) return state;
   for (const it of layout.items) {

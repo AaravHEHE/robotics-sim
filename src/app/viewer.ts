@@ -21,6 +21,8 @@ export interface FieldPose {
 }
 
 const DEG = Math.PI / 180;
+/** Gravity (in/s^2), for drawing falling pieces. */
+const GRAVITY_IN = 386;
 
 /**
  * Remove a group's children and free their GPU resources (geometries, materials,
@@ -510,11 +512,16 @@ export class FieldViewer {
         m.object.rotateX(-v * DEG);
       }
     });
-    this.manipVis?.update((m) => {
-      const k = 6 + (this.profile?.mechanisms.indexOf(m) ?? -1);
-      return k < 6 ? 0 : lerp(k);
-    });
+    // the game state first: what each mechanism holds, then where it is
     this.showGameAt(t);
+    this.manipVis?.update(
+      (m) => {
+        const k = 6 + (this.profile?.mechanisms.indexOf(m) ?? -1);
+        return k < 6 ? 0 : lerp(k);
+      },
+      t,
+      { x: lerp(1), y: lerp(2), theta: lerp(3) },
+    );
     const count = Math.max(2, i0 + 1);
     this.trail?.geometry.setDrawRange(0, count);
     this.frame = i0;
@@ -541,6 +548,13 @@ export class FieldViewer {
       }
       const node = this.pieceNodes.get(id);
       if (node) placeNode(node, tr[k + 1], tr[k + 2], tr[k + 3], this.lyingIds.has(id));
+    }
+    // dropped pieces fall from where they were let go
+    for (const [id, tr] of Object.entries(this.lastGameState?.transit ?? {})) {
+      const node = this.pieceNodes.get(id);
+      if (!node) continue;
+      const s = Math.max(0, (t - tr.t0) / 1000);
+      node.position.y = t < tr.t1 ? Math.max(0, tr.from.z - 0.5 * GRAVITY_IN * s * s) : 0;
     }
   }
 

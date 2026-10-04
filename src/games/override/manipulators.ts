@@ -12,7 +12,7 @@ import { box, octagon, satMtv } from '../../sim/world.ts';
 import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
 import type { World } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
-import type { FloorStack, LyingPin, OverrideState } from './state.ts';
+import type { FloorStack, LyingPin, OverrideState, Transit } from './state.ts';
 import type { ContactShape } from './toggle.ts';
 
 /** Horizontal tolerance for releasing onto a Goal or stack (in). */
@@ -42,6 +42,12 @@ const LOADER_REFILL_MS = 1000;
 /** After the bottom piece is pulled out, the next one falls into a Loader's opening (ms). */
 const LOADER_DROP_MS = 200;
 const DEFAULT_CAPACITY: Capacity = { pins: 1, cups: 1 };
+/** How long a claw takes to draw in what it closes on (ms; for the viewer). */
+const GRAB_MS = 180;
+/** Gravity (in/s^2): dropped pieces fall this fast. */
+const GRAVITY = 386;
+/** How long an intake takes to pull a piece in when it keeps it (no `into`) (ms). */
+const CAPTURE_MS = 250;
 
 /** What the manipulators need from the game. */
 export interface GameOps {
@@ -50,8 +56,9 @@ export interface GameOps {
   readonly mode: 'h2h' | 'skills';
   readonly alliance: Alliance;
   removeFloor(id: string): void;
-  addFloor(pieces: Piece[], x: number, y: number): void;
-  addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): void;
+  /** Add a standing stack / lying Pin to the floor; returns its id. */
+  addFloor(pieces: Piece[], x: number, y: number): string;
+  addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): string;
   /** A floor stack's pieces changed. */
   rebuildFloor(stack: FloorStack): void;
   /** Something changed structurally (record a snapshot). */
@@ -171,8 +178,6 @@ export class Manipulators {
   private readonly stagings: StagingSpec[];
   private readonly wrists: WristSpec[];
   private readonly tools: ToggleToolSpec[];
-  /** Piece id -> time it reaches its intake's destination. */
-  private readonly arrival = new Map<string, number>();
   private readonly lastIntake = new Map<string, number>();
   private nextRefill = 0;
   /** Current time (ms) and when each Loader's bottom piece is next within reach. */
@@ -320,7 +325,7 @@ export class Manipulators {
     const reach = c.spec.reach ?? 2;
     // a tilted claw can't close around a standing stack (only a lying Pin)
     const upright = this.tilt(c.spec) <= MAX_TILT;
-    type Cand = { d: number; take: () => void; pieces: Piece[] };
+    type Cand = { d: number; take: () => void; pieces: Piece[]; from?: Transit['from']; lying?: number };
     const cands: Cand[] = [];
     const ok = (pieces: Piece[]) => pieces.length > 0 && fits(c.spec.capacity, held, pieces);
 
@@ -328,7 +333,8 @@ export class Manipulators {
       const items = state.held[s.name];
       const d = dhypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
       if (d <= reach && Math.abs(e.robot.z - s.at.z) <= 1.5 && ok(items)) {
-        cands.push({ d, pieces: items, take: () => this.receive(c, state.held[s.name].splice(0), 0) });
+        const [sx, sy] = toField(this.world.pose, { x: s.at.x ?? 0, y: s.at.y });
+        cands.push({ d, pieces: items, from: { x: sx, y: sy, z: s.at.z }, take: () => this.receive(c, state.held[s.name].splice(0), 0) });
       }
     }
     if (e.z <= LOW_REACH) {
@@ -336,7 +342,7 @@ export class Manipulators {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
         const d = dhypot(e.x - mx, e.y - my);
-        if (items.length && this.loaderOpen(l.id) && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), take: () => this.receive(c, this.takeFromLoader(l.id), e.z) });
+        if (items.length && this.loaderOpen(l.id) && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), from: { x: mx, y: my, z: 0 }, take: () => this.receive(c, this.takeFromLoader(l.id), e.z) });
       }
       for (const l of state.lying) {
         const [a, b] = pinEnds(l);
@@ -344,7 +350,10 @@ export class Manipulators {
         // the point of the Pin nearest the grip point must be between the jaws
         const [cx, cy] = closestOnSegment([e.x, e.y], a, b);
         const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
-        if (d <= reach && this.between(e, cx, cy, reach) && ok([pin])) cands.push({ d, pieces: [pin], take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
+        if (d <= reach && this.between(e, cx, cy, reach) && ok([pin])) {
+          const lying = pin.colors[0] === l.colors[0] ? l.heading : l.heading + 180;
+          cands.push({ d, pieces: [pin], from: { x: l.x, y: l.y, z: 0 }, lying, take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
+        }
       }
     }
     for (const g of upright ? field.goals ?? [] : []) {
@@ -355,7 +364,7 @@ export class Manipulators {
       const slot = slotAt(pieces, g.height, true, e.z);
       if (slot && ok(pieces.slice(slot.index))) {
         // loose pieces nearby are taken first
-        cands.push({ d: d + reach, pieces: pieces.slice(slot.index), take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
+        cands.push({ d: d + reach, pieces: pieces.slice(slot.index), from: { x: g.x, y: g.y, z: slot.bottom }, take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
       }
     }
     for (const s of upright ? state.floor : []) {
@@ -363,12 +372,14 @@ export class Manipulators {
       if (d > reach || !this.between(e, s.x, s.y, reach)) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
       if (slot && ok(s.pieces.slice(slot.index))) {
-        cands.push({ d, pieces: s.pieces.slice(slot.index), take: () => this.takeFromFloor(s, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
+        cands.push({ d, pieces: s.pieces.slice(slot.index), from: { x: s.x, y: s.y, z: slot.bottom }, take: () => this.takeFromFloor(s, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
       }
     }
     if (!cands.length) return;
     cands.sort((a, b) => a.d - b.d);
-    cands[0].take();
+    const best = cands[0];
+    best.take();
+    if (best.from) this.setTransit(`claw:${c.spec.name}`, { from: best.from, lying: best.lying, t0: this.now, t1: this.now + GRAB_MS });
     this.checkPossession();
     this.ops.changed();
   }
@@ -416,7 +427,7 @@ export class Manipulators {
       this.ops.changed();
       return;
     }
-    this.dropAt(pieces, e.x, e.y);
+    this.dropAt(pieces, e.x, e.y, bottom);
     this.ops.changed();
   }
 
@@ -429,6 +440,7 @@ export class Manipulators {
     const flipped = w.adi ? v >= 0.5 : a > 90 + band && a < 270 - band;
     if (flipped === c.flipped) return;
     c.flipped = flipped;
+    this.ops.state.flipped[c.spec.name] = flipped;
     const held = this.ops.state.held[c.spec.name];
     if (!held.length) return;
     const height = layoutStack(held, 0, false).reduce((m, s) => Math.max(m, s.top), 0);
@@ -445,7 +457,7 @@ export class Manipulators {
     // deliver pieces that have travelled through
     const destSpec = spec.into ? (this.profile.mechanisms.find((m) => m.name === spec.into) as ClawSpec | StagingSpec) : null;
     if (spec.into && destSpec && mine.length && this.canReceive(destSpec)) {
-      const ready = mine.filter((p) => (this.arrival.get(p.id) ?? 0) <= t);
+      const ready = mine.filter((p) => (state.transit[p.id]?.t1 ?? 0) <= t);
       // pieces that came in together (a stack) move on together, keeping their order;
       // otherwise one at a time, as far as there is room
       const batches = fits(destSpec.capacity, state.held[spec.into], ready) ? [ready] : ready.map((p) => [p]);
@@ -456,7 +468,7 @@ export class Manipulators {
         if (claw && claw.spec.grip !== 'roller') claw.cradled = true;
         for (const p of batch) {
           mine.splice(mine.indexOf(p), 1);
-          this.arrival.delete(p.id);
+          delete state.transit[p.id];
         }
         state.held[spec.into] = merge(state.held[spec.into], batch);
         this.ops.changed();
@@ -470,16 +482,19 @@ export class Manipulators {
       // reversing spits out what is still in the intake
       const p = mine.pop();
       if (!p) return;
-      this.arrival.delete(p.id);
+      delete state.transit[p.id];
       const [x, y] = toField(this.world.pose, { x: spec.zone.x, y: spec.zone.y + spec.zone.length / 2 + 3 });
-      this.dropAt([p], x, y);
+      this.dropAt([p], x, y, 0.5);
       this.lastIntake.set(spec.name, t);
       this.ops.changed();
       return;
     }
-    const acquired = this.intakeOne(spec);
-    if (!acquired.length) return;
-    for (const p of acquired) this.arrival.set(p.id, t + (spec.transferMs ?? 300));
+    const got = this.intakeOne(spec);
+    if (!got) return;
+    const acquired = got.pieces;
+    // each piece rides through the intake from where it was: the viewer animates it
+    const t1 = t + (spec.into ? (spec.transferMs ?? 300) : CAPTURE_MS);
+    for (const p of acquired) this.setTransit(p.id, { from: got.from, lying: got.lying, t0: t, t1 });
     state.held[spec.name] = merge(state.held[spec.name], acquired);
     this.lastIntake.set(spec.name, t);
     this.checkPossession();
@@ -506,7 +521,7 @@ export class Manipulators {
     return Math.abs(lx - z.x) <= z.width / 2 + margin && Math.abs(ly - z.y) <= z.length / 2 + margin;
   }
 
-  private intakeOne(spec: IntakeSpec): Piece[] {
+  private intakeOne(spec: IntakeSpec): { pieces: Piece[]; from: Transit['from']; lying?: number } | null {
     const { state, field } = this.ops;
     const acc = { pins: true, cups: true, lying: true, ...spec.accepts };
     const mine = state.held[spec.name];
@@ -514,13 +529,13 @@ export class Manipulators {
     for (const l of field.loaders ?? []) {
       const items = state.loaders[l.id];
       const [mx, my] = loaderMouth(field, l);
-      if (items.length && this.loaderOpen(l.id) && this.inZone(spec, mx, my, 0.5) && accepted(items.slice(0, 1))) return this.takeFromLoader(l.id);
+      if (items.length && this.loaderOpen(l.id) && this.inZone(spec, mx, my, 0.5) && accepted(items.slice(0, 1))) return { pieces: this.takeFromLoader(l.id), from: { x: mx, y: my, z: 0 } };
     }
     for (const s of state.floor) {
       if (!this.inZone(spec, s.x, s.y, stackRadius(s.pieces)) || !accepted(s.pieces)) continue;
       this.ops.removeFloor(s.id);
       state.floor.splice(state.floor.indexOf(s), 1);
-      return s.pieces;
+      return { pieces: s.pieces, from: { x: s.x, y: s.y, z: 0 } };
     }
     if (acc.lying && acc.pins) {
       for (const l of state.lying) {
@@ -528,11 +543,14 @@ export class Manipulators {
         const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
         if (!accepted([pin])) continue;
         let got: Piece[] = [];
+        const from = { x: l.x, y: l.y, z: 0 };
+        // it ends up standing with the end nearer the robot down: point the lying axis that way
+        const lying = pin.colors[0] === l.colors[0] ? l.heading : l.heading + 180;
         this.takeLying(l, (p) => (got = [p]));
-        return got;
+        return { pieces: got, from, lying };
       }
     }
-    return [];
+    return null;
   }
 
   // ---------------- taking and dropping ----------------
@@ -581,8 +599,11 @@ export class Manipulators {
     into(state.goals[g.id].splice(index));
   }
 
-  /** Drop pieces to the floor at (x, y): a lone Pin falls over; anything else stands. */
-  private dropAt(pieces: Piece[], x: number, y: number): void {
+  /**
+   * Drop pieces to the floor at (x, y), let go with their bottom `z` inches up: a lone Pin
+   * falls over; anything else stands.
+   */
+  private dropAt(pieces: Piece[], x: number, y: number, z = 0): void {
     const half = this.ops.field.perimeter.inside / 2 - CUP.rimDiameter / 2 - 0.1;
     let px = Math.max(-half, Math.min(half, x));
     let py = Math.max(-half, Math.min(half, y));
@@ -622,12 +643,20 @@ export class Manipulators {
     }
     px = Math.max(-half, Math.min(half, px));
     py = Math.max(-half, Math.min(half, py));
-    if (lone && pieces[0].kind === 'pin') {
-      // the bottom half lands behind, the top half ahead (robot heading)
-      this.ops.addLying(pieces[0].colors, px, py, heading);
-      return;
-    }
-    this.ops.addFloor(pieces, px, py);
+    const id =
+      lone && pieces[0].kind === 'pin'
+        ? // the bottom half lands behind, the top half ahead (robot heading)
+          this.ops.addLying(pieces[0].colors, px, py, heading)
+        : this.ops.addFloor(pieces, px, py);
+    if (z > 0.25) this.setTransit(id, { from: { x: px, y: py, z }, t0: this.now, t1: this.now + 1000 * Math.sqrt((2 * z) / GRAVITY) });
+  }
+
+  /** Record a piece in motion for the viewer, forgetting ones that arrived a while ago. */
+  private setTransit(key: string, tr: Transit): void {
+    const { transit, held } = this.ops.state;
+    const riding = new Set(this.intakes.flatMap((i) => held[i.name].map((p) => p.id)));
+    for (const [k, v] of Object.entries(transit)) if (v.t1 < this.now - 1000 && !riding.has(k)) delete transit[k];
+    transit[key] = tr;
   }
 
   // ---------------- rules and loaders ----------------

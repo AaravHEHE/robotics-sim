@@ -149,16 +149,18 @@ export class OverrideGame implements GameOps {
     this.opponentSide.delete(id);
   }
 
-  addFloor(pieces: Piece[], x: number, y: number): void {
+  addFloor(pieces: Piece[], x: number, y: number): string {
     const s: FloorStack = { id: `d${++this.dropCount}`, x, y, pieces };
     this.state.floor.push(s);
     this.physics.addStack(s, false);
+    return s.id;
   }
 
-  addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): void {
+  addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): string {
     const l = { id: `d${++this.dropCount}`, x, y, heading, colors };
     this.state.lying.push(l);
     this.physics.addLying(l, false);
+    return l.id;
   }
 
   rebuildFloor(stack: FloorStack): void {
