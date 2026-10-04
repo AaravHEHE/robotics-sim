@@ -12,7 +12,8 @@ import { box, octagon, satMtv } from '../../sim/world.ts';
 import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
 import type { World } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
-import type { FloorStack, LyingPin, OverrideState, Transit } from './state.ts';
+import { initialState, type FloorStack, type LyingPin, type OverrideState, type Transit } from './state.ts';
+import { sideOf } from './rules.ts';
 import type { ContactShape } from './toggle.ts';
 
 /** Horizontal tolerance for releasing onto a Goal or stack (in). */
@@ -129,6 +130,37 @@ export function gripOn(piece: Piece, along: number): number {
   return Math.max(GRIP_MARGIN, Math.min(h - GRIP_MARGIN, along));
 }
 
+/**
+ * The Preload a robot starts holding, and in which mechanism ('no-holder' when the layout
+ * has a Preload but no mechanism of the robot takes it).
+ */
+export function preloadFor(field: FieldDef, mode: 'h2h' | 'skills', alliance: Alliance, profile: RobotProfile): { holder: string; pin: Piece } | 'no-holder' | null {
+  const piece = field.layouts?.[mode]?.preload?.[alliance];
+  if (!piece || piece.kind !== 'pin') return null;
+  const holder = profile.mechanisms.find((m): m is ClawSpec | IntakeSpec | StagingSpec => 'preload' in m && !!m.preload);
+  if (!holder) return 'no-holder';
+  const color = piece.colors.find((c) => c !== 'yellow') ?? 'yellow';
+  const order: PreloadOrientation = holder.preload!;
+  const colors: [PinColor, PinColor] = order === 'alliance-down' ? [color as PinColor, 'yellow'] : ['yellow', color as PinColor];
+  return { holder: holder.name, pin: { kind: 'pin', id: 'preload', colors } };
+}
+
+/**
+ * The field as a run starts: the layout's pieces, and the Preload in the robot (for showing
+ * the field before and between runs, exactly as the simulator will begin).
+ */
+export function startingState(field: FieldDef, layout: 'h2h' | 'skills', profile: RobotProfile, start: { x: number; y: number }): OverrideState {
+  const state = initialState(field, layout);
+  const alliance: Alliance = layout === 'skills' || sideOf([start.x, start.y]) !== 'blue' ? 'red' : 'blue';
+  const p = preloadFor(field, layout, alliance, profile);
+  if (p && p !== 'no-holder') {
+    state.held[p.holder] = [p.pin];
+    const claw = profile.mechanisms.find((m): m is ClawSpec => m.kind === 'claw' && m.name === p.holder);
+    if (claw) state.grip[claw.name] = gripOn(p.pin, clawEffector(profile, claw, () => 0).z);
+  }
+  return state;
+}
+
 /** Footprint radius of a standing stack: its widest piece (Cup rim or Pin collar). */
 function stackRadius(pieces: Piece[]): number {
   return Math.max(...pieces.map((p) => (p.kind === 'cup' ? CUP.rimDiameter : PIN.collarDiameter) / 2));
@@ -228,17 +260,9 @@ export class Manipulators {
   }
 
   private loadPreload(): void {
-    const holder = this.profile.mechanisms.find((m): m is ClawSpec | IntakeSpec | StagingSpec => 'preload' in m && !!m.preload);
-    const piece = this.ops.field.layouts?.[this.ops.mode === 'skills' ? 'skills' : 'h2h']?.preload?.[this.ops.alliance];
-    if (!piece || piece.kind !== 'pin') return;
-    if (!holder) {
-      this.ops.note('No mechanism holds the Preload (set "preload" on a claw, intake or staging area), so it is not on the field.');
-      return;
-    }
-    const alliance = piece.colors.find((c) => c !== 'yellow') ?? 'yellow';
-    const order: PreloadOrientation = holder.preload!;
-    const colors: [PinColor, PinColor] = order === 'alliance-down' ? [alliance as PinColor, 'yellow'] : ['yellow', alliance as PinColor];
-    this.ops.state.held[holder.name] = [{ kind: 'pin', id: 'preload', colors }];
+    const p = preloadFor(this.ops.field, this.ops.mode, this.ops.alliance, this.profile);
+    if (p === 'no-holder') this.ops.note('No mechanism holds the Preload (set "preload" on a claw, intake or staging area), so it is not on the field.');
+    else if (p) this.ops.state.held[p.holder] = [p.pin];
   }
 
   // ---------------- per-step ----------------

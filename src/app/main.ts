@@ -4,7 +4,7 @@
 import type { BuildResult } from '../compiler/build.ts';
 import type { Diagnostic } from '../compiler/diagnostics.ts';
 import type { CompilerRequest, CompilerResponse } from '../compiler/worker.ts';
-import { initialState } from '../games/override/state.ts';
+import { startingState } from '../games/override/manipulators.ts';
 import type { FieldDef } from '../sim/field.ts';
 import { maxSpeed, validateProfile, type RobotProfile } from '../sim/profile.ts';
 import { simulatedEnvNames } from '../sim/pros-api.ts';
@@ -149,13 +149,56 @@ async function applyRobot() {
   else viewer.showTime(state.t);
 }
 
+// The code follows the robot: each preset has its own auton (and mechanism test), written
+// for its ports. Picking a robot opens its auton unless you have your own code open.
 $<HTMLSelectElement>('robot-select').onchange = async (e) => {
   state.robotId = (e.target as HTMLSelectElement).value;
   settingsChanged();
   clearRecording();
   await applyRobot();
   persistSettings();
+  const { auton } = samplesFor(state.robotId);
+  if (!auton) return;
+  if (codeIsUnchangedSample()) {
+    await openSample(auton);
+    setStatus(`Opened “${auton.name}”, the auton written for this robot. Press Run.`, 'ok');
+  } else if (confirm(`Open the auton written for “${robot().name}”?\n\nYour current code was written for its own robot's ports; on this robot its motors and pistons may do nothing. OK replaces it (use Export first to keep a copy). Cancel keeps your code.`)) {
+    await openSample(auton);
+    setStatus(`Opened “${auton.name}”. Press Run.`, 'ok');
+  } else {
+    setStatus(`Kept your code. Check that its ports match “${robot().name}” (Edit shows them).`);
+  }
 };
+
+/** The auton and the mechanism test written for a robot preset. */
+function samplesFor(robotId: string): { auton?: SampleMeta; test?: SampleMeta } {
+  return {
+    auton: SAMPLES.find((x) => x.robot === robotId && x.kind !== 'test'),
+    test: SAMPLES.find((x) => x.robot === robotId && x.kind === 'test'),
+  };
+}
+
+/** Is the editor showing a shipped sample, unchanged? (Then it is safe to replace.) */
+function codeIsUnchangedSample(): boolean {
+  if (!SAMPLES.some((x) => x.id === state.projectName)) return false;
+  const now = editor.files();
+  const orig = editableFiles(sampleProject(state.projectName));
+  const keys = Object.keys(orig);
+  return keys.length === Object.keys(now).length && keys.every((k) => now[k] === orig[k]);
+}
+
+async function openRobotSample(kind: 'auton' | 'test') {
+  const s = samplesFor(state.robotId)[kind];
+  if (!s) {
+    setStatus(`“${robot().name}” has no ${kind === 'auton' ? 'auton' : 'mechanism test'} sample.`);
+    return;
+  }
+  if (!codeIsUnchangedSample() && !confirm(`Open “${s.name}”? It replaces the code in the editor (use Export first to keep a copy).`)) return;
+  await openSample(s);
+  setStatus(`Opened “${s.name}”. Press Run.`, 'ok');
+}
+$('btn-robot-auton').onclick = () => void openRobotSample('auton');
+$('btn-robot-test').onclick = () => void openRobotSample('test');
 
 // ---------------- start pose ----------------
 
@@ -165,7 +208,7 @@ function readStart() {
   const half = field().perimeter.inside / 2 - 6;
   state.start = { x: Math.max(-half, Math.min(half, x)), y: Math.max(-half, Math.min(half, y)), theta: t };
   settingsChanged();
-  viewer.showPose(state.start);
+  clearRecording();
   persistSettings();
 }
 spInputs.forEach((i) => i.addEventListener('change', readStart));
@@ -190,7 +233,7 @@ function setStart(p: { x: number; y: number; theta: number }) {
   state.start = { x: p.x, y: p.y, theta: p.theta };
   [p.x, p.y, p.theta].forEach((v, i) => (spInputs[i].value = String(v)));
   settingsChanged();
-  viewer.showPose(state.start);
+  clearRecording();
   persistSettings();
 }
 
@@ -200,10 +243,16 @@ function applyField() {
   settingsChanged();
   viewer.setField(f);
   clearRecording();
-  viewer.setGameState(f.game?.id === 'override' ? initialState(f, layoutId()) : null);
-  renderScore(null, 0);
-  $('start-pose').classList.remove('hidden');
   renderPresets();
+}
+
+/**
+ * Show the field exactly as a run will start: every piece in its starting place, the
+ * Preload in the robot and the robot at its start.
+ */
+function showStart() {
+  const f = field();
+  viewer.setGameState(f.game?.id === 'override' ? startingState(f, layoutId(), robot(), state.start) : null);
   viewer.showPose(state.start);
 }
 
@@ -254,6 +303,14 @@ function clearRecording() {
   state.setup = null;
   viewer.setRecording(null);
   renderScore(null, 0);
+  // the field goes back to how a run starts (not where the last run left everything)
+  showStart();
+  // and the last run's notes, console and brain screen go with it
+  $('panel-events').innerHTML = '<p class="empty">Press Run to see notes about the run.</p>';
+  $('badge-events').textContent = '';
+  $('panel-console').replaceChildren();
+  delete $('panel-console').dataset.rows;
+  $('lcd').textContent = '';
   $('start-pose').classList.remove('hidden');
 }
 
@@ -392,7 +449,7 @@ async function run() {
   const setup: RunSetup = { robot: robot(), field: field(), start: { ...state.start }, autonMs: state.autonMs, place: state.place };
   const stale = () => seq !== state.runSeq;
   state.running = true;
-  setPlaying(false);
+  clearRecording(); // the field resets: the new run starts from the starting layout
   $<HTMLButtonElement>('btn-run').disabled = true;
   setStatus('Compiling…');
   const t0 = performance.now();
@@ -414,6 +471,14 @@ async function run() {
     const warnings = rec.events.filter((e) => e.level !== 'info').length;
     if (rec.error) {
       setStatus(rec.error, 'err');
+      showTab('events');
+    } else if (portProblems(rec).length) {
+      // the code was written for another robot: say so where it can't be missed
+      const ports = portProblems(rec);
+      setStatus(
+        `This code doesn't match “${setup.robot.name}”: it uses ${ports.length === 1 ? 'port' : 'ports'} ${ports.join(', ')}, which this robot doesn't have (or has something else on). Those motors and sensors do nothing. Open this robot's auton with the Auton button, or Edit the robot.`,
+        'err',
+      );
       showTab('events');
     } else {
       const ran = rec.autonStart !== null ? (rec.stop - rec.autonStart) / 1000 : 0;
@@ -437,6 +502,16 @@ async function run() {
   }
 }
 $('btn-run').onclick = run;
+
+/** Ports the code used that the robot profile doesn't have (or has a different device on). */
+function portProblems(rec: Recording): string[] {
+  const ports = new Set<string>();
+  for (const e of rec.events) {
+    const m = e.message.match(/^Code (?:uses (?:a \w+ on )?port|writes ADI port) (\w+), (?:but the robot profile has|which is not a valid)/);
+    if (m) ports.add(m[1]);
+  }
+  return [...ports];
+}
 editor.onRunShortcut = run;
 
 // ---------------- results panels ----------------
@@ -690,18 +765,23 @@ function persistProject() {
   void saveProject({ name: state.projectName, files: editor.files(), binary, robotId: state.robotId });
 }
 
-function loadFiles(name: string, files: Record<string, string>, binary: Record<string, Uint8Array> = {}) {
-  // Text files from static/ are assets too (LemLib paths)
-  state.binary = { ...binary };
+/** The files of a project the editor shows (library headers are provided by the simulator). */
+function editableFiles(files: Record<string, string>): Record<string, string> {
   const editable: Record<string, string> = {};
   for (const [p, t] of Object.entries(files)) {
     if (/^(src|include)\//.test(p) || p.startsWith('static/') || p === 'project.pros') {
-      if (/^include\/(api\.h|pros\/|lemlib\/|fmt\/|EZ-Template\/|okapi\/|liblvgl\/)/.test(p)) continue; // provided by the simulator
+      if (/^include\/(api\.h|pros\/|lemlib\/|fmt\/|EZ-Template\/|okapi\/|liblvgl\/)/.test(p)) continue;
       editable[p] = t;
     }
   }
+  return editable;
+}
+
+function loadFiles(name: string, files: Record<string, string>, binary: Record<string, Uint8Array> = {}) {
+  // Text files from static/ are assets too (LemLib paths)
+  state.binary = { ...binary };
   state.projectName = name;
-  editor.load(editable);
+  editor.load(editableFiles(files));
   applyField();
   persistProject();
 }

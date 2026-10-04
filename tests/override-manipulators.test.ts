@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
-import { loaderMouth } from '../src/games/override/manipulators.ts';
+import { loaderMouth, startingState } from '../src/games/override/manipulators.ts';
 import type { FieldDef } from '../src/sim/field.ts';
 import { clawEffector, liftEffector, toRobot } from '../src/sim/lift.ts';
 import { validateProfile, type ClawSpec, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
@@ -447,6 +447,23 @@ describe('each robot type works like its real counterpart', () => {
     world.adiOut.set('B', false);
     run(250);
     expect(game.state.goals.R1).toEqual([]);
+  });
+});
+
+describe('the field shown before a run', () => {
+  it('is the starting layout with the Preload in the robot, in the starting alliance color', async () => {
+    const f = await field();
+    const r = await robot('override-dr4b-roller');
+    const red = startingState(f, 'h2h', r, { x: -60.705, y: -37 });
+    expect(red.held['Roller claw']).toEqual([{ kind: 'pin', id: 'preload', colors: ['red', 'yellow'] }]);
+    expect(Object.values(red.goals).every((g) => g.length <= 1)).toBe(true); // nothing scored yet
+    const blue = startingState(f, 'h2h', r, { x: 60.705, y: 37 });
+    expect(blue.held['Roller claw'][0]).toMatchObject({ colors: ['blue', 'yellow'] });
+    // and it is exactly what the simulator starts from
+    const world = new World(r, f, { x: -60.705, y: -37, theta: 90 });
+    const game = await OverrideGame.create(f, 'h2h', world);
+    expect(game.state.held).toEqual(red.held);
+    expect(game.state.floor.map((x) => x.id)).toEqual(red.floor.map((x) => x.id));
   });
 });
 

@@ -20,7 +20,7 @@ export interface SampleMeta {
 /** A mechanism test for an Override robot preset: runs from Red 2 (west), head-to-head (15 s). */
 const test = (id: string, robot: string, name: string, what: string): SampleMeta => ({
   id,
-  name: `Test: ${name}`,
+  name: `Mechanism test: ${name}`,
   description: `Plain PROS mechanism test (prints PASS / FAIL for each check): drives a lane and turns a full circle, then ${what}.`,
   robot,
   field: 'override',
