@@ -432,7 +432,7 @@ describe('each robot type works like its real counterpart', () => {
 });
 
 describe('Override manipulators from compiled code', () => {
-  it('a PROS program drives to its Goal and drops the Preload in: +5 for red', async () => {
+  it('a PROS program backs its rear claw up to its Goal and drops the Preload in: +5 for red', async () => {
     const rec = await simulate(
       prosProject(`#include "main.h"
 pros::MotorGroup left({-1, -2, -3}, pros::MotorGears::blue);
@@ -440,15 +440,15 @@ pros::MotorGroup right({4, 5, 6}, pros::MotorGears::blue);
 pros::adi::Pneumatics claw('A', true); // closed on the Preload
 void initialize() {}
 void autonomous() {
-  left.move(50); right.move(50); pros::delay(1000); // into Goal R1
+  left.move(-50); right.move(-50); pros::delay(1000); // back into Goal R1 (the claw is at the rear)
   left.brake(); right.brake(); pros::delay(200);
   claw.retract(); pros::delay(200);                 // let go
-  left.move(-50); right.move(-50); pros::delay(400);
+  left.move(50); right.move(50); pros::delay(400);
   left.brake(); right.brake();
 }
 `),
       'override-fourbar-claw',
-      { field: await field(), start: { x: -62.5, y: R1.y, theta: 90 } },
+      { field: await field(), start: { x: -62.5, y: R1.y, theta: 270 } }, // facing the wall
     );
     expect(rec.error).toBeNull();
     const g = rec.game!;

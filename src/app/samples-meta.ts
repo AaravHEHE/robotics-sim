@@ -94,7 +94,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-workhorse-toggle',
     name: 'Override: 4-bar workhorse (EZ-Template)',
-    description: 'EZ-Template odometry. Drops the Preload into Goal R1, stacks a Cup + yellow Pin on it, then presses the Red 1 Toggle twice to red.',
+    description: 'EZ-Template odometry. Backs up to Goal R1 and drops the Preload in with the rear claw, backs onto a Cup + yellow Pin and stacks it on the Preload, then presses the Red 1 Toggle twice to red with the front bumper.',
     robot: 'override-fourbar-claw',
     field: 'override',
     start: 'red1_s',
@@ -123,7 +123,7 @@ export const SAMPLES: SampleMeta[] = [
   test('test-cascade', 'override-cascade', 'cascade + claw + intake', 'moves the cascade to three heights, drops and re-grabs the Preload and spins the intake both ways'),
   test('test-intake-staging', 'override-intake-staging', 'intake -> rear staging -> rear DR4B', 'reads the GPS and tray sensor, takes the Preload from the tray with the rear claw, lifts it to three heights and spins the intake'),
   test('test-sixbar-wrist', 'override-sixbar-wrist', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),
-  test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the 4-bar to three heights and drops and re-grabs the Preload'),
+  test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the rear 4-bar to three heights and drops and re-grabs the Preload behind the robot'),
   test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and reads the optical sensor'),
   test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),
 ];

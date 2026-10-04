@@ -209,7 +209,7 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
 | `override-cascade` | Cascade + intake | LemLib | 15 s | Same, with the intake feeding the stack into the claw | 45 |
 | `override-sixbar-wrist` | 6-bar + wrist | EZ-Template | 15 s | Wrist turns the Preload red end down; Toggle to red | 35 |
 | `override-toggle-bot` | Toggle bot | PROS | 15 s | Rolls both red-side Toggles red, so the yellow Pins on N_R1 and N_R2 score | 40 |
-| `override-workhorse-toggle` | 4-bar + bumper | EZ-Template | 15 s | Preload; Cup + yellow Pin stacked on it; bumper presses the Toggle to red | 45 |
+| `override-workhorse-toggle` | 4-bar (rear claw) + front bumper | EZ-Template | 15 s | Backs the Preload into R1; backs onto a Cup + yellow Pin and stacks it on the Preload; bumper presses the Toggle to red | 45 |
 | `override-midfield-pusher` | Midfield pusher | PROS | 60 s Skills | Parks in the Midfield | 8 |
 | `override-skills` | Intake → rear staging → rear DR4B | LemLib | 60 s Skills | A 3-combo tower on R1 from Match Loads, stacked out of the back of the robot, then parks in the Midfield | 23 |
 
@@ -222,7 +222,7 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
 | Cascade | `lift: cascade` + `claw` (piston) [+ `intake` front-only] |
 | Intake→staging | front `intake` (pass-through over the deck) + rear `staging` + rear `lift: dr4b` + `claw`: scores out of the back |
 | 6-bar wrist | `lift: sixbar` + motor `wrist` + `claw`; places only with the wrist upright (0° or 180°) |
-| Workhorse | `lift: fourbar` + `claw` (piston) + `toggleBumper` |
+| Workhorse | rear `lift: fourbar` (`facing: rear`) + rear `claw` (piston) + front Toggle `bumper`: scores reversing, presses Toggles driving forward |
 | Toggle bot | `toggleRoller` / `togglePlate` |
 | Midfield pusher | none: a full-size 18″ × 18″, heavy traction drive that bulldozes stacks |
 

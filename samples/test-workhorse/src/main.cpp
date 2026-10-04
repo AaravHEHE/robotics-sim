@@ -1,17 +1,17 @@
 #include "main.h"
 
-// Mechanism test for the "Override: 4-bar + piston claw + Toggle bumper" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: 4-bar + rear piston claw + front Toggle bumper" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the 4-bar to three heights, and the claw drops and re-grabs the Preload. Each check prints PASS or FAIL with what it measured
+// its range: the rear 4-bar to three heights, and the rear claw drops and re-grabs the Preload behind the robot. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
-pros::Motor lift(7, pros::MotorGears::green, pros::MotorUnits::degrees);  // 4-bar, 1:5
-pros::adi::Pneumatics claw('A', true);  // extended = closed (on the Preload)
+pros::Motor lift(7, pros::MotorGears::green, pros::MotorUnits::degrees);  // 4-bar, 1:5, reaching out the back
+pros::adi::Pneumatics claw('A', true);  // rear claw: extended = closed (on the Preload)
 
 // ---------------- checks ----------------
 int passed = 0, failed = 0;
@@ -128,7 +128,7 @@ void initialize() {
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: 4-bar + piston claw + Toggle bumper\n");
+  printf("Mechanism test: Override: 4-bar + rear piston claw + front Toggle bumper\n");
   driveTest();
   mechanismTest();
   driveBack();
