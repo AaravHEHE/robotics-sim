@@ -42,7 +42,23 @@ export function liftOffset(spec: LiftSpec, out: number): { dy: number; dz: numbe
 
 export function liftEffector(spec: LiftSpec, out: number): Point3 {
   const { dy, dz } = liftOffset(spec, out);
-  return { x: spec.home.x ?? 0, y: spec.home.y + dy, z: spec.home.z + dz };
+  const reach = spec.facing === 'rear' ? -dy : dy; // a rear lift's bars swing out behind
+  return { x: spec.home.x ?? 0, y: spec.home.y + reach, z: spec.home.z + dz };
+}
+
+/**
+ * How far a claw is tilted from upright (degrees, 0..90). A claw on a single-pivot arm
+ * turns with the arm (fourbars, sixbars, DR4Bs and cascades keep it level); a motor wrist
+ * turns it too (0° and 180° are both upright: the stack is just upside down).
+ */
+export function clawTilt(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number): number {
+  let tilt = 0;
+  const lift = claw.lift ? profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === claw.lift) : undefined;
+  if (lift?.lift === 'arm') tilt += valueOf(lift);
+  const wrist = profile.mechanisms.find((m) => m.kind === 'wrist' && m.claw === claw.name);
+  if (wrist && !wrist.adi) tilt += valueOf(wrist);
+  const a = ((tilt % 180) + 180) % 180;
+  return Math.min(a, 180 - a);
 }
 
 const pt = (p: RobotPoint): Point3 => ({ x: p.x ?? 0, y: p.y, z: p.z });

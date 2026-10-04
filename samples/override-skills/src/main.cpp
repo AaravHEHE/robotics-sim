@@ -2,17 +2,18 @@
 #include "lemlib/api.hpp" // IWYU pragma: keep
 
 // V5RC Override: Autonomous Coding Skills, 60 s (LemLib).
-// Robot: "Override: intake -> staging -> claw". Start: Red 1 (left wall, south).
+// Robot: "Override: intake -> rear staging -> rear DR4B". Start: Red 1 (left wall, south).
 //
 // In Skills the drive team keeps both red Loaders stocked with Match Loads (Pins and Cups
 // alternate in each chute), and the GPS code strip is up: the robot starts from a GPS
-// reading. It builds a tower on Goal R1 out of Pin + Cup combos:
-//  1. Takes a Cup from the south red Loader. The intake drops it into the staging tray,
-//     where it sits over the Preload Pin: a combo. The claw picks the combo up and sets it
-//     on Goal R1 (the Pin nests in the Goal, the Cup over the Pin).
-//  2. Twice: takes a Pin and a Cup, which the tray assembles into a combo, and stacks it on
-//     the tower (each Pin nests in the Cup below it). Red Pin halves score in red
-//     Quadrants; the Cups' gray lower halves hide the yellow halves.
+// reading. The front intake carries pieces over the robot into a tray at the back, which
+// assembles a Pin + Cup combo; the rear DR4B claw picks the combo up and stacks it out of
+// the back of the robot. It builds a tower on Goal R1:
+//  1. Takes a Cup from the south red Loader; in the tray it lands over the Preload Pin.
+//     The combo goes on Goal R1 (the Pin nests in the Goal, the Cup over the Pin).
+//  2. Twice: takes a Pin and a Cup and stacks the combo on the tower (each Pin nests in
+//     the Cup below it). Red Pin halves score in red Quadrants; the Cups' gray lower halves
+//     hide the yellow halves.
 //  3. Parks partly in the Midfield (+8).
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
@@ -21,9 +22,10 @@
 pros::MotorGroup leftMotors({-1, -2, -3}, pros::MotorGearset::blue);
 pros::MotorGroup rightMotors({4, 5, 6}, pros::MotorGearset::blue);
 pros::Imu imu(11);
-pros::Motor lift(7, pros::MotorGearset::green, pros::MotorUnits::degrees);  // 4-bar, 1:5
+pros::Motor lift(7, pros::MotorGearset::green, pros::MotorUnits::degrees);  // DR4B, 1:5
 pros::Motor intake(10, pros::MotorGearset::blue);
 pros::adi::Pneumatics claw('A', false);  // extended = closed
+pros::Optical trayEye(9);                // looks down into the tray from above
 // GPS 6" behind the turning center, facing backward: tell it the offset (meters)
 pros::Gps gps(12, 0, -6 * 0.0254);
 
@@ -33,18 +35,19 @@ lemlib::ControllerSettings angularController(2, 0, 10, 3, 1, 100, 3, 500, 0);
 lemlib::OdomSensors sensors(nullptr, nullptr, nullptr, nullptr, &imu);
 lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors);
 
-// The 4-bar is geared 1:5: the bar turns a fifth of the motor.
+// The DR4B is geared 1:5: its bars turn a fifth of the motor.
 void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 5, 200); }
 
-// Face (x, y), drive straight at it and stop `standoff` inches short, still facing it:
-// a claw `standoff` inches ahead of the robot's center then sits right over the target.
-void approach(double x, double y, double standoff, float maxSpeed = 100) {
-  chassis.turnToPoint(x, y, 700);
+// Back up to (x, y): turn the back of the robot toward it, then reverse until the robot's
+// center is `standoff` inches from it. The rear claw (11" behind the center) is then right
+// over it, at any lift height (a DR4B keeps the same reach).
+void backInto(double x, double y, double standoff, float maxSpeed = 100) {
+  chassis.turnToPoint(x, y, 700, {.forwards = false});
   chassis.waitUntilDone();
   const lemlib::Pose p = chassis.getPose();
   const double dx = x - p.x, dy = y - p.y, d = std::hypot(dx, dy);
-  chassis.moveToPoint(x - dx / d * standoff, y - dy / d * standoff, 1500, {.maxSpeed = maxSpeed});
-  chassis.turnToPoint(x, y, 500);
+  chassis.moveToPoint(x - dx / d * standoff, y - dy / d * standoff, 1500, {.forwards = false, .maxSpeed = maxSpeed});
+  chassis.turnToPoint(x, y, 500, {.forwards = false});
   chassis.waitUntilDone();
 }
 
@@ -55,37 +58,58 @@ void goTo(double x, double y, bool forwards = true) {
   chassis.moveToPoint(x, y, 1500, {.forwards = forwards});
 }
 
+// Is there a Cup in the tray? The sensor looks down at the top of what's there: a Pin
+// shows its colored top half, a Cup is gray or clear (hardly any color saturation).
+bool cupInTray() { return trayEye.get_proximity() > 50 && trayEye.get_saturation() < 0.3; }
+
 // Goal R1 and the spot in front of the south red Loader where the intake reaches its
 // bottom opening.
 constexpr double R1_X = -47.09, R1_Y = -23.55;
-constexpr double LOADER_X = -52.47, LOADER_Y = -58.76;
+constexpr double LOADER_X = -55.5, LOADER_Y = -58.76;  // front bumper ~2" from the Loader
 // The lane between Goal R1 / the diagonal stack (west) and Goal R2 (east)
-constexpr double LANE_X = -37;
+constexpr double LANE_X = -36;
+// The rear claw's distance behind the robot's center
+constexpr double CLAW_BEHIND = 11;
 
 // From the lane east of R1 down to the Loader (around the diagonal stack at (-47, -47)),
-// take one piece, and come back up the lane. The staging tray assembles the combo.
+// take `pieces` pieces, wait until the tray has assembled the combo, grab it, and come
+// back up the lane. (Turning in place sweeps the robot's corners 10.6" around its center:
+// it only turns where that circle is clear of Goal R1.)
 void fetchFromLoader(int pieces) {
   goTo(LANE_X, -37.5);
   goTo(LANE_X, LOADER_Y);
   goTo(LOADER_X, LOADER_Y);
   chassis.turnToHeading(270, 500);  // square to the Loader
   chassis.waitUntilDone();
-  // The intake pulls in the Loader's bottom piece at once; the next one takes ~200 ms to drop
-  // into the opening. Stop (brake mode: at once) before one piece too many comes in (SG6).
+  // The intake pulls in the Loader's bottom piece at once; the next one takes ~200 ms to
+  // drop into the opening. Stop (brake mode: at once) before one piece too many (SG6).
   intake.move(127);
   pros::delay(pieces == 1 ? 100 : 300);
   intake.brake();
-  pros::delay(350);  // through the intake into the staging tray
-  claw.extend();     // the claw sits at the tray: grab what's there
-  pros::delay(150);
+  // the pieces ride over the robot into the tray; the Cup lands last, over the Pin
+  const std::uint32_t giveUp = pros::millis() + 1500;
+  while (!cupInTray() && pros::millis() < giveUp) pros::delay(10);
+  claw.extend();  // the claw sits at the tray: grab the combo
+  pros::delay(200);
   goTo(LANE_X, LOADER_Y, false);
   goTo(LANE_X, -35);
+}
+
+// Back into R1 from the lane, put the combo down, and drive straight back out.
+void placeOnR1() {
+  backInto(R1_X, R1_Y, CLAW_BEHIND, 70);
+  pros::delay(300);  // let the lift reach its height
+  claw.retract();
+  pros::delay(250);
+  chassis.moveToPoint(LANE_X, -35, 1000);  // facing away from R1: straight out, no turn
+  chassis.waitUntilDone();
 }
 
 void initialize() {
   pros::lcd::initialize();
   chassis.calibrate();
   intake.set_brake_mode(pros::MotorBrake::brake);
+  lift.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void disabled() {}
@@ -98,27 +122,20 @@ void autonomous() {
   chassis.setPose(g.x / 0.0254, g.y / 0.0254, gps.get_heading() - 180);  // the GPS faces backward
   printf("GPS start (%.1f, %.1f) facing %.0f\n", g.x / 0.0254, g.y / 0.0254, gps.get_heading() - 180);
 
-  // 1. Preload + Cup combo onto R1 (claw low: the Pin's bottom drops into the Goal)
+  // 1. Preload + Cup combo onto R1, lift down (the Pin's bottom drops into the Goal)
   fetchFromLoader(1);
-  approach(R1_X, R1_Y, 10.6, 70);
-  claw.retract();
-  pros::delay(200);
+  placeOnR1();
 
-  // 2. Two Pin + Cup combos on top; each sits higher, so the 4-bar rises further
-  const double barAngle[] = {32, 58};
-  const double standoff[] = {11.3, 10.4};
+  // 2. Two Pin + Cup combos on top; each sits 7.1" higher, so the DR4B rises further
+  const double barAngle[] = {20, 39};
   for (int i = 0; i < 2; i++) {
-    goTo(LANE_X, -35, false);
     fetchFromLoader(2);
     liftTo(barAngle[i]);
-    approach(R1_X, R1_Y, standoff[i], 70);
-    claw.retract();
-    pros::delay(250);
+    placeOnR1();
     liftTo(0);
   }
 
   // 3. Park with the front of the robot inside the Midfield.
-  goTo(LANE_X, -35, false);
   goTo(LANE_X, -10);
   goTo(-26, -10);
   chassis.waitUntilDone();

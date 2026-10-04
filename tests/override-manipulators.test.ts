@@ -361,6 +361,60 @@ describe('manipulators behave like the real mechanisms', () => {
   });
 });
 
+describe('each robot type works like its real counterpart', () => {
+  it('a rear-facing bar lift swings its claw out behind the robot as it rises', () => {
+    const rear: LiftSpec = { ...LIFT, facing: 'rear', home: { y: -10, z: 3 } };
+    const up = liftEffector(rear, 30); // -30° -> 0°: the bar is horizontal, at full reach
+    expect(up.y).toBeLessThan(-10);
+    expect(up.y).toBeCloseTo(-10 - 12 * (1 - Math.cos(Math.PI / 6)), 6);
+    expect(liftEffector(LIFT, 30).y).toBeCloseTo(10 + 12 * (1 - Math.cos(Math.PI / 6)), 6);
+  });
+
+  it('an arm claw tilts with the arm: raised, it can neither grab a standing stack nor set one down', async () => {
+    const ARM: LiftSpec = { kind: 'lift', name: 'Lift', lift: 'arm', motors: [7], ratio: 0.2, range: [0, 95], home: { y: 10, z: 3 }, length: 9, startAngle: -15 };
+    const r = await testRobot([ARM, claw]);
+    // held Preload over R1 with the arm raised 40°: the Pin hangs at an angle and won't go on
+    const a = await setup(r, { x: R1.x - 10 - 9 * (Math.cos((25 * Math.PI) / 180) - Math.cos((15 * Math.PI) / 180)), y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    a.lift(40);
+    a.run(250);
+    a.world.adiOut.set('B', false);
+    a.run(250);
+    expect(a.game.state.goals.R1).toEqual([]);
+    // level (arm down) it places
+    const b = await setup(r, { x: R1.x - 10, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    b.run(250);
+    b.world.adiOut.set('B', false);
+    b.run(250);
+    expect(b.game.state.goals.R1.map((p) => p.id)).toEqual(['preload']);
+  });
+
+  it('a roller claw spits pieces out one at a time, bottom first', async () => {
+    const rollerClaw: MechanismSpec = { kind: 'claw', name: 'Claw', lift: 'Lift', grip: 'roller', motors: [8], ratio: 1 };
+    const r = await testRobot([LIFT, rollerClaw]);
+    const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 });
+    game.state.held.Claw = [{ kind: 'pin', id: 'p', colors: ['red', 'yellow'] }, { kind: 'cup', id: 'c', up: 'clear' }];
+    world.motor(8).cmd = -127; // spin out
+    const placed: number[] = [];
+    run(1000, (t) => {
+      if (game.state.goals.R1.length > placed.length) placed.push(t);
+    });
+    expect(game.state.goals.R1.map((p) => p.id)).toEqual(['p', 'c']); // the Pin into the Goal, then the Cup over it
+    expect(placed[1] - placed[0]).toBeGreaterThan(30);
+  });
+
+  it('a wrist halfway through its turn cannot set the stack down: it falls', async () => {
+    const wrist: MechanismSpec = { kind: 'wrist', name: 'Wrist', claw: 'Claw', motors: [8], ratio: 1 };
+    const r = await testRobot([LIFT, claw, wrist]);
+    const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    world.motor(8).angle = 60;
+    world.motor(8).brakeMode = 2;
+    run(250);
+    world.adiOut.set('B', false);
+    run(250);
+    expect(game.state.goals.R1).toEqual([]);
+  });
+});
+
 describe('Override manipulators from compiled code', () => {
   it('a PROS program drives to its Goal and drops the Preload in: +5 for red', async () => {
     const rec = await simulate(

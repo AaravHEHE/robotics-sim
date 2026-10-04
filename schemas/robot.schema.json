@@ -97,6 +97,7 @@
           "into": { "type": "string", "description": "intake: claw or staging that receives its pieces" },
           "accepts": { "type": "object", "properties": { "pins": { "type": "boolean" }, "cups": { "type": "boolean" }, "lying": { "type": "boolean" } } },
           "transferMs": { "type": "number", "minimum": 0 },
+          "facing": { "enum": ["front", "rear"], "description": "lift: which way a bar lift reaches (default front)" },
           "rollerDiameter": { "type": "number", "exclusiveMinimum": 0, "description": "intake: roller diameter (in), default 2.75" },
           "claw": { "type": "string", "description": "wrist: the claw it flips" },
           "tool": { "enum": ["bumper", "plate", "roller"], "description": "toggleTool: kind" },

@@ -99,6 +99,12 @@ export interface LiftSpec extends MechanismDrive {
   stages?: number;
   /** Rise when extended (piston), inches. */
   travel?: number;
+  /**
+   * Which way a bar lift (arm, fourbar, sixbar) reaches as it rises: 'front' (default) or
+   * 'rear' for a lift that scores out of the back of the robot (its home y is then behind
+   * the turning center).
+   */
+  facing?: 'front' | 'rear';
 }
 
 /** What a claw / intake / staging area can hold at once. */
@@ -346,6 +352,7 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         if (['arm', 'fourbar', 'sixbar', 'dr4b'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
         if (m.lift === 'cascade' && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
         if (m.lift === 'piston' && !isNum(m.travel, 0.1, 60)) e.push(`Lift ${m.name}: travel is required.`);
+        if (m.facing !== undefined && m.facing !== 'front' && m.facing !== 'rear') e.push(`Lift ${m.name}: facing must be front or rear.`);
         break;
       case 'claw':
         if (!['piston', 'motor', 'roller'].includes(m.grip)) e.push(`Claw ${m.name}: grip must be piston, motor or roller.`);

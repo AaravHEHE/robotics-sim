@@ -7,7 +7,7 @@
 
 import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
-import { clawEffector, toField, toRobot, type Point3 } from '../../sim/lift.ts';
+import { clawEffector, clawTilt, toField, toRobot, type Point3 } from '../../sim/lift.ts';
 import { box, octagon, satMtv } from '../../sim/world.ts';
 import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
 import type { World } from '../../sim/world.ts';
@@ -32,6 +32,8 @@ const ROLLER_DIAMETER = 2.75;
 const JAW_HALF_WIDTH = 1.25;
 /** A Placed piece is only taken off a Goal when centered in the jaws (in). */
 const GOAL_GRAB_RADIUS = 1.5;
+/** Most a claw may be tilted from upright and still close around or set down a standing stack (degrees). */
+export const MAX_TILT = 20;
 /** A motor wrist flips past 90° ± this (degrees), so it doesn't chatter around 90°. */
 const WRIST_HYSTERESIS = 5;
 /** Pieces a Loader chute holds, and how often the drive team adds one (Skills). */
@@ -265,12 +267,24 @@ export class Manipulators {
     return { x, y, z: p.z, robot: p };
   }
 
+  /** How far a claw is tilted from upright (degrees). */
+  tilt(spec: ClawSpec): number {
+    return clawTilt(this.profile, spec, (m) => this.world.mechanismState(m));
+  }
+
   private stepClaw(c: ClawRuntime): void {
     const held = this.ops.state.held[c.spec.name];
     if (c.spec.grip === 'roller') {
       const spin = this.world.mechanismRpm(c.spec) * (c.spec.inward ?? 1);
       if (spin > SPIN_RPM) this.grab(c);
-      else if (spin < -SPIN_RPM && held.length) this.release(c);
+      else if (spin < -SPIN_RPM && held.length) {
+        // rollers push pieces out of the mouth one at a time, bottom first, at roller speed
+        const surface = (-spin / 60) * Math.PI * ROLLER_DIAMETER;
+        if (this.now - (this.lastIntake.get(c.spec.name) ?? -1e9) >= (1000 * INTAKE_SPACING) / surface) {
+          this.lastIntake.set(c.spec.name, this.now);
+          this.release(c, 1);
+        }
+      }
       return;
     }
     const closed = this.isClosed(c);
@@ -304,11 +318,13 @@ export class Manipulators {
     if (held.length && c.spec.grip !== 'roller') return;
     const e = this.effector(c.spec);
     const reach = c.spec.reach ?? 2;
+    // a tilted claw can't close around a standing stack (only a lying Pin)
+    const upright = this.tilt(c.spec) <= MAX_TILT;
     type Cand = { d: number; take: () => void; pieces: Piece[] };
     const cands: Cand[] = [];
     const ok = (pieces: Piece[]) => pieces.length > 0 && fits(c.spec.capacity, held, pieces);
 
-    for (const s of this.stagings) {
+    for (const s of upright ? this.stagings : []) {
       const items = state.held[s.name];
       const d = dhypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
       if (d <= reach && Math.abs(e.robot.z - s.at.z) <= 1.5 && ok(items)) {
@@ -316,7 +332,7 @@ export class Manipulators {
       }
     }
     if (e.z <= LOW_REACH) {
-      for (const l of field.loaders ?? []) {
+      for (const l of upright ? field.loaders ?? [] : []) {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
         const d = dhypot(e.x - mx, e.y - my);
@@ -331,7 +347,7 @@ export class Manipulators {
         if (d <= reach && this.between(e, cx, cy, reach) && ok([pin])) cands.push({ d, pieces: [pin], take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
       }
     }
-    for (const g of field.goals ?? []) {
+    for (const g of upright ? field.goals ?? [] : []) {
       const pieces = state.goals[g.id];
       const d = dhypot(e.x - g.x, e.y - g.y);
       // Placed pieces come off a Goal only when the claw is centered on them (deliberately)
@@ -342,7 +358,7 @@ export class Manipulators {
         cands.push({ d: d + reach, pieces: pieces.slice(slot.index), take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
       }
     }
-    for (const s of state.floor) {
+    for (const s of upright ? state.floor : []) {
       const d = dhypot(e.x - s.x, e.y - s.y);
       if (d > reach || !this.between(e, s.x, s.y, reach)) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
@@ -364,20 +380,25 @@ export class Manipulators {
     this.ops.state.held[c.spec.name] = merge(held, pieces);
   }
 
-  private release(c: ClawRuntime): void {
+  /** Let go of the held stack, or only its bottom `count` pieces (a roller claw spitting out). */
+  private release(c: ClawRuntime, count = Infinity): void {
     const { state, field } = this.ops;
     const held = state.held[c.spec.name];
     const e = this.effector(c.spec);
     const bottom = e.z - c.grip;
     const first = held[0];
+    const slots = layoutStack(held, 0, false);
+    const upright = this.tilt(c.spec) <= MAX_TILT;
     const nests = (existing: Piece[], base: number, onGoal: boolean) => {
-      // a stack alternates Pin, Cup, Pin...: a Pin can't stand on a Pin, nor a Cup on a Cup
+      // a tilted stack doesn't go on; a stack alternates Pin, Cup, Pin...: a Pin can't stand on a Pin, nor a Cup on a Cup
+      if (!upright) return false;
       if (existing.length && existing[existing.length - 1].kind === first.kind) return false;
       const rest = restingBottom(existing, base, onGoal, first);
       return bottom >= rest - PLACE_BELOW && bottom <= rest + PLACE_ABOVE;
     };
-    const pieces = held.splice(0);
-    c.grip = 0;
+    const pieces = held.splice(0, count);
+    // what stays in the claw is held by its new bottom piece
+    c.grip = held.length ? c.grip - (slots[pieces.length].bottom - slots[0].bottom) : 0;
     for (const g of field.goals ?? []) {
       if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE) continue;
       if (!nests(state.goals[g.id], g.height, true)) break; // over a Goal but it won't sit: falls off

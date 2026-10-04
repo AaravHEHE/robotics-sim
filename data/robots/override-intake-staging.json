@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "id": "override-intake-staging",
-  "name": "Override: intake -> staging -> claw",
-  "description": "A front roller intake (port 10) feeds a staging tray that assembles a Pin + Cup combo; a 4-bar (port 7, 1:5) with a pneumatic claw (ADI A) picks the combo up and stacks it. The Preload starts in the staging tray. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor watching the tray (port 9). Good for Skills Match Loads.",
+  "name": "Override: intake -> rear staging -> rear DR4B",
+  "description": "A front roller intake (port 10) carries pieces over the deck into a staging tray at the back, which assembles a Pin + Cup combo. A rear DR4B (port 7, 1:5) with a pneumatic claw (ADI A) hanging 3.5\" past the rear bumper takes the combo from the tray and stacks it out of the back of the robot, with the same reach at every height. The Preload starts in the tray. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking at the tray from above (port 9). Good for Skills Match Loads.",
   "size": {
     "width": 15,
     "length": 15,
@@ -11,8 +11,16 @@
   "mass": 16,
   "drivetrain": {
     "type": "tank",
-    "left": [-1, -2, -3],
-    "right": [4, 5, 6],
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
     "cartridge": "blue",
     "wheelDiameter": 3.25,
     "wheelRpm": 450,
@@ -56,50 +64,65 @@
       "type": "optical",
       "port": 9,
       "name": "Tray eye",
-      "watches": "Stage"
+      "watches": "Stage",
+      "mount": {
+        "x": 0,
+        "y": -11,
+        "z": 9,
+        "heading": 180
+      }
     }
   ],
   "mechanisms": [
     {
       "kind": "intake",
       "name": "Intake",
-      "motors": [10],
+      "motors": [
+        10
+      ],
       "ratio": 1,
       "zone": {
         "x": 0,
-        "y": 12.5,
+        "y": 8.25,
         "width": 8,
-        "length": 3
+        "length": 1.5
       },
-      "into": "Stage"
+      "into": "Stage",
+      "transferMs": 500,
+      "rollerDiameter": 2.75
     },
     {
       "kind": "staging",
       "name": "Stage",
       "at": {
-        "y": 10,
+        "y": -11,
         "z": 2
       },
       "preload": "alliance-down"
     },
     {
       "kind": "lift",
-      "name": "Lift",
-      "lift": "fourbar",
-      "motors": [7],
+      "name": "DR4B",
+      "lift": "dr4b",
+      "motors": [
+        7
+      ],
       "ratio": 0.2,
-      "range": [0, 110],
+      "range": [
+        0,
+        100
+      ],
       "home": {
-        "y": 10,
+        "y": -11,
         "z": 2
       },
-      "length": 11,
-      "startAngle": -25
+      "length": 10,
+      "startAngle": -40
     },
     {
       "kind": "claw",
       "name": "Claw",
-      "lift": "Lift",
+      "lift": "DR4B",
       "grip": "piston",
       "adi": "A"
     }
