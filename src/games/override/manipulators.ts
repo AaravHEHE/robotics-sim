@@ -8,6 +8,7 @@
 import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
 import { clawEffector, toField, toRobot, type Point3 } from '../../sim/lift.ts';
+import { box, octagon, satMtv } from '../../sim/world.ts';
 import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
 import type { World } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
@@ -23,11 +24,21 @@ export const PLACE_ABOVE = 4;
 const LOW_REACH = PIN.collarDiameter + 1.5;
 /** Output speed (rpm) above which rollers and intakes count as spinning. */
 const SPIN_RPM = 10;
-/** Minimum time between two intake pickups or ejections (ms). */
-const INTAKE_COOLDOWN = 350;
+/** Spacing between pieces travelling through an intake (in): one piece's length. */
+const INTAKE_SPACING = PIN.length;
+/** Intake roller diameter when the profile doesn't give one (in): a 2.75" flex wheel. */
+const ROLLER_DIAMETER = 2.75;
+/** Half the width between a claw's jaws (in): what is further to the side isn't gripped. */
+const JAW_HALF_WIDTH = 1.25;
+/** A Placed piece is only taken off a Goal when centered in the jaws (in). */
+const GOAL_GRAB_RADIUS = 1.5;
+/** A motor wrist flips past 90° ± this (degrees), so it doesn't chatter around 90°. */
+const WRIST_HYSTERESIS = 5;
 /** Pieces a Loader chute holds, and how often the drive team adds one (Skills). */
 const LOADER_CAPACITY = 2;
 const LOADER_REFILL_MS = 1000;
+/** After the bottom piece is pulled out, the next one falls into a Loader's opening (ms). */
+const LOADER_DROP_MS = 200;
 const DEFAULT_CAPACITY: Capacity = { pins: 1, cups: 1 };
 
 /** What the manipulators need from the game. */
@@ -98,6 +109,18 @@ function slotAt(pieces: Piece[], base: number, onGoal: boolean, z: number): { in
   return null;
 }
 
+/** Footprint radius of a standing stack: its widest piece (Cup rim or Pin collar). */
+function stackRadius(pieces: Piece[]): number {
+  return Math.max(...pieces.map((p) => (p.kind === 'cup' ? CUP.rimDiameter : PIN.collarDiameter) / 2));
+}
+
+function closestOnSegment(p: Vec2, a: Vec2, b: Vec2): Vec2 {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const k = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+  return [a[0] + k * dx, a[1] + k * dy];
+}
+
 function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
@@ -130,6 +153,11 @@ interface ClawRuntime {
   /** Height of the held stack's bottom below the grip point. */
   grip: number;
   flipped: boolean;
+  /**
+   * The held pieces were fed in by an intake while the claw was open: they rest in the
+   * open claw (it hasn't closed on them yet) and fall out if it is raised before closing.
+   */
+  cradled: boolean;
 }
 
 export class Manipulators {
@@ -145,6 +173,9 @@ export class Manipulators {
   private readonly arrival = new Map<string, number>();
   private readonly lastIntake = new Map<string, number>();
   private nextRefill = 0;
+  /** Current time (ms) and when each Loader's bottom piece is next within reach. */
+  private now = 0;
+  private readonly loaderReady = new Map<string, number>();
   /** Kind of the piece last put in each Loader. */
   private readonly lastLoaded = new Map<string, Piece['kind']>();
 
@@ -153,7 +184,7 @@ export class Manipulators {
     this.world = world;
     this.profile = world.profile;
     const of = <K extends MechanismSpec['kind']>(k: K) => this.profile.mechanisms.filter((m): m is Extract<MechanismSpec, { kind: K }> => m.kind === k);
-    this.claws = of('claw').map((spec) => ({ spec, closed: false, grip: 0, flipped: false }));
+    this.claws = of('claw').map((spec) => ({ spec, closed: false, grip: 0, flipped: false, cradled: false }));
     this.intakes = of('intake');
     this.stagings = of('staging');
     this.wrists = of('wrist');
@@ -166,8 +197,13 @@ export class Manipulators {
       if (c.spec.grip === 'piston' && c.spec.adi && ops.state.held[c.spec.name]?.length) {
         world.pistons.set(c.spec.adi.toUpperCase(), (c.spec.closedWhen ?? 'extended') === 'extended' ? 1 : 0);
       }
+      // likewise a motor claw starts physically closed on it (its encoder still reads from there)
+      if (c.spec.grip === 'motor' && c.spec.motors?.length && ops.state.held[c.spec.name]?.length) {
+        for (const port of c.spec.motors) world.motor(Math.abs(port)).angle = (c.spec.closedAt ?? 0) / (c.spec.ratio ?? 1);
+      }
       c.closed = this.isClosed(c) || (c.spec.grip === 'motor' && ops.state.held[c.spec.name]?.length > 0);
     }
+    this.checkPossession();
   }
 
   private loadPreload(): void {
@@ -187,6 +223,7 @@ export class Manipulators {
   // ---------------- per-step ----------------
 
   step(t: number): void {
+    this.now = t;
     this.refillLoaders(t);
     for (const c of this.claws) this.stepClaw(c);
     for (const w of this.wrists) this.stepWrist(w);
@@ -238,8 +275,26 @@ export class Manipulators {
     }
     const closed = this.isClosed(c);
     if (closed && !c.closed) this.grab(c);
-    if (!closed && c.closed && held.length) this.release(c);
+    if (closed) c.cradled = false; // now gripped
+    // an open claw doesn't hold anything: what it gripped falls (or is Placed) as soon as it
+    // opens, and what an intake fed into it stays only while the claw is down to receive it
+    if (!closed && held.length && (!c.cradled || !this.lowered(c.spec))) {
+      c.cradled = false;
+      this.release(c);
+    }
     c.closed = closed;
+  }
+
+  /** A piece's position relative to a claw's grip point: [sideways, along the jaws] (in). */
+  private jawOffset(e: { robot: Point3 }, fx: number, fy: number): [number, number] {
+    const [lx, ly] = toRobot(this.world.pose, fx, fy);
+    return [Math.abs(lx - e.robot.x), Math.abs(ly - e.robot.y)];
+  }
+
+  /** Is a point between the claw's jaws: within `reach` along them, and not off to the side? */
+  private between(e: { robot: Point3 }, fx: number, fy: number, reach: number): boolean {
+    const [side, along] = this.jawOffset(e, fx, fy);
+    return side <= Math.min(JAW_HALF_WIDTH, reach) && along <= reach;
   }
 
   private grab(c: ClawRuntime): void {
@@ -265,27 +320,31 @@ export class Manipulators {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
         const d = dhypot(e.x - mx, e.y - my);
-        if (items.length && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), take: () => this.receive(c, items.splice(0, 1), e.z) });
+        if (items.length && this.loaderOpen(l.id) && d <= reach + 1 && ok(items.slice(0, 1))) cands.push({ d, pieces: items.slice(0, 1), take: () => this.receive(c, this.takeFromLoader(l.id), e.z) });
       }
       for (const l of state.lying) {
         const [a, b] = pinEnds(l);
         const d = distToSegment([e.x, e.y], a, b);
+        // the point of the Pin nearest the grip point must be between the jaws
+        const [cx, cy] = closestOnSegment([e.x, e.y], a, b);
         const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
-        if (d <= reach && ok([pin])) cands.push({ d, pieces: [pin], take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
+        if (d <= reach && this.between(e, cx, cy, reach) && ok([pin])) cands.push({ d, pieces: [pin], take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
       }
     }
     for (const g of field.goals ?? []) {
       const pieces = state.goals[g.id];
       const d = dhypot(e.x - g.x, e.y - g.y);
-      if (!pieces.length || d > reach) continue;
+      // Placed pieces come off a Goal only when the claw is centered on them (deliberately)
+      if (!pieces.length || d > Math.min(reach, GOAL_GRAB_RADIUS) || !this.between(e, g.x, g.y, reach)) continue;
       const slot = slotAt(pieces, g.height, true, e.z);
       if (slot && ok(pieces.slice(slot.index))) {
-        cands.push({ d, pieces: pieces.slice(slot.index), take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
+        // loose pieces nearby are taken first
+        cands.push({ d: d + reach, pieces: pieces.slice(slot.index), take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
       }
     }
     for (const s of state.floor) {
       const d = dhypot(e.x - s.x, e.y - s.y);
-      if (d > reach) continue;
+      if (d > reach || !this.between(e, s.x, s.y, reach)) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
       if (slot && ok(s.pieces.slice(slot.index))) {
         cands.push({ d, pieces: s.pieces.slice(slot.index), take: () => this.takeFromFloor(s, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
@@ -312,13 +371,16 @@ export class Manipulators {
     const bottom = e.z - c.grip;
     const first = held[0];
     const nests = (existing: Piece[], base: number, onGoal: boolean) => {
+      // a stack alternates Pin, Cup, Pin...: a Pin can't stand on a Pin, nor a Cup on a Cup
+      if (existing.length && existing[existing.length - 1].kind === first.kind) return false;
       const rest = restingBottom(existing, base, onGoal, first);
       return bottom >= rest - PLACE_BELOW && bottom <= rest + PLACE_ABOVE;
     };
     const pieces = held.splice(0);
     c.grip = 0;
     for (const g of field.goals ?? []) {
-      if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE || !nests(state.goals[g.id], g.height, true)) continue;
+      if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE) continue;
+      if (!nests(state.goals[g.id], g.height, true)) break; // over a Goal but it won't sit: falls off
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
         this.ops.violation('SG9', `The robot added Scoring Objects to opponent Goal ${g.id}.`);
       }
@@ -342,7 +404,8 @@ export class Manipulators {
     if (!c) return;
     const v = this.world.mechanismState(w);
     const a = ((v % 360) + 360) % 360;
-    const flipped = w.adi ? v >= 0.5 : a > 90 && a < 270;
+    const band = c.flipped ? -WRIST_HYSTERESIS : WRIST_HYSTERESIS;
+    const flipped = w.adi ? v >= 0.5 : a > 90 + band && a < 270 - band;
     if (flipped === c.flipped) return;
     c.flipped = flipped;
     const held = this.ops.state.held[c.spec.name];
@@ -369,6 +432,7 @@ export class Manipulators {
         if (!batch.length || !fits(destSpec.capacity, state.held[spec.into], batch)) continue;
         const claw = this.claws.find((c) => c.spec.name === spec.into);
         if (claw && !state.held[spec.into].length) claw.grip = 0;
+        if (claw && claw.spec.grip !== 'roller') claw.cradled = true;
         for (const p of batch) {
           mine.splice(mine.indexOf(p), 1);
           this.arrival.delete(p.id);
@@ -378,7 +442,9 @@ export class Manipulators {
       }
     }
     const spin = this.world.mechanismRpm(spec) * (spec.inward ?? 1);
-    if (Math.abs(spin) <= SPIN_RPM || t - (this.lastIntake.get(spec.name) ?? -1e9) < INTAKE_COOLDOWN) return;
+    // pieces follow each other through the rollers one piece-length apart, at roller speed
+    const surface = (Math.abs(spin) / 60) * Math.PI * (spec.rollerDiameter ?? ROLLER_DIAMETER); // in/s
+    if (Math.abs(spin) <= SPIN_RPM || t - (this.lastIntake.get(spec.name) ?? -1e9) < (1000 * INTAKE_SPACING) / surface) return;
     if (spin < 0) {
       // reversing spits out what is still in the intake
       const p = mine.pop();
@@ -399,11 +465,18 @@ export class Manipulators {
     this.ops.changed();
   }
 
-  /** A claw fed by an intake takes pieces only while lowered; staging always can. */
+  /** A claw fed by an intake takes pieces only while lowered and open; staging always can. */
   private canReceive(dest: ClawSpec | StagingSpec): boolean {
-    if (dest.kind !== 'claw' || !dest.lift) return true;
+    if (dest.kind !== 'claw') return true;
+    if (dest.grip !== 'roller' && clawClosed(dest, this.world.mechanismState(dest))) return false;
+    return this.lowered(dest);
+  }
+
+  /** Is a claw down where its intake hands pieces over (its lift near home)? */
+  private lowered(dest: ClawSpec): boolean {
+    if (!dest.lift) return true;
     const lift = this.profile.mechanisms.find((m) => m.name === dest.lift);
-    return !lift || clawEffector(this.profile, dest, (m) => this.world.mechanismState(m)).z <= ((lift as { home: Point3 }).home.z + 2);
+    return !lift || clawEffector(this.profile, dest, (m) => this.world.mechanismState(m)).z <= (lift as { home: Point3 }).home.z + 2;
   }
 
   private inZone(spec: IntakeSpec, fx: number, fy: number, margin: number): boolean {
@@ -420,17 +493,17 @@ export class Manipulators {
     for (const l of field.loaders ?? []) {
       const items = state.loaders[l.id];
       const [mx, my] = loaderMouth(field, l);
-      if (items.length && this.inZone(spec, mx, my, 0.5) && accepted(items.slice(0, 1))) return items.splice(0, 1);
+      if (items.length && this.loaderOpen(l.id) && this.inZone(spec, mx, my, 0.5) && accepted(items.slice(0, 1))) return this.takeFromLoader(l.id);
     }
     for (const s of state.floor) {
-      if (!this.inZone(spec, s.x, s.y, 0.5) || !accepted(s.pieces)) continue;
+      if (!this.inZone(spec, s.x, s.y, stackRadius(s.pieces)) || !accepted(s.pieces)) continue;
       this.ops.removeFloor(s.id);
       state.floor.splice(state.floor.indexOf(s), 1);
       return s.pieces;
     }
     if (acc.lying && acc.pins) {
       for (const l of state.lying) {
-        if (!this.inZone(spec, l.x, l.y, 0.5)) continue;
+        if (!this.inZone(spec, l.x, l.y, PIN.coneDiameter / 2)) continue;
         const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
         if (!accepted([pin])) continue;
         let got: Piece[] = [];
@@ -442,6 +515,16 @@ export class Manipulators {
   }
 
   // ---------------- taking and dropping ----------------
+
+  private loaderOpen(id: string): boolean {
+    return this.now >= (this.loaderReady.get(id) ?? 0);
+  }
+
+  /** The bottom piece of a Loader; the one above it then drops into the opening. */
+  private takeFromLoader(id: string): Piece[] {
+    this.loaderReady.set(id, this.now + LOADER_DROP_MS);
+    return this.ops.state.loaders[id].splice(0, 1);
+  }
 
   /** A lying pin picked up stands with the end nearer the robot at the bottom. */
   private uprightColors(l: LyingPin): [PinColor, PinColor] {
@@ -491,9 +574,36 @@ export class Manipulators {
       px = g.x + (d > 1e-6 ? (px - g.x) * k : clear);
       py = g.y + (d > 1e-6 ? (py - g.y) * k : 0);
     }
-    if (pieces.length === 1 && pieces[0].kind === 'pin') {
+    const lone = pieces.length === 1 && pieces[0].kind === 'pin';
+    const heading = this.world.pose.theta;
+    // it lands beside the robot (or a Loader, or another stack), never inside it
+    const outline = (x: number, y: number) => (lone ? box(x, y, PIN.coneDiameter, PIN.length, heading) : octagon(x, y, stackRadius(pieces) * 2));
+    const solids = [this.world.footprint(), ...this.world.obstacles.filter((o) => o.id.startsWith('loader ')).map((o) => o.poly)];
+    for (let iter = 0; iter < 4; iter++) {
+      let moved = false;
+      for (const solid of solids) {
+        const mtv = satMtv(outline(px, py), solid);
+        if (!mtv) continue;
+        px += mtv[0] * 1.02;
+        py += mtv[1] * 1.02;
+        moved = true;
+      }
+      for (const st of this.ops.state.floor) {
+        const gap = stackRadius(st.pieces) + (lone ? PIN.coneDiameter / 2 : stackRadius(pieces));
+        const d = dhypot(px - st.x, py - st.y);
+        if (d >= gap) continue;
+        const k = d > 1e-6 ? gap / d : 1;
+        px = st.x + (d > 1e-6 ? (px - st.x) * k : gap);
+        py = st.y + (d > 1e-6 ? (py - st.y) * k : 0);
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    px = Math.max(-half, Math.min(half, px));
+    py = Math.max(-half, Math.min(half, py));
+    if (lone && pieces[0].kind === 'pin') {
       // the bottom half lands behind, the top half ahead (robot heading)
-      this.ops.addLying(pieces[0].colors, px, py, this.world.pose.theta);
+      this.ops.addLying(pieces[0].colors, px, py, heading);
       return;
     }
     this.ops.addFloor(pieces, px, py);

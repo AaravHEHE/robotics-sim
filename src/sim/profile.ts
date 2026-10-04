@@ -142,6 +142,8 @@ export interface IntakeSpec extends MechanismDrive {
   inward?: 1 | -1;
   /** Time from pickup to arrival at `into` (default 300 ms). */
   transferMs?: number;
+  /** Diameter of the rollers that pull pieces in (default 2.75 in): sets how fast pieces pass. */
+  rollerDiameter?: number;
   capacity?: Capacity;
   preload?: PreloadOrientation;
 }
@@ -357,6 +359,7 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         drive(m, 'motors');
         if (!isRect(m.zone)) e.push(`Intake ${m.name}: zone {x, y, width, length} is required.`);
         ref(m, m.into, ['claw', 'staging'], 'into');
+        if (m.rollerDiameter !== undefined && !(m.rollerDiameter > 0)) e.push(`Intake ${m.name}: rollerDiameter must be a positive number of inches.`);
         cap(m);
         break;
       case 'staging':

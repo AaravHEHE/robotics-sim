@@ -70,8 +70,10 @@ void fetchFromLoader(int pieces) {
   goTo(LOADER_X, LOADER_Y);
   chassis.turnToHeading(270, 500);  // square to the Loader
   chassis.waitUntilDone();
-  intake.move(127);  // the intake swallows one piece about every 350 ms
-  pros::delay(pieces == 1 ? 150 : 500);
+  // The intake pulls in the Loader's bottom piece at once; the next one takes ~200 ms to drop
+  // into the opening. Stop (brake mode: at once) before one piece too many comes in (SG6).
+  intake.move(127);
+  pros::delay(pieces == 1 ? 100 : 300);
   intake.brake();
   pros::delay(350);  // through the intake into the staging tray
   claw.extend();     // the claw sits at the tray: grab what's there
@@ -83,6 +85,7 @@ void fetchFromLoader(int pieces) {
 void initialize() {
   pros::lcd::initialize();
   chassis.calibrate();
+  intake.set_brake_mode(pros::MotorBrake::brake);
 }
 
 void disabled() {}

@@ -5,7 +5,7 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
 import { loaderMouth } from '../src/games/override/manipulators.ts';
 import type { FieldDef } from '../src/sim/field.ts';
-import { liftEffector } from '../src/sim/lift.ts';
+import { liftEffector, toRobot } from '../src/sim/lift.ts';
 import { validateProfile, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
 import { World } from '../src/sim/world.ts';
 import { prosProject, robot, simulate } from './helpers.ts';
@@ -240,6 +240,124 @@ describe('Override Toggle tools', () => {
     world.adiOut.set('C', true);
     run(500);
     expect(game.state.toggles.find((x) => x.id === 'T_red1')!.angle).toBe(120);
+  });
+});
+
+describe('manipulators behave like the real mechanisms', () => {
+  const N_R1 = { x: -47.091, y: 23.547 }; // neutral Goal, 5.77" tall, holding a yellow Pin
+  const intake: MechanismSpec = { kind: 'intake', name: 'Intake', motors: [10], ratio: 1, zone: { x: 0, y: 8, width: 8, length: 2 } };
+
+  it('a claw that only ever opens lets go of the Preload', async () => {
+    const r = await testRobot([LIFT, claw]);
+    const { game, run } = await setup(r, { x: -30, y: -50, theta: 90 }); // solenoid never set
+    run(400);
+    expect(game.state.held.Claw).toEqual([]);
+    const motorClaw: MechanismSpec = { kind: 'claw', name: 'Claw', lift: 'Lift', grip: 'motor', motors: [8], ratio: 1, closedAt: 60, preload: 'alliance-down' };
+    // a motor claw starts closed on the Preload (loaded by hand) and lets go once it opens
+    const m = await setup(await testRobot([LIFT, motorClaw]), { x: -30, y: -50, theta: 90 });
+    expect(m.world.mechanismState(motorClaw)).toBe(60);
+    m.run(100);
+    expect(m.game.state.held.Claw.length).toBe(1);
+    m.world.motor(8).angle = 0;
+    m.run(100);
+    expect(m.game.state.held.Claw).toEqual([]);
+  });
+
+  it('closing beside a Goal does not take its Pin: only what is between the jaws', async () => {
+    const r = await testRobot([LIFT, { ...claw, preload: undefined }]);
+    // claw at the Pin's height, its grip point 1.3" past and 1.5" to the side of the Goal's center:
+    // within the old 2" capture circle, but the Pin isn't between the jaws
+    const { game, run, world, lift } = await setup(r, { x: N_R1.x - 10.3, y: N_R1.y + 1.5, theta: 90 });
+    lift(25);
+    run(250);
+    world.adiOut.set('B', true);
+    run(250);
+    expect(game.state.goals.N_R1.length).toBe(1);
+    expect(game.state.held.Claw).toEqual([]);
+    expect(game.rules.violations).toEqual([]);
+  });
+
+  it('a Pin released onto a Pin does not nest: it falls off', async () => {
+    const r = await testRobot([LIFT, claw]);
+    const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    game.state.goals.R1.push({ kind: 'pin', id: 'p0', colors: ['red', 'yellow'] });
+    run(250);
+    world.adiOut.set('B', false);
+    run(250);
+    expect(game.state.goals.R1.map((p) => p.id)).toEqual(['p0']);
+    expect(game.state.lying.some((l) => l.id.startsWith('d') || l.colors.join() === 'red,yellow')).toBe(true);
+  });
+
+  it('a dropped piece lands outside the robot, not inside its frame', async () => {
+    const deckClaw: MechanismSpec = { kind: 'claw', name: 'Claw', at: { y: 0, z: 8 }, grip: 'piston', adi: 'B', preload: 'alliance-down' };
+    const r = await testRobot([deckClaw]);
+    const { game, run, world } = await setup(r, { x: -30, y: -50, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    run(100);
+    world.adiOut.set('B', false);
+    run(400);
+    const d = game.state.lying.find((l) => l.id === 'preload' || l.colors.join() === 'red,yellow' && Math.hypot(l.x + 30, l.y + 50) < 15)!;
+    expect(d).toBeDefined();
+    const [lx, ly] = toRobot(world.pose, d.x, d.y);
+    const { width, length } = r.size;
+    expect(Math.abs(lx) >= width / 2 || Math.abs(ly) >= length / 2).toBe(true);
+  });
+
+  it('an intake at the bumper takes a stack the robot pushes against', async () => {
+    const r = await testRobot([{ ...intake, zone: { x: 0, y: 7.5, width: 8, length: 1.5 }, capacity: { pins: 1, cups: 1 } }]);
+    // the Midfield-corner stack (a Cup holding a Pin) at (-23.548, -23.548), approached from the south
+    const { game, run, world, drive } = await setup(r, { x: -23.548, y: -40, theta: 0 });
+    world.motor(10).cmd = 127;
+    drive(40);
+    run(1500);
+    expect(game.state.held.Intake.map((p) => p.kind)).toEqual(['cup', 'pin']);
+  });
+
+  it('an intake waits for its claw to open before handing over', async () => {
+    const r = await testRobot([LIFT, { ...claw, preload: undefined }, { ...intake, into: 'Claw' }]);
+    const { game, run, world, drive } = await setup(r, { x: -23.548, y: -40, theta: 0 }, 'h2h', (w) => w.adiOut.set('B', true));
+    world.motor(10).cmd = 127;
+    drive(40);
+    run(1500, (t) => t === 1200 && drive(0));
+    expect(game.state.held.Claw).toEqual([]); // closed: nothing gets in
+    expect(game.state.held.Intake.length).toBe(2);
+    world.adiOut.set('B', false); // open: the stack slides into the claw...
+    run(600);
+    expect(game.state.held.Claw.map((p) => p.kind)).toEqual(['cup', 'pin']); // ...and rests there
+    world.adiOut.set('B', true);
+    run(300);
+    expect(game.state.held.Claw.length).toBe(2);
+  });
+
+  it('a Loader feeds one piece at a time: the next one drops into the opening ~0.2 s later', async () => {
+    const r = await testRobot([{ ...intake, capacity: { pins: 5, cups: 5 } }]);
+    const f = await field();
+    const L = f.loaders!.find((l) => l.id === 'L_red_s')!;
+    const [mx, my] = loaderMouth(f, L);
+    const { game, run, world } = await setup(r, { x: mx + 9, y: my, theta: 270 }, 'skills');
+    run(1100); // the drive team stocks the chute
+    const times: number[] = [];
+    world.motor(10).cmd = 127;
+    run(700, (t) => {
+      if (game.state.held.Intake.length > times.length) times.push(t);
+    });
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(200);
+  });
+
+  it('a motor wrist flips once past 90 degrees, without chattering around it', async () => {
+    const wrist: MechanismSpec = { kind: 'wrist', name: 'Wrist', claw: 'Claw', motors: [8], ratio: 1 };
+    const r = await testRobot([LIFT, claw, wrist]);
+    const { game, run, world } = await setup(r, { x: -30, y: -50, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    const flips: string[] = [];
+    const colors = () => (game.state.held.Claw[0] as { colors: string[] }).colors.join('/');
+    for (const a of [80, 92, 88, 93, 87, 96, 120, 95, 84, 60]) {
+      world.motor(8).angle = a;
+      world.motor(8).brakeMode = 2;
+      run(20);
+      flips.push(colors());
+    }
+    // flips past 95, flips back below 85
+    expect(flips).toEqual(['red/yellow', 'red/yellow', 'red/yellow', 'red/yellow', 'red/yellow', 'yellow/red', 'yellow/red', 'yellow/red', 'red/yellow', 'red/yellow']);
   });
 });
 
