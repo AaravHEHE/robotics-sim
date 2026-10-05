@@ -11,6 +11,7 @@ import { simulatedEnvNames } from '../sim/pros-api.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { PlaceMode } from '../sim/runtime.ts';
 import type { SimRequest, SimResponse } from '../sim/worker.ts';
+import { clearFieldAsset, FIELD_ASSET_TYPES, fieldModelFrom, fitToField, loadFieldAsset, readFieldModel, saveFieldAsset, toGlb, type FieldAsset } from './field-assets.ts';
 import { jsonEditor, ProjectEditor } from './editor.ts';
 import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
@@ -244,7 +245,74 @@ function applyField() {
   viewer.setField(f);
   clearRecording();
   renderPresets();
+  void showFieldModel();
 }
+
+// ---------------- field model (official CAD, local only) ----------------
+
+let fieldModelLoad = 0;
+/** Show the visitor's stored model of the current field, if any. */
+async function showFieldModel(): Promise<FieldAsset | undefined> {
+  const token = ++fieldModelLoad;
+  const id = field().id;
+  const a = await loadFieldAsset(id);
+  const model = a ? await fieldModelFrom(a).catch(() => null) : null;
+  if (token !== fieldModelLoad) return a;
+  viewer.setFieldModel(model, { base: !!a?.hideBase, statics: !!a?.hideStatics });
+  return a;
+}
+
+function fieldDialogShow(a: FieldAsset | undefined, msg?: string) {
+  $('fm-status').textContent = msg ?? (a ? `Showing “${a.name}”.` : 'No model loaded: the built-in field is shown.');
+  $<HTMLInputElement>('fm-hide-base').checked = a?.hideBase ?? true;
+  $<HTMLInputElement>('fm-hide-statics').checked = a?.hideStatics ?? true;
+  $<HTMLSelectElement>('fm-turns').value = String(a?.turns ?? 0);
+  $<HTMLInputElement>('fm-lift').value = String(a?.lift ?? 0);
+  for (const id of ['fm-hide-base', 'fm-hide-statics', 'fm-turns', 'fm-lift', 'fm-clear']) $<HTMLInputElement>(id).disabled = !a;
+}
+
+$('btn-field-look').onclick = async () => {
+  fieldDialogShow(await loadFieldAsset(field().id));
+  $<HTMLDialogElement>('dlg-field').showModal();
+};
+$('fm-load').onclick = async () => {
+  const file = await pickFile(FIELD_ASSET_TYPES);
+  if (!file) return;
+  const status = (m: string) => ($('fm-status').textContent = m);
+  try {
+    const model = await readFieldModel(file.name, await file.arrayBuffer(), status);
+    const { unit, removed } = fitToField(model, field());
+    status('Saving it in this browser…');
+    const a: FieldAsset = {
+      name: file.name,
+      glb: await toGlb(model),
+      turns: 0,
+      lift: 0,
+      hideBase: $<HTMLInputElement>('fm-hide-base').checked,
+      hideStatics: $<HTMLInputElement>('fm-hide-statics').checked,
+    };
+    await saveFieldAsset(field().id, a);
+    await showFieldModel();
+    fieldDialogShow(a, `Showing “${file.name}” (read as ${unit}${removed ? `; left out ${removed} moving part${removed > 1 ? 's' : ''}` : ''}).`);
+  } catch (e) {
+    status(`Couldn't use that file: ${(e as Error).message}`);
+  }
+};
+async function updateFieldAsset(change: Partial<FieldAsset>) {
+  const a = await loadFieldAsset(field().id);
+  if (!a) return;
+  await saveFieldAsset(field().id, { ...a, ...change });
+  await showFieldModel();
+}
+$<HTMLInputElement>('fm-hide-base').onchange = (e) => void updateFieldAsset({ hideBase: (e.target as HTMLInputElement).checked });
+$<HTMLInputElement>('fm-hide-statics').onchange = (e) => void updateFieldAsset({ hideStatics: (e.target as HTMLInputElement).checked });
+$<HTMLSelectElement>('fm-turns').onchange = (e) => void updateFieldAsset({ turns: Number((e.target as HTMLSelectElement).value) });
+$<HTMLInputElement>('fm-lift').onchange = (e) => void updateFieldAsset({ lift: Number((e.target as HTMLInputElement).value) || 0 });
+$('fm-clear').onclick = async () => {
+  await clearFieldAsset(field().id);
+  await showFieldModel();
+  fieldDialogShow(undefined);
+};
 
 /**
  * Show the field exactly as a run will start: every piece in its starting place, the

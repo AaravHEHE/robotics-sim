@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { FieldDef } from '../sim/field.ts';
 import { isPneumatic, type MechanismSpec, type RobotProfile } from '../sim/profile.ts';
 import type { Recording } from '../sim/recording.ts';
@@ -56,6 +57,12 @@ export class FieldViewer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly fieldGroup = new THREE.Group();
+  /** Built-in floor and perimeter, and built-in Goals and Loaders (hidden under a loaded field model). */
+  private baseGroup = new THREE.Group();
+  private staticGroup = new THREE.Group();
+  /** A field model the visitor loaded (cosmetic only), and which built-in parts it replaces. */
+  private readonly fieldModel = new THREE.Group();
+  private hideBuiltIn = { base: false, statics: false };
   private readonly robotGroup = new THREE.Group();
   private readonly ghost = new THREE.Group();
   private readonly overlay = new THREE.Group();
@@ -91,6 +98,14 @@ export class FieldViewer {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // filmic tone mapping and a soft studio environment: metal, polycarbonate and plastic
+    // pick up reflections instead of looking flat
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.5;
+    pmrem.dispose();
     container.appendChild(this.renderer.domElement);
     // the GPU can drop the context (driver reset, too many tabs): allow it to come back
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
@@ -102,14 +117,16 @@ export class FieldViewer {
     this.controls.addEventListener('change', () => (this.needsRender = true));
     this.controls.addEventListener('start', () => (this.userMoved = true));
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x50555c, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x50555c, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff6ea, 2.4);
     sun.position.set(60, 160, 90);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 400 });
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.02;
     this.scene.add(sun);
-    this.scene.add(this.fieldGroup, this.gameGroup, this.overlay, this.ghost, this.robotGroup);
+    this.scene.add(this.fieldGroup, this.fieldModel, this.gameGroup, this.overlay, this.ghost, this.robotGroup);
     this.applyTheme();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
 
@@ -195,47 +212,90 @@ export class FieldViewer {
     const g = canvas.getContext('2d')!;
     g.fillStyle = field.tiles.color;
     g.fillRect(0, 0, px, px);
-    // subtle foam speckle (deterministic)
+    // deterministic noise for the foam
     let seed = 7;
-    for (let i = 0; i < 9000; i++) {
-      seed = (seed * 16807) % 2147483647;
-      const x = seed % px;
-      seed = (seed * 16807) % 2147483647;
-      const y = seed % px;
-      g.fillStyle = `rgba(255,255,255,${(seed % 10) / 400})`;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    // each foam tile is a slightly different shade, as on a real field
+    const tile = px / n;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const v = rand();
+        g.fillStyle = v < 0.5 ? `rgba(0,0,0,${(0.5 - v) * 0.06})` : `rgba(255,255,255,${(v - 0.5) * 0.05})`;
+        g.fillRect(i * tile, j * tile, tile, tile);
+      }
+    }
+    for (let i = 0; i < 14000; i++) {
+      const x = rand() * px;
+      const y = rand() * px;
+      g.fillStyle = `rgba(255,255,255,${rand() * 0.035})`;
       g.fillRect(x, y, 2, 2);
     }
-    g.strokeStyle = 'rgba(0,0,0,0.35)';
-    g.lineWidth = 3;
+    // seams with the interlocking teeth of the tile edges
+    g.strokeStyle = 'rgba(0,0,0,0.26)';
+    g.lineWidth = Math.max(2, px / 700);
+    const teeth = 6;
+    const tooth = tile / teeth;
+    const depth = tooth * 0.22;
     for (let i = 1; i < n; i++) {
-      const p = (i / n) * px;
-      g.beginPath();
-      g.moveTo(p, 0);
-      g.lineTo(p, px);
-      g.moveTo(0, p);
-      g.lineTo(px, p);
-      g.stroke();
+      const p = i * tile;
+      for (const vertical of [true, false]) {
+        g.beginPath();
+        for (let k = 0; k <= n * teeth; k++) {
+          const a = k * tooth;
+          const off = k % 2 ? depth : -depth;
+          if (vertical) {
+            if (!k) g.moveTo(p + off, a);
+            g.lineTo(p + off, a);
+            g.lineTo(p + off, a + tooth);
+          } else {
+            if (!k) g.moveTo(a, p + off);
+            g.lineTo(a, p + off);
+            g.lineTo(a + tooth, p + off);
+          }
+        }
+        g.stroke();
+      }
     }
     drawTape(g, field, px);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(inside, inside), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+    // foam grain as a bump map (tiled)
+    const grain = document.createElement('canvas');
+    grain.width = grain.height = 256;
+    const gg = grain.getContext('2d')!;
+    const img = gg.createImageData(256, 256);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 110 + rand() * 60;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    gg.putImageData(img, 0, 0);
+    const bump = new THREE.CanvasTexture(grain);
+    bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+    bump.repeat.set(n * 4, n * 4);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(inside, inside),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.97, bumpMap: bump, bumpScale: 0.6 }),
+    );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
-    this.fieldGroup.add(floor);
+    this.baseGroup = new THREE.Group();
+    this.staticGroup = new THREE.Group();
+    this.fieldGroup.add(this.baseGroup, this.staticGroup);
+    this.baseGroup.add(floor);
 
     // surrounding floor
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(inside * 3, inside * 3), new THREE.MeshStandardMaterial({ color: 0x777b80, roughness: 1 }));
     outer.rotation.x = -Math.PI / 2;
     outer.position.y = -0.05;
     outer.receiveShadow = true;
-    this.fieldGroup.add(outer);
+    this.baseGroup.add(outer);
 
     // perimeter: aluminum rails with clear panels
     const { wallHeight: h, wallThickness: t } = field.perimeter;
-    const rail = new THREE.MeshStandardMaterial({ color: 0xc8ccd1, metalness: 0.6, roughness: 0.35 });
-    const panel = new THREE.MeshPhysicalMaterial({ color: 0xdfe8f0, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false });
+    const rail = new THREE.MeshStandardMaterial({ color: 0xd2d6db, metalness: 0.85, roughness: 0.32 });
+    const panel = new THREE.MeshPhysicalMaterial({ color: 0xe6eef5, transparent: true, opacity: 0.16, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: false });
     for (const [x, z, w, d] of [
       [0, -half - t / 2, inside + 2 * t, t],
       [0, half + t / 2, inside + 2 * t, t],
@@ -246,11 +306,20 @@ export class FieldViewer {
         const r = new THREE.Mesh(new THREE.BoxGeometry(w, 1, d), rail);
         r.position.set(x, y, z);
         r.castShadow = true;
-        this.fieldGroup.add(r);
+        this.baseGroup.add(r);
       }
       const p = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w - 0.6, 0.3), h - 2, Math.max(d - 0.6, 0.3)), panel);
       p.position.set(x, h / 2, z);
-      this.fieldGroup.add(p);
+      this.baseGroup.add(p);
+      // upright extrusions where the perimeter panels meet (one per tile)
+      const along = w > d;
+      for (let i = 1; i < n; i++) {
+        const u = -half + (i * inside) / n;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(along ? 1 : t, h - 1, along ? t : 1), rail);
+        post.position.set(along ? u : x, h / 2, along ? z : u);
+        post.castShadow = true;
+        this.baseGroup.add(post);
+      }
     }
     // corner posts
     for (const sx of [-1, 1]) {
@@ -258,18 +327,48 @@ export class FieldViewer {
         const post = new THREE.Mesh(new THREE.BoxGeometry(t * 1.4, h + 0.5, t * 1.4), rail);
         post.position.set(sx * (half + t / 2), h / 2, sz * (half + t / 2));
         post.castShadow = true;
-        this.fieldGroup.add(post);
+        this.baseGroup.add(post);
       }
     }
     // game field elements (goals, toggles, loaders)
-    for (const goal of field.goals ?? []) this.fieldGroup.add(goalMesh(goal));
+    for (const goal of field.goals ?? []) this.staticGroup.add(goalMesh(goal));
     for (const t of field.toggles ?? []) {
       const { outer, roll } = toggleMesh(t, field);
       this.toggleRolls.set(t.id, roll);
       this.fieldGroup.add(outer);
     }
-    for (const l of field.loaders ?? []) this.fieldGroup.add(loaderMesh(l, field));
+    for (const l of field.loaders ?? []) this.staticGroup.add(loaderMesh(l, field));
+    this.applyHidden();
     this.setView(this.mode);
+  }
+
+  /**
+   * Show a field model the visitor loaded (already in field inches, three.js axes), or
+   * none. It is cosmetic: it replaces the look of the built-in floor and perimeter
+   * (`base`) and/or Goals and Loaders (`statics`); the simulation never sees it.
+   */
+  setFieldModel(model: THREE.Object3D | null, hide: { base: boolean; statics: boolean }) {
+    clearGroup(this.fieldModel);
+    if (model) this.fieldModel.add(model);
+    this.hideBuiltIn = model ? hide : { base: false, statics: false };
+    this.applyHidden();
+  }
+
+  private applyHidden() {
+    this.baseGroup.visible = !this.hideBuiltIn.base;
+    this.staticGroup.visible = !this.hideBuiltIn.statics;
+    this.needsRender = true;
+  }
+
+  /** A JPEG of the current view (for checking the look without a visible window). */
+  snapshot(width = 640): string {
+    const c = this.renderer.domElement;
+    this.renderer.render(this.scene, this.camera);
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = Math.round((width * c.height) / c.width);
+    out.getContext('2d')!.drawImage(c, 0, 0, out.width, out.height);
+    return out.toDataURL('image/jpeg', 0.7);
   }
 
   /** Show a game state's scoring objects and toggle angles (null hides them). */

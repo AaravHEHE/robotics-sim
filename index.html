@@ -19,6 +19,7 @@
     <div class="group">
       <label class="field-label" for="field-select">Field</label>
       <select id="field-select"></select>
+      <button id="btn-field-look" class="ghost" title="Use the official VEX field model (CAD) for the look of this field">Model…</button>
     </div>
     <div class="group">
       <label class="field-label" for="robot-select">Robot</label>
@@ -131,6 +132,23 @@
             <button type="button" id="rb-delete" class="ghost danger">Delete this custom robot</button>
           </div>
         </div>
+      </div>
+      <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-field" class="dialog">
+    <form method="dialog">
+      <h2>Field model</h2>
+      <p class="muted">Load the official field CAD (VEX publishes it as a ZIP of STEP files on its field CAD page) or any GLB / glTF / OBJ export of it. It stays in this browser: it is never uploaded or published. It only changes the look; the simulation still uses the measured field. Pins, Cups and Toggles in the model are left out, because the simulation draws them where they really are.</p>
+      <div class="stack">
+        <button type="button" id="fm-load" class="primary">Load a field model (.zip, .step, .glb, .obj)…</button>
+        <p id="fm-status" class="muted" role="status" aria-live="polite">No model loaded: the built-in field is shown.</p>
+        <label><input type="checkbox" id="fm-hide-base" checked /> Hide the built-in tiles and perimeter</label>
+        <label><input type="checkbox" id="fm-hide-statics" checked /> Hide the built-in Goals and Loaders</label>
+        <label>Turn <select id="fm-turns"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select> so the red side matches</label>
+        <label>Raise by <input id="fm-lift" type="number" step="0.1" value="0" style="width: 5em" /> in (to line the model's tile tops up with the floor)</label>
+        <button type="button" id="fm-clear" class="ghost danger">Remove the model</button>
       </div>
       <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
     </form>
