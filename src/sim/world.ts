@@ -73,6 +73,11 @@ export class MotorState {
   positionAccel: number | null = null;
   /** Lift motors: sign of the motor direction that raises the lift (0 = not a lift). */
   liftUp = 0;
+  /**
+   * A bar lift (arm, 4-bar, 6-bar, DR4B, chain bar) this motor drives: past vertical its
+   * weight pulls the other way. Its bar angle is startAngle + motor angle × ratio.
+   */
+  barLift: { startAngle: number; ratio: number } | null = null;
 
   constructor(port: number, cartridge: Cartridge | null) {
     this.port = port;
@@ -249,7 +254,9 @@ export class World {
     }
     for (const d of profile.devices) {
       if (d.type === 'motor') this.motors.set(d.port, new MotorState(d.port, d.cartridge));
-      if (d.type === 'imu') this.imus.set(d.port, { port: d.port, calibratingUntil: 0, rotationOffset: 0, headingOffset: 0, pitchOffset: 0, rollOffset: 0, yawOffset: 0 });
+      // an IMU reads 0 where it powered on (the start), not the field heading
+      const t0 = start.theta;
+      if (d.type === 'imu') this.imus.set(d.port, { port: d.port, calibratingUntil: 0, rotationOffset: t0, headingOffset: t0, pitchOffset: 0, rollOffset: 0, yawOffset: t0 });
       if (d.type === 'rotation') this.rotations.set(d.port, { port: d.port, spec: d, raw: 0, velocity: 0, zero: 0, reversed: false });
     }
     // lift motors carry the lift's weight (a positive output raises a lift)
@@ -257,7 +264,9 @@ export class World {
       if (mech.kind !== 'lift' || !isMotorized(mech)) continue;
       for (const port of mech.motors!) {
         const m = this.motors.get(port);
-        if (m) m.liftUp = Math.sign(mech.ratio ?? 1) || 1;
+        if (!m) continue;
+        m.liftUp = Math.sign(mech.ratio ?? 1) || 1;
+        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'chainbar'].includes(mech.lift)) m.barLift = { startAngle: mech.startAngle ?? 0, ratio: mech.ratio ?? 1 };
       }
     }
   }
@@ -409,12 +418,14 @@ export class World {
         m.rpm = sideV * inPerSecToWheelRpm * wheelToMotor * m.driveMount;
       } else if (m.cartridge) {
         let target = m.targetRpm();
-        if (m.liftUp) {
-          // a lift motor works against the lift's weight: slower going up, and with no
-          // power it sags (coast) or creeps down (brake); hold keeps it where it is
+        // a lift motor works against the lift's weight: slower going up, and with no power it
+        // sags (coast) or creeps down (brake); hold keeps it where it is. A bar swung past
+        // vertical falls the other way (onto its far stop).
+        const up = m.barLift ? m.liftUp * Math.sign(Math.round(dcosDeg(m.barLift.startAngle + m.angle * m.barLift.ratio) * 1e9)) : m.liftUp;
+        if (up) {
           const unpowered = m.mode !== 'position' && target === 0;
-          if (unpowered) target = m.brakeMode === 0 ? -m.liftUp * LIFT_SAG * m.freeRpm : m.brakeMode === 1 ? -m.liftUp * LIFT_CREEP * m.freeRpm : 0;
-          else if (target * m.liftUp > 0) target *= 1 - LIFT_LOAD;
+          if (unpowered) target = m.brakeMode === 0 ? -up * LIFT_SAG * m.freeRpm : m.brakeMode === 1 ? -up * LIFT_CREEP * m.freeRpm : 0;
+          else if (target * up > 0) target *= 1 - LIFT_LOAD;
         }
         const a = (m.freeRpm / MOTOR_SPINUP_S) * dt;
         m.rpm += Math.max(-a, Math.min(a, target - m.rpm));

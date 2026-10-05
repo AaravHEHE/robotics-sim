@@ -104,7 +104,9 @@ export class Scheduler {
   }
 
   delay(ms: number): Promise<void> {
-    const wake = this.now + Math.max(0, ms);
+    // delay(0) only yields on a robot, but its clock keeps running while the CPU spins: here a
+    // task always ready would stop simulated time, so a zero wait lasts one tick
+    const wake = this.now + Math.max(1, ms);
     return this.park(() => this.now >= wake);
   }
 

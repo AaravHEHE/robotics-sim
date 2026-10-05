@@ -302,6 +302,36 @@ export function validateProfile(p: unknown): string[] {
       claim(String(dev.port), dev.name ?? dev.type);
     }
   }
+  const mount = (dev: DeviceSpec, m: { x?: number; y?: number; heading?: number } | undefined, needHeading: boolean) => {
+    if (!m || !isNum(m.x, -40, 40) || !isNum(m.y, -40, 40) || (needHeading ? !isNum(m.heading, -360, 360) : m.heading !== undefined && !isNum(m.heading, -360, 360))) {
+      e.push(`${dev.type} sensor on port ${dev.port}: mount needs x and y (inches)${needHeading ? ' and heading (degrees)' : ''}.`);
+    }
+  };
+  for (const dev of r.devices) {
+    if (dev.type === 'motor' && !(dev.cartridge in CARTRIDGE_RPM)) e.push(`Motor on port ${dev.port}: cartridge must be red, green or blue.`);
+    if (dev.type === 'distance') mount(dev, dev.mount, true);
+    if (dev.type === 'optical' && dev.mount !== undefined) mount(dev, dev.mount, true);
+    if (dev.type === 'gps' && dev.mount !== undefined) mount(dev, dev.mount, false);
+    if (dev.type === 'rotation' && dev.trackingWheel) {
+      const tw = dev.trackingWheel;
+      if (tw.axis !== 'vertical' && tw.axis !== 'horizontal') e.push(`Rotation sensor on port ${dev.port}: trackingWheel.axis must be vertical or horizontal.`);
+      if (!isNum(tw.wheelDiameter, 0.5, 10)) e.push(`Rotation sensor on port ${dev.port}: trackingWheel.wheelDiameter must be 0.5-10 inches.`);
+      if (!isNum(tw.offset, -40, 40)) e.push(`Rotation sensor on port ${dev.port}: trackingWheel.offset must be in inches.`);
+    }
+    if (dev.type === 'rotation' && dev.mechanism !== undefined && !r.mechanisms.some((m) => m.name === dev.mechanism && isMotorized(m))) {
+      e.push(`Rotation sensor on port ${dev.port}: mechanism "${dev.mechanism}" must name a motorized mechanism.`);
+    }
+  }
+  // mechanism motors must be motor devices of their own (not the drivetrain's)
+  const motorPorts = new Set(r.devices.filter((x) => x.type === 'motor').map((x) => x.port as number));
+  const drivePorts = new Set([...d.left, ...d.right].map((x) => Math.abs(x)));
+  for (const m of r.mechanisms) {
+    for (const port of m.motors ?? []) {
+      if (!Number.isInteger(port) || port < 1 || port > 21) e.push(`Mechanism ${m.name}: motor port ${port} must be 1-21 (mechanism ports are unsigned).`);
+      else if (drivePorts.has(port)) e.push(`Mechanism ${m.name}: port ${port} is a drivetrain motor.`);
+      else if (!motorPorts.has(port)) e.push(`Mechanism ${m.name}: port ${port} needs a motor device in devices.`);
+    }
+  }
   e.push(...validateMechanisms(r.mechanisms));
   for (const dev of r.devices) {
     if (dev.type !== 'optical' || dev.watches === undefined) continue;
@@ -342,6 +372,10 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
   let preloads = 0;
   for (const m of mechs) {
     if (!m.name) e.push('Every mechanism needs a name.');
+    const range = (m as { range?: unknown }).range;
+    if (range !== undefined && !(Array.isArray(range) && range.length === 2 && isNum(range[0]) && isNum(range[1]) && range[0] < range[1])) {
+      e.push(`Mechanism ${m.name}: range must be [low, high] with low < high (output degrees).`);
+    }
     if (!KINDS.includes(m.kind)) {
       e.push(`Mechanism ${m.name}: unknown kind "${m.kind as string}".`);
       continue;
@@ -367,6 +401,8 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
           if (b && b.kind === 'lift' && b.base) e.push(`Lift ${m.name}: base ${m.base} rides on another lift itself (one level of mounting only).`);
         }
         if (m.lift === 'cascade' && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
+        if (m.lift === 'cascade' && m.stages !== undefined && !(Number.isInteger(m.stages) && m.stages >= 1 && m.stages <= 8)) e.push(`Lift ${m.name}: stages must be a whole number 1-8.`);
+        if (m.startAngle !== undefined && !isNum(m.startAngle, -180, 180)) e.push(`Lift ${m.name}: startAngle must be -180 to 180 degrees.`);
         if (m.lift === 'piston' && !isNum(m.travel, 0.1, 60)) e.push(`Lift ${m.name}: travel is required.`);
         if (m.facing !== undefined && m.facing !== 'front' && m.facing !== 'rear') e.push(`Lift ${m.name}: facing must be front or rear.`);
         break;

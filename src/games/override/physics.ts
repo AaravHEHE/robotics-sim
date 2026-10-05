@@ -6,6 +6,7 @@
 // "snap" operations in game.ts (hybrid model).
 
 import RAPIER from '@dimforge/rapier2d-deterministic-compat';
+import { dhypot } from '../../sim/dmath.ts';
 import type { FieldDef, Vec2 } from '../../sim/field.ts';
 import { box, fieldObstacles, octagon, satMtv, type Obstacle } from '../../sim/world.ts';
 import { CUP, PIN, type Piece } from './elements.ts';
@@ -168,7 +169,7 @@ export class FloorPhysics {
       const shape = (grow: number) => (o.length ? box(x, y, 2 * (o.r + grow), o.length + 2 * grow, -b.rotation() / RAD) : octagon(x, y, 2 * (o.r + grow)));
       const poly = shape(0);
       const mtv = satMtv(poly, robot);
-      const depth = mtv ? Math.hypot(mtv[0], mtv[1]) : 0;
+      const depth = mtv ? dhypot(mtv[0], mtv[1]) : 0;
       if (depth > 0 && b.isSleeping()) b.wakeUp(); // a resting piece the robot runs into gets pushed
       if (depth > PINNED_DEPTH && this.anchored(b)) this.pinned.add(id);
       else if (this.pinned.has(id) && !satMtv(shape(PINNED_RELEASE), robot)) this.pinned.delete(id);

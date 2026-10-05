@@ -111,7 +111,9 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const prev = dv().getUint32(prevPtr, true);
     const wake = prev + (delta >>> 0);
     dv().setUint32(prevPtr, wake, true);
-    return sched.park(() => sched.now >= wake);
+    // (a zero period still lets a tick pass, as delay(0) does: see Scheduler.delay)
+    const until = Math.max(wake, delta >>> 0 ? 0 : sched.now + 1);
+    return sched.park(() => sched.now >= until);
   });
   f.task_create = (fn: number, arg: number, _prio: number, depth: number, namePtr: number) => {
     const bytes = Math.max(64 * 1024, (depth & 0xffff) * 4 * 2);
@@ -415,6 +417,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     s.calibratingUntil = sched.now + CAL_MS;
     s.rotationOffset = world.pose.theta;
     s.headingOffset = world.pose.theta;
+    s.yawOffset = world.pose.theta; // calibrating zeroes yaw too
     return sched.delay(5).then(() => 1);
   });
   susp('imu_reset_blocking', (port: number) => {
@@ -423,6 +426,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     s.calibratingUntil = sched.now + CAL_MS;
     s.rotationOffset = world.pose.theta;
     s.headingOffset = world.pose.theta;
+    s.yawOffset = world.pose.theta; // calibrating zeroes yaw too
     return sched.delay(CAL_MS).then(() => 1);
   });
   f.imu_set_data_rate = (port: number) => (imu(port) ? 1 : PROS_ERR);
@@ -518,13 +522,21 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const rev = (port < 0) !== r.reversed ? -1 : 1;
     return Math.round(rev * (r.raw - r.zero));
   };
+  // PROS: reset() makes the position equal to the sensor's angle (0-360°); reset_position() zeroes it
   f.rotation_reset = (port: number) => {
+    const r = rot(port);
+    if (!r) return PROS_ERR;
+    const rev = (port < 0) !== r.reversed ? -1 : 1;
+    const angle = (((rev * r.raw) % 36000) + 36000) % 36000;
+    r.zero = r.raw - rev * angle;
+    return 1;
+  };
+  f.rotation_reset_position = (port: number) => {
     const r = rot(port);
     if (!r) return PROS_ERR;
     r.zero = r.raw;
     return 1;
   };
-  f.rotation_reset_position = f.rotation_reset;
   f.rotation_set_data_rate = (port: number) => (rot(port) ? 1 : PROS_ERR);
   f.rotation_set_position = (port: number, pos: number) => {
     const r = rot(port);
