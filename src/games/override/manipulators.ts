@@ -268,10 +268,30 @@ export class Manipulators {
     this.checkPossession();
   }
 
+  private preload: { holder: string; pin: Piece } | null = null;
+
   private loadPreload(): void {
     const p = preloadFor(this.ops.field, this.ops.mode, this.ops.alliance, this.profile);
     if (p === 'no-holder') this.ops.note('No mechanism holds the Preload (set "preload" on a claw, intake or staging area), so it is not on the field.');
-    else if (p) this.ops.state.held[p.holder] = [p.pin];
+    else if (p) {
+      this.ops.state.held[p.holder] = [p.pin];
+      this.preload = p;
+    }
+  }
+
+  /** Nothing has been picked up, dropped or placed yet: the robot still holds just its Preload. */
+  untouched(): boolean {
+    const held = Object.entries(this.ops.state.held).filter(([, v]) => v.length);
+    if (!this.preload) return held.length === 0;
+    return held.length === 1 && held[0][0] === this.preload.holder && held[0][1].length === 1 && held[0][1][0] === this.preload.pin;
+  }
+
+  /** The robot changed alliance before moving: it holds that alliance's Preload instead. */
+  reloadPreload(): void {
+    if (this.preload) this.ops.state.held[this.preload.holder] = [];
+    this.preload = null;
+    this.loadPreload();
+    for (const c of this.claws) if (this.ops.state.held[c.spec.name]?.length) c.closed = this.isClosed(c);
   }
 
   // ---------------- per-step ----------------
@@ -465,6 +485,8 @@ export class Manipulators {
       if (!nests(state.goals[g.id], g.height, true)) break; // over a Goal but it won't sit: falls off
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
         this.ops.violation('SG9', `The robot added Scoring Objects to opponent Goal ${g.id}.`);
+      } else if (this.ops.mode === 'h2h' && g.color === 'neutral' && this.opposingSide(g)) {
+        this.ops.violation('SG7', `The robot placed Scoring Objects on Goal ${g.id}, on the opposing side of the Autonomous Line.`);
       }
       state.goals[g.id].push(...pieces);
       this.ops.changed();
@@ -648,6 +670,12 @@ export class Manipulators {
       state.floor.splice(state.floor.indexOf(s), 1);
     }
     into(taken);
+  }
+
+  /** A Goal on the opposing alliance's side of the Autonomous Line (head-to-head). */
+  private opposingSide(g: GoalDef): boolean {
+    const side = sideOf([g.x, g.y]);
+    return side !== 'line' && side !== this.ops.alliance;
   }
 
   private takeFromGoal(g: GoalDef, index: number, into: (ps: Piece[]) => void): void {

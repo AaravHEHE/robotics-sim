@@ -79,3 +79,23 @@ void autonomous() {}
     expect(lines).toContain('reset 0.0 0.0 0.0');
   });
 });
+
+describe('Override: setPose() onto the other side', () => {
+  it('a robot placed on the blue side before it moves plays for blue, with the blue Preload', async () => {
+    const { OverrideGame } = await import('../src/games/override/game.ts');
+    const f = JSON.parse(await (await import('node:fs/promises')).readFile('data/fields/override.json', 'utf8'));
+    const p = await robot('override-banshee');
+    const w = new World(p, f, { x: -60.705, y: -37, theta: 90 });
+    const game = await OverrideGame.create(f, 'h2h', w);
+    expect(game.alliance).toBe('red');
+    w.pose = { x: 60.705, y: -37, theta: 270 }; // chassis.setPose() places it on Blue 1
+    game.robotTeleported();
+    for (let t = 0; t < 200; t++) {
+      w.step(1);
+      game.step(1);
+    }
+    expect(game.alliance).toBe('blue');
+    expect((game.state.held['Roller claw'][0] as { colors: string[] }).colors[0]).toBe('blue');
+    expect(game.rules.violations).toEqual([]);
+  });
+});

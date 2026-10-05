@@ -47,9 +47,9 @@ export class OverrideGame implements GameOps {
   readonly field: FieldDef;
   readonly layout: string;
   readonly mode: Mode;
-  readonly alliance: Alliance;
+  alliance: Alliance;
   readonly state: OverrideState;
-  readonly rules: RuleMonitor;
+  rules: RuleMonitor;
   private readonly world: World;
   private readonly physics: FloorPhysics;
   private readonly toggles: ToggleSim;
@@ -72,12 +72,7 @@ export class OverrideGame implements GameOps {
     this.alliance = this.mode === 'skills' || sideOf([world.pose.x, world.pose.y]) !== 'blue' ? 'red' : 'blue';
     this.toggles = new ToggleSim(field);
     this.rules = new RuleMonitor(field, { alliance: this.alliance, mode: this.mode, size: world.profile.size });
-    if (this.mode === 'h2h') {
-      for (const o of [...this.state.floor, ...this.state.lying]) {
-        const side = sideOf([o.x, o.y]);
-        if (side !== 'line' && side !== this.alliance && !startsOnAutonLine([o.x, o.y])) this.opponentSide.add(o.id);
-      }
-    }
+    this.findOpponentSide();
     this.physics = new FloorPhysics(field, world.profile.size, { x: world.pose.x, y: world.pose.y, heading: world.pose.theta });
     for (const s of this.state.floor) this.physics.addStack(s);
     for (const p of this.state.lying) this.physics.addLying(p);
@@ -109,9 +104,34 @@ export class OverrideGame implements GameOps {
     return new OverrideGame(field, layout, world);
   }
 
-  /** The robot was placed somewhere else instantly (setPose placement). */
+  /** Objects that start on the opponent's side of the Autonomous Line (SG7e), head-to-head. */
+  private findOpponentSide(): void {
+    this.opponentSide.clear();
+    if (this.mode !== 'h2h') return;
+    for (const o of [...this.state.floor, ...this.state.lying]) {
+      const side = sideOf([o.x, o.y]);
+      if (side !== 'line' && side !== this.alliance && !startsOnAutonLine([o.x, o.y])) this.opponentSide.add(o.id);
+    }
+  }
+
+  /**
+   * The robot was placed somewhere else instantly (setPose placement). If that puts it on
+   * the other alliance's side before it has done anything, it is that alliance's robot:
+   * its Preload, its side of the Autonomous Line and its Goals.
+   */
   robotTeleported(): void {
     this.physics.teleportRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
+    const side = sideOf([this.world.pose.x, this.world.pose.y]);
+    if (this.mode !== 'h2h' || side === 'line' || side === this.alliance) return;
+    if (!this.manipulators.untouched()) return;
+    this.alliance = side;
+    this.rules = new RuleMonitor(this.field, { alliance: this.alliance, mode: this.mode, size: this.world.profile.size });
+    this.rec.alliance = this.alliance;
+    this.rec.violations = this.rules.violations;
+    this.findOpponentSide();
+    this.manipulators.reloadPreload();
+    this.notes.push(`setPose() placed the robot on the ${side} side: it plays for ${side}.`);
+    this.dirty = true;
   }
 
   /** Advance by one simulator step (1 ms); physics runs every PHYSICS_DT_MS. */
@@ -146,6 +166,11 @@ export class OverrideGame implements GameOps {
 
   removeFloor(id: string): void {
     this.physics.remove(id);
+    // a claw or intake taking it touches it as much as the chassis would (SG7e)
+    if (this.opponentSide.has(id)) {
+      this.rules.add(this.clock, 'SG7', 'The robot took a Scoring Object from the opposing side of the Autonomous Line.');
+      this.opponentSide.clear(); // reported once
+    }
     this.opponentSide.delete(id);
   }
 

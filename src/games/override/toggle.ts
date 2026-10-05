@@ -149,6 +149,7 @@ export class ToggleSim {
         s.angle += Math.max(-PRESS_RATE, Math.min(PRESS_RATE, spin)) * dt;
         this.latched.set(def.id, false);
         this.target.delete(def.id);
+        this.flung.delete(def.id); // the roller has it now: no fast press carries on afterwards
         continue;
       }
       if ((pressing && !this.latched.get(def.id)) || this.flung.has(def.id)) {
