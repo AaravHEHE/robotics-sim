@@ -7,17 +7,21 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { runSample } from '../scripts/sample-run.ts';
 import { SAMPLES } from '../src/app/samples-meta.ts';
 import type { FieldDef } from '../src/sim/field.ts';
+import { placedPrefix } from '../src/games/override/scoring.ts';
 import { build } from './helpers.ts';
 
-const GOLDEN: Record<string, { red: number; blue: number; toggles?: Record<string, string> }> = {
-  'override-flex': { red: 35, blue: 0, toggles: { red1: 'red' } },
-  'override-toggle-bot': { red: 40, blue: 0, toggles: { red1: 'red', red2: 'red' } },
-  'override-workhorse-toggle': { red: 45, blue: 0, toggles: { red1: 'red' } },
-  'override-midfield-pusher': { red: 8, blue: 0 },
-  'override-dr4b': { red: 45, blue: 0, toggles: { red1: 'red' } },
-  'override-cascade': { red: 45, blue: 0, toggles: { red1: 'red' } },
-  'override-sixbar-wrist': { red: 35, blue: 0, toggles: { red1: 'red' } },
-  'override-skills': { red: 23, blue: 0 },
+/** Score, Toggles and Pins Placed on Goals (counting the ones on the field at the start). */
+const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?: Record<string, string> }> = {
+  'override-flex': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
+  'override-banshee': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-ace': { red: 55, blue: 0, pins: 8, toggles: { red2: 'red' } },
+  'override-claw-gate': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-dr4b-intake': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-sixbar-wrist': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
+  'override-toggle-bot': { red: 40, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
+  'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
+  'override-midfield-pusher': { red: 8, blue: 0, pins: 0 },
+  'override-skills': { red: 48, blue: 0, pins: 4, toggles: { red1: 'red', red2: 'red' } },
 };
 
 describe('Override sample autons', () => {
@@ -36,6 +40,10 @@ describe('Override sample autons', () => {
       expect({ red: r.score.red, blue: r.score.blue }).toEqual({ red: want.red, blue: want.blue });
       for (const [zone, color] of Object.entries(want.toggles ?? {})) expect(r.score.toggles.find((t) => t.zone === zone)?.color).toBe(color);
       expect(rec.game!.violations).toEqual([]);
+      const s = rec.game!.snapshots.at(-1)!.state;
+      expect(Object.values(s.goals).reduce((n, ps) => n + placedPrefix(ps).filter((p) => p.kind === 'pin').length, 0)).toBe(want.pins);
+      // clean driving: never into a Goal, never shoving a piece that can't move
+      expect(rec.events.filter((e) => /Robot hit goal|couldn't move/.test(e.message)).map((e) => e.message)).toEqual([]);
     });
   }
 });

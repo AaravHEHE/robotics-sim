@@ -1,20 +1,19 @@
 #include "main.h"
 #include "lemlib/api.hpp" // IWYU pragma: keep
 
-// V5RC Override: Autonomous Coding Skills, 60 s (LemLib + GPS).
+// V5RC Override: DR4B + intake chamber, 8059A-style (LemLib).
 // Robot: "Override: DR4B + intake chamber". Start: Red 1 (left wall, south).
 //
-// In Skills the drive team keeps both red Loaders stocked with Match Loads as "loaded
-// stacks" (a Pin with a Cup nested over it), and the GPS code strip is up. Red Pin halves
-// score in red Quadrants; yellow halves score where that Quadrant's Toggle is red; in the
-// Midfield they score while the robot is in it.
+// The front intake carries a whole standing stack (a Cup with a Pin in it) over the robot
+// into the chamber on the DR4B at the back; the clamp holds it and the DR4B lifts it
+// straight up, so this robot scores backing into a Goal. The odometry starts from a GPS
+// reading instead of a hard-coded pose.
 //
-//  1. The 3-Pin stack on Goal R1 from the Preload and two floor stacks (as in the 15 s
-//     auton), then the Red 1 Toggle to red at speed.
-//  2. A loaded stack from the south red Loader, straight up the intake into the chamber,
-//     backed onto Goal R2.
-//  3. The Red 2 Toggle to red: the yellow Pin on neutral Goal N_R2 scores.
-//  4. Park in the Midfield: the yellow Pin on the center Goal scores.
+//  1. Back into red Goal R1 and drop the Preload (red half down) into it.
+//  2. Intake the Cup + yellow Pin at (-47, -47), lift it and back it onto the Preload.
+//  3. Intake the Cup + yellow Pin at (-23.5, -23.5), lift it higher and back it on top:
+//     a 3-Pin stack.
+//  4. Hit the Red 1 Toggle at full speed with the passive toggler: two faces, yellow -> red.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -82,19 +81,6 @@ void intakeStack(double x, double y) {
   intake.brake();
 }
 
-// Take one loaded stack out of the bottom of the Loader ahead (its opening at (x, y)):
-// a short burst of the intake, so the next one (which drops down 0.2 s later) stays put.
-void takeMatchLoad(double x, double y) {
-  liftTo(0);
-  clamp.retract();
-  approach(x, y, 9, 90);
-  intake.move(127);
-  pros::delay(120);
-  intake.brake();
-  for (int t = 0; t < 1000 && chamberEye.get_proximity() < 50; t += 10) pros::delay(10);
-  clamp.extend();
-}
-
 void initialize() {
   pros::lcd::initialize();
   lift.set_brake_mode_all(pros::MotorBrake::hold);
@@ -103,25 +89,6 @@ void initialize() {
 
 void disabled() {}
 void competition_initialize() {}
-
-// Back up to (x, y): turn the back of the robot to it, then reverse straight there.
-void backTo(double x, double y) {
-  chassis.turnToPoint(x, y, 800, {.forwards = false});
-  chassis.moveToPoint(x, y, 2000, {.forwards = false});
-  chassis.waitUntilDone();
-}
-
-// Hit the Toggle ahead at full speed (two faces), then let go of it.
-void ramToggle() {
-  leftMotors.move(127);
-  rightMotors.move(127);
-  pros::delay(700);
-  leftMotors.move(-60);  // a Toggle a robot still touches doesn't count
-  rightMotors.move(-60);
-  pros::delay(250);
-  leftMotors.brake();
-  rightMotors.brake();
-}
 
 void autonomous() {
   // Start from the GPS: its reading is the sensor's position, converted to the robot center.
@@ -162,36 +129,14 @@ void autonomous() {
   approach(-38, -2, 0);
   chassis.turnToHeading(270, 800);
   chassis.waitUntilDone();
-  ramToggle();
-
-  // 5. Down the lane x = -58.3 (between R1 and the Cups along the wall) to the south red
-  //    Loader, intake running.
-  backTo(-58.3, -2);
-  chassis.turnToHeading(180, 800);
-  chassis.moveToPoint(-58.3, -40, 1500);
-  approach(-50, -58.76, 0);
-  chassis.turnToHeading(270, 800);
-  chassis.waitUntilDone();
-  takeMatchLoad(-64.96, -58.76);  // the Loader's bottom opening
-  liftTo(ONE_PIN);
-  pullAway(-3);
-  backInto(-23.55, -47.09);     // R2
-  clamp.retract();
-  pros::delay(150);
-
-  // 6. North round the west side of R2, east along y = -36, then hit the Red 2 Toggle
-  //    (bottom wall, x = 0) after a run-up.
-  pullAway(4);
-  liftTo(0);
-  approach(-38, -36, 0);
-  approach(-4, -36, 0);
-  chassis.turnToHeading(180, 800);
-  chassis.waitUntilDone();
-  ramToggle();
-
-  // 7. Park in the Midfield, clear of the stack at (0, -23.5).
-  chassis.moveToPoint(-4, -46, 1500, {.forwards = false});
-  approach(-12, -12, 0);
+  leftMotors.move(127);
+  rightMotors.move(127);
+  pros::delay(700);
+  leftMotors.move(-60);  // let go: a Toggle a robot still touches doesn't count
+  rightMotors.move(-60);
+  pros::delay(250);
+  leftMotors.brake();
+  rightMotors.brake();
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

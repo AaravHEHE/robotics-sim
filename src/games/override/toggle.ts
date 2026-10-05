@@ -110,6 +110,8 @@ export class ToggleSim {
   private readonly latched = new Map<string, boolean>();
   /** Detent each Toggle is rolling toward while pressed. */
   private readonly target = new Map<string, number>();
+  /** Toggles flung by a fast press: momentum carries them on to the second face. */
+  private readonly flung = new Set<string>();
 
   constructor(field: FieldDef) {
     this.defs = field.toggles ?? [];
@@ -139,6 +141,7 @@ export class ToggleSim {
       if (locked) {
         // jammed: nothing turns it (not even our own presses) until the jammer lets go
         this.target.delete(def.id);
+        this.flung.delete(def.id);
         continue;
       }
       if (spin) {
@@ -148,13 +151,16 @@ export class ToggleSim {
         this.target.delete(def.id);
         continue;
       }
-      if (pressing && !this.latched.get(def.id)) {
+      if ((pressing && !this.latched.get(def.id)) || this.flung.has(def.id)) {
+        if (fast && !this.target.has(def.id)) this.flung.add(def.id);
         const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + (fast ? 240 : 120);
         this.target.set(def.id, goal);
         s.angle = Math.min(goal, s.angle + PRESS_RATE * dt);
         if (s.angle >= goal) {
-          this.latched.set(def.id, true);
+          // it stops on the face; a press still on it has to let go before it turns it again
+          this.latched.set(def.id, pressing);
           this.target.delete(def.id);
+          this.flung.delete(def.id);
         }
         continue;
       }

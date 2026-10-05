@@ -432,6 +432,19 @@ describe('each robot type works like its real counterpart', () => {
     expect(await run(127)).toBe(240);
   });
 
+  it('a Toggle hit at speed carries on to the second face even when the robot backs straight off', async () => {
+    const bumper: MechanismSpec = { kind: 'toggleTool', name: 'Bumper', tool: 'bumper', box: { x: 0, y: 7.75, width: 12, length: 0.5 }, bottom: 11, top: 13.5 };
+    const r = await testRobot([bumper]);
+    const { game, run, drive } = await setup(r, { x: -45, y: 0, theta: 270 });
+    const toggle = () => game.state.toggles.find((x) => x.id === 'T_red1')!;
+    drive(127);
+    run(2000, (t) => {
+      if (toggle().touched) drive(-60); // pull away the moment it touches
+    });
+    expect(toggle().angle).toBe(240);
+    expect(game.score().score.toggles.find((x) => x.id === 'T_red1')!.color).toBe('red');
+  });
+
   it('a rear-facing bar lift swings its claw out behind the robot as it rises', () => {
     const rear: LiftSpec = { ...LIFT, facing: 'rear', home: { y: -10, z: 3 } };
     const up = liftEffector(rear, 30); // -30° -> 0°: the bar is horizontal, at full reach

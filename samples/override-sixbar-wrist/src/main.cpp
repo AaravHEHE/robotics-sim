@@ -6,9 +6,11 @@
 //  1. The Preload starts in the claw yellow end down. Turn the wrist over so the red end
 //     is down (the claw now holds the Pin by its top end), raise the 6-bar so the Pin's
 //     bottom clears the Goal, and drop it into red Goal R1: red half visible, 5 points.
-//  2. Press the Red 1 Toggle twice with the front of the chassis (13" tall, so it reaches a
-//     Toggle on top of the wall): yellow -> blue -> red. Now the Preload's yellow half and
-//     the yellow Pin on neutral Goal N_R1 are Owned by red.
+//  2. Turn the wrist back upright, clamp the Cup + yellow Pin standing at (-47, -47) and
+//     set it on the Preload: the Cup nests over the Pin's top.
+//  3. Hit the Red 1 Toggle at full speed with the front of the chassis (13" tall, so it
+//     reaches a Toggle on top of the wall): it turns two faces, yellow -> red. Now the
+//     yellow halves in Red 1 are Owned by red, including the Pin on neutral Goal N_R1.
 //
 // Positions are field coordinates in inches; odom_xyt_set() tells EZ-Template where the
 // robot starts.
@@ -29,6 +31,16 @@ const int TURN_SPEED = 90;
 
 void liftTo(double barDegrees) { sixBar.move_absolute(barDegrees * 5, 200); }
 void wristTo(double degrees) { wrist.move_absolute(degrees * 2, 200); }
+
+// Turn to face (x, y), then drive straight at it and stop `standoff` inches short.
+void approach(double x, double y, double standoff) {
+  const double px = chassis.odom_x_get(), py = chassis.odom_y_get();
+  const double dx = x - px, dy = y - py, d = std::hypot(dx, dy);
+  chassis.pid_turn_set(std::atan2(dx, dy) * 180 / M_PI, TURN_SPEED);
+  chassis.pid_wait();
+  chassis.pid_odom_set({{(x - dx / d * standoff) * okapi::inch, (y - dy / d * standoff) * okapi::inch}, fwd, DRIVE_SPEED});
+  chassis.pid_wait();
+}
 
 void default_constants() {
   chassis.pid_drive_constants_set(20.0, 0.0, 100.0);
@@ -75,24 +87,40 @@ void autonomous() {
   chassis.pid_wait();
   claw.retract();  // the Pin drops into the Goal
   pros::delay(200);
-  liftTo(0);
 
-  // 2. Up the lane x = -58.5 (between the wall-group Cups and R1) to the Red 1 Toggle.
+  // 2. Wrist back upright and the claw down at the floor: clamp the Cup + yellow Pin standing
+  //    at (-47, -47) around the Cup, raise it just over the Preload and set it on.
+  liftTo(0);
+  wristTo(0);
   chassis.pid_odom_set({{-58.5_in, -35.0_in}, rev, DRIVE_SPEED});
   chassis.pid_wait();
+  approach(-47.09, -47.09, 10);
+  claw.extend();
+  pros::delay(150);
+  liftTo(16);  // the claw 7" up and 10.9" ahead: the Cup's bottom just over the Preload's top
+  approach(-47.09, -23.55, 10.85);
+  claw.retract();
+  pros::delay(150);
+  liftTo(0);
+
+  // 3. Up the lane x = -58.5 (between the wall-group Cups and R1) to the Red 1 Toggle.
+  chassis.pid_drive_set(-6_in, DRIVE_SPEED);
+  chassis.pid_wait();
+  approach(-58.5, -36, 0);
   chassis.pid_turn_set(0_deg, TURN_SPEED);
   chassis.pid_wait();
   chassis.pid_odom_set({{-58.5_in, -5_in}, fwd, DRIVE_SPEED});
   chassis.pid_wait();
   chassis.pid_turn_set(270_deg, TURN_SPEED);
   chassis.pid_wait();
+  chassis.pid_drive_set(-14_in, DRIVE_SPEED);  // a run-up
+  chassis.pid_wait();
   chassis.drive_mode_set(ez::DISABLE);
-  for (int i = 0; i < 2; i++) {
-    chassis.drive_set(80, 80);  // the wall stops the robot: plain power, not a PID drive
-    pros::delay(600);
-    chassis.drive_set(-60, -60);
-    pros::delay(250);
-  }
+  // hit it at full speed: it turns two faces, yellow -> red
+  chassis.drive_set(127, 127);  // the wall stops the robot: plain power, not a PID drive
+  pros::delay(600);
+  chassis.drive_set(-60, -60);  // let go: a Toggle a robot still touches doesn't count
+  pros::delay(250);
   chassis.drive_set(0, 0);
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
