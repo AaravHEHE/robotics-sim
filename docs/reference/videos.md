@@ -1,6 +1,6 @@
 # Override robot references (videos)
 
-What each source showed, as used for the robot presets (`docs/robots/`). Watched on
+What each source showed, as used for the robot presets ([../robots.md](../robots.md)). Watched on
 2026-10-04: transcripts from the videos' captions, plus frames.
 
 ## Strategy and scoring level
