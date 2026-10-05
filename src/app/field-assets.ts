@@ -29,7 +29,10 @@ export interface FieldAsset {
 
 const key = (fieldId: string) => `field:${fieldId}`;
 export const loadFieldAsset = (fieldId: string) => safe(idb.get<FieldAsset>('models', key(fieldId)), undefined);
-export const saveFieldAsset = (fieldId: string, a: FieldAsset) => safe(idb.put('models', key(fieldId), a), undefined);
+/** Throws when the browser can't store it (e.g. storage full, or a private window). */
+export const saveFieldAsset = async (fieldId: string, a: FieldAsset) => {
+  await idb.put('models', key(fieldId), a);
+};
 export const clearFieldAsset = (fieldId: string) => safe(idb.del('models', key(fieldId)), undefined);
 
 /**
@@ -41,6 +44,7 @@ export const MOVING_PART =
   /(^|[^a-z])((?<!(hinge|shoulder|dowel|clevis|cotter|roll|spring|pivot|hitch|lock|detent|ball|guide)[\s_-]?)pins?|cups?|toggles?|robots?|scoring objects?)(?![a-z])/i;
 
 const ext = (name: string) => name.toLowerCase().split('.').pop() ?? '';
+// (.gltf only as a single self-contained file: a separate .bin can't be found)
 export const FIELD_ASSET_TYPES = '.glb,.gltf,.obj,.step,.stp,.zip';
 
 /** Read a file the visitor picked into a model (any supported format, or a ZIP of them). */

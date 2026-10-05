@@ -26,9 +26,15 @@ function db(): Promise<IDBDatabase> {
 async function tx<T>(store: Store, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const d = await db();
   return new Promise((resolve, reject) => {
-    const r = fn(d.transaction(store, mode).objectStore(store));
-    r.onsuccess = () => resolve(r.result);
+    const t = d.transaction(store, mode);
+    const r = fn(t.objectStore(store));
     r.onerror = () => reject(r.error);
+    if (mode === 'readonly') r.onsuccess = () => resolve(r.result);
+    else {
+      // a write is only done once its transaction commits (e.g. storage full aborts it)
+      t.oncomplete = () => resolve(r.result);
+      t.onabort = () => reject(t.error ?? new Error('The browser did not save it.'));
+    }
   });
 }
 

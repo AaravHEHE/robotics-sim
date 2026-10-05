@@ -208,8 +208,12 @@ function readStart() {
   const [x, y, t] = spInputs.map((i) => Number(i.value) || 0);
   const half = field().perimeter.inside / 2 - 6;
   state.start = { x: Math.max(-half, Math.min(half, x)), y: Math.max(-half, Math.min(half, y)), theta: t };
+  // show what is used: a clamped value, and no preset once the start is edited
+  spInputs[0].value = String(state.start.x);
+  spInputs[1].value = String(state.start.y);
   settingsChanged();
   clearRecording();
+  renderPresets();
   persistSettings();
 }
 spInputs.forEach((i) => i.addEventListener('change', readStart));
@@ -275,13 +279,23 @@ $('btn-field-look').onclick = async () => {
   fieldDialogShow(await loadFieldAsset(field().id));
   $<HTMLDialogElement>('dlg-field').showModal();
 };
+/** Field-model changes, one after another (each rewrites the stored model). */
+let fieldAssetQueue: Promise<unknown> = Promise.resolve();
+const queued = <T>(fn: () => Promise<T>): Promise<T> => {
+  const next = fieldAssetQueue.then(fn, fn);
+  fieldAssetQueue = next.catch(() => undefined);
+  return next;
+};
+
 $('fm-load').onclick = async () => {
   const file = await pickFile(FIELD_ASSET_TYPES);
   if (!file) return;
+  // the field it was loaded for, even if the visitor switches fields while it reads
+  const f = field();
   const status = (m: string) => ($('fm-status').textContent = m);
   try {
     const model = await readFieldModel(file.name, await file.arrayBuffer(), status);
-    const { unit, removed } = fitToField(model, field());
+    const { unit, removed } = fitToField(model, f);
     status('Saving it in this browser…');
     const a: FieldAsset = {
       name: file.name,
@@ -291,25 +305,37 @@ $('fm-load').onclick = async () => {
       hideBase: $<HTMLInputElement>('fm-hide-base').checked,
       hideStatics: $<HTMLInputElement>('fm-hide-statics').checked,
     };
-    await saveFieldAsset(field().id, a);
+    await queued(() => saveFieldAsset(f.id, a));
+    if (field().id !== f.id) return;
     await showFieldModel();
     fieldDialogShow(a, `Showing “${file.name}” (read as ${unit}${removed ? `; left out ${removed} moving part${removed > 1 ? 's' : ''}` : ''}).`);
   } catch (e) {
     status(`Couldn't use that file: ${(e as Error).message}`);
   }
 };
-async function updateFieldAsset(change: Partial<FieldAsset>) {
-  const a = await loadFieldAsset(field().id);
-  if (!a) return;
-  await saveFieldAsset(field().id, { ...a, ...change });
-  await showFieldModel();
+function updateFieldAsset(change: Partial<FieldAsset>) {
+  const id = field().id;
+  return queued(async () => {
+    const a = await loadFieldAsset(id);
+    if (!a) return;
+    await saveFieldAsset(id, { ...a, ...change });
+    await showFieldModel();
+  }).catch((e) => ($('fm-status').textContent = `Couldn't save that change: ${(e as Error).message}`));
 }
 $<HTMLInputElement>('fm-hide-base').onchange = (e) => void updateFieldAsset({ hideBase: (e.target as HTMLInputElement).checked });
 $<HTMLInputElement>('fm-hide-statics').onchange = (e) => void updateFieldAsset({ hideStatics: (e.target as HTMLInputElement).checked });
 $<HTMLSelectElement>('fm-turns').onchange = (e) => void updateFieldAsset({ turns: Number((e.target as HTMLSelectElement).value) });
 $<HTMLInputElement>('fm-lift').onchange = (e) => void updateFieldAsset({ lift: Number((e.target as HTMLInputElement).value) || 0 });
+// Enter in the number box would submit (close) the dialog
+$<HTMLInputElement>('fm-lift').onkeydown = (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    (e.target as HTMLInputElement).dispatchEvent(new Event('change'));
+  }
+};
 $('fm-clear').onclick = async () => {
-  await clearFieldAsset(field().id);
+  const id = field().id;
+  await queued(() => clearFieldAsset(id));
   await showFieldModel();
   fieldDialogShow(undefined);
 };
@@ -340,6 +366,7 @@ $<HTMLSelectElement>('sp-preset').onchange = (e) => {
 $<HTMLSelectElement>('sp-place').onchange = (e) => {
   state.place = (e.target as HTMLSelectElement).value as PlaceMode;
   settingsChanged();
+  clearRecording();
   persistSettings();
 };
 $<HTMLSelectElement>('auton-length').onchange = (e) => {
@@ -380,6 +407,14 @@ function clearRecording() {
   delete $('panel-console').dataset.rows;
   $('lcd').textContent = '';
   $('start-pose').classList.remove('hidden');
+  const timer = $('timer');
+  timer.textContent = '0:00.00';
+  timer.classList.remove('done');
+  $('timer-sub').textContent = 'Autonomous';
+  const scrub = $<HTMLInputElement>('scrub'); // (this can run before the timeline code below is set up)
+  scrub.min = '0';
+  scrub.max = String(state.autonMs);
+  scrub.value = '0';
 }
 
 // ---------------- compiler + simulator ----------------
@@ -512,9 +547,8 @@ async function run() {
     setStatus('This browser is too old to run programs (needs WebAssembly JSPI: Chrome 137+, Firefox 153+, Safari 27+).', 'err');
     return;
   }
-  // everything the run depends on is frozen now; changing a setting cancels it
-  const seq = ++state.runSeq;
-  const setup: RunSetup = { robot: robot(), field: field(), start: { ...state.start }, autonMs: state.autonMs, place: state.place };
+  let seq = ++state.runSeq;
+  let setup: RunSetup = { robot: robot(), field: field(), start: { ...state.start }, autonMs: state.autonMs, place: state.place };
   const stale = () => seq !== state.runSeq;
   state.running = true;
   clearRecording(); // the field resets: the new run starts from the starting layout
@@ -523,7 +557,14 @@ async function run() {
   const t0 = performance.now();
   try {
     const b = await compile();
-    if (stale()) throw new Cancelled();
+    // compiling doesn't depend on the robot, field or start: if one changed meanwhile, simulate
+    // with what is selected now. From here on, everything the run depends on is frozen and
+    // changing a setting cancels it.
+    if (stale()) {
+      seq = ++state.runSeq;
+      setup = { robot: robot(), field: field(), start: { ...state.start }, autonMs: state.autonMs, place: state.place };
+      clearRecording();
+    }
     renderProblems(b);
     if (!b.ok || !b.wasm) {
       const n = b.diagnostics.filter((d) => d.severity === 'error').length + b.notes.filter((n) => n.level === 'error').length;
@@ -768,7 +809,8 @@ function renderScore(rec: Recording | null, t: number) {
   const g = rec?.game ?? null;
   const setup = state.setup;
   const atEnd = !!rec && t >= rec.stop - 1;
-  const bucket = atEnd ? -1 : Math.floor(t / 100);
+  // ~10 times a second while playing; exactly the shown moment when paused or scrubbing
+  const bucket = atEnd ? -1 : state.playing ? Math.floor(t / 100) : t + 0.5;
   if (rec && scoreCache?.rec === rec && scoreCache.bucket === bucket) return;
   scoreCache = rec ? { rec, bucket } : null;
   // the run's own field and robot, not whatever is selected now
@@ -1010,8 +1052,9 @@ function openRobotDialog() {
     state.robots = [...PRESETS, ...(await listCustomRobots())];
     state.robotId = p.id;
     renderRobotSelect();
+    settingsChanged();
+    clearRecording();
     await applyRobot();
-    invalidateRun();
     persistSettings();
     $<HTMLDialogElement>('dlg-robot').close();
     setStatus(`Saved robot “${p.name}” in this browser.`, 'ok');
@@ -1023,9 +1066,7 @@ function openRobotDialog() {
     const assetId = 'glb-' + Date.now().toString(36);
     await saveModel(assetId, buf);
     editingGlb = { assetId };
-    const p = validate();
-    if (p) await viewer.setRobot(p, buf);
-    setStatus(`Attached ${f.name}. Save the robot to keep it.`);
+    setStatus(`Attached ${f.name}. Save the robot to see and keep it.`);
   };
   $('rb-model-clear').onclick = () => {
     editingGlb = null;
@@ -1063,6 +1104,8 @@ function openRobotDialog() {
     state.robots = [...PRESETS, ...(await listCustomRobots())];
     state.robotId = PRESETS[0].id;
     renderRobotSelect();
+    settingsChanged();
+    clearRecording();
     await applyRobot();
     persistSettings();
     $<HTMLDialogElement>('dlg-robot').close();

@@ -199,6 +199,9 @@ export class FieldViewer {
   setField(field: FieldDef) {
     this.field = field;
     clearGroup(this.fieldGroup);
+    // the last field's model isn't this field's (the app loads this one's, if any)
+    clearGroup(this.fieldModel);
+    this.hideBuiltIn = { base: false, statics: false };
     clearGroup(this.gameGroup);
     this.toggleRolls.clear();
     const inside = field.perimeter.inside;
@@ -404,7 +407,7 @@ export class FieldViewer {
     this.profile = profile;
     clearGroup(this.robotGroup);
     clearGroup(this.ghost);
-    this.mechs = [];
+    this.mechs = (body?.userData.mechs as MechVisual[] | undefined) ?? [];
     this.robotGroup.add(body ?? this.boxRobot(profile));
     this.manipVis = new ManipulatorVisuals(profile, this.robotGroup, !body);
     this.manipVis.setHeld(this.lastGameState);
@@ -522,11 +525,14 @@ export class FieldViewer {
     const center = box.getCenter(new THREE.Vector3());
     const off = p.model?.offset ?? [0, 0, 0];
     root.position.set(-center.x + off[0], -box.min.y + off[2], -center.z - off[1]);
+    // the model's named moving parts (kept on the model until the robot is shown)
+    const mechs: MechVisual[] = [];
     for (const m of p.mechanisms) {
       if (!m.node) continue;
       const obj = root.getObjectByName(m.node);
-      if (obj) this.mechs.push({ spec: m, object: obj, base: { rotation: obj.rotation.clone(), position: obj.position.clone() } });
+      if (obj) mechs.push({ spec: m, object: obj, base: { rotation: obj.rotation.clone(), position: obj.position.clone() } });
     }
+    holder.userData.mechs = mechs;
     holder.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
     });
