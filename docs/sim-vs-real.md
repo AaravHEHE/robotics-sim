@@ -57,6 +57,15 @@ The app also had reliability problems, fixed in 3.1:
 
 Runs now freeze their settings, and stale results are dropped. Errors are reported instead of breaking the page.
 
+## Changed in Milestone 4
+
+| Before | Now |
+|---|---|
+| The field kept the last run's pieces until the next run finished. | The field shows its starting layout again whenever the code, robot, start or field changes, and at the start of every run. |
+| Picking a robot kept the code in the editor, so one program ran on every robot (with the wrong ports). | Picking a robot opens its own auton (after asking, if you edited the code), and a run whose code uses ports the robot doesn't have says so in the status bar. |
+| Robot presets were generic. | Nine presets are modelled on real robots from reveal videos ([robots.md](robots.md)), with chain bars on cascades, intakes that hand off to an arm folded over them, and roller claws. |
+| A dropped piece inside the robot's outline could be pushed out sideways, out of a claw's reach. | It is pushed out the shortest way. |
+
 ## Still different
 
 ### Driving and turning
@@ -78,8 +87,8 @@ Runs now freeze their settings, and stale results are dropped. Errors are report
 | **Medium** | Intakes never jam. Everything that touches the zone while it spins is pulled in, and a lying Pin comes up with the end nearer the robot at the bottom. | Pieces jam, come in sideways or bounce out, and the orientation of a lying Pin depends on the intake's design. |
 | **Medium** | Floor physics is 2D. Pieces slide and spin on the floor, but stacks never tip over and pieces never bounce or roll. | A stack knocked hard falls over; a Pin can roll away. |
 | **Low** | Grip strength isn't modelled. A closed claw holds whatever it closed on, and a motor claw is "closed" past an angle, whatever the force. | A weak claw drops pieces when the robot jolts. |
-| **Low** | The drive team restocks the Skills Loaders about once a second, Pins and Cups alternating. | A person loads them, as fast as they can. |
-| **Medium** | Toggles move one face per press, a roller can turn them either way, and a jammer locks them completely. | The real mechanism's feel, and how far a hard press turns it, may differ. |
+| **Low** | The drive team restocks the Skills Loaders about once a second, each time with a loaded stack (a Pin with a Cup nested over it), up to two per Loader; a robot takes one loaded stack at a time from the bottom. | A person loads them, as fast as they can, separately or nested. |
+| **Medium** | Toggles move one face per press, or two when hit faster than 40 in/s (as 8059's passive toggler does in autonomous); a roller can turn them either way, and a jammer locks them completely. | The real mechanism's feel, and the speed at which a hit carries a Toggle two faces, may differ. |
 
 ### Sensors
 

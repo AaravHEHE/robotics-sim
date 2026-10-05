@@ -25,14 +25,21 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
   Pins, Cups, Goals, Toggles and Loaders.
   - **Scoring:** live, by the manual's rules, including the Autonomous Bonus, the AWP
     checklist and Skills scoring.
-  - **Robots:** lifts, claws, intakes, staging trays, wrists and Toggle tools in the
-    profile turn your code's motor and piston commands into picking up, stacking and
-    dropping. Pieces visibly ride through intakes into trays and claws. There are 8
-    presets for the common robot designs, each working like its real counterpart (see
-    [docs/override-research.md](docs/override-research.md)).
-  - **Samples:** 8 Override autons covering PROS, LemLib and EZ-Template, head-to-head
-    autonomous and Skills. There is also a **mechanism test** for every robot, which
-    drives, turns and works each mechanism, printing PASS / FAIL per check.
+  - **Robots:** lifts (arm, 4-bar, 6-bar, DR4B, cascade, chain bar on a cascade),
+    claws, roller claws, intakes, staging trays, wrists and Toggle tools in the profile
+    turn your code's motor and piston commands into picking up, stacking and dropping.
+    Pieces visibly ride through intakes into trays and claws. There are 9 presets
+    modelled on real robots (the Banshee, an 8059A-style DR4B, the Claw Gate, ACE, the
+    Flex hero bot and more); see [docs/robots.md](docs/robots.md).
+  - **Samples:** a competitive 15 s auton for every robot, each written for that robot
+    and using all of its mechanisms. The four meta robots each build a 3-Pin stack and
+    turn a Toggle (55 points and the Autonomous Win Point), in PROS, LemLib (one starting
+    from the GPS) or EZ-Template. There are also two Skills runs (Match Loads, both
+    Toggles, a Midfield park) and a **mechanism test** for every robot, which drives,
+    turns and works each mechanism, printing PASS / FAIL per check.
+  - **Official field model:** **Field › Model…** loads the official VEX field CAD (the
+    ZIP of STEP files, or a GLB / OBJ export) for the look of the field. It stays in your
+    browser and never changes the simulation.
 
 Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safari 27+.
 
@@ -41,9 +48,13 @@ Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safa
 1. Open a sample (**Samples**) or **Import** a zip of your PROS project folder. The
    copies of PROS / LemLib / EZ-Template headers in your project's `include/` are ignored
    automatically.
-2. Pick a **Robot** whose ports and drivetrain match your code, or **Edit** one.
+2. Pick a **Robot** whose ports and drivetrain match your code, or **Edit** one. Picking
+   a robot opens its auton (it asks first if you have edited the code); **Auton** and
+   **Test** open that robot's auton or mechanism test. If your code uses ports the robot
+   doesn't have, the run says so.
 3. Set the **start position**. LemLib's first `setPose()` can also place the robot.
-4. Press **Run** (Ctrl+Enter). Problems, console output (`printf`, `std::cout`), the
+4. Press **Run** (Ctrl+Enter). The field resets to its starting layout for every run.
+   Problems, console output (`printf`, `std::cout`), the
    brain screen (`pros::lcd`) and notes about unsupported calls appear below the editor.
 
 `initialize()` runs first. The match clock starts when `autonomous()` starts, as in a
@@ -93,6 +104,9 @@ After changing anything in `shim/` or `src/compiler/flags.ts`, run
   sensors, robot presets and samples.
 - **Milestone 3:** reliability fixes, realistic motion (no turn swing), correct and
   distinct mechanisms, animated pieces, and mechanism tests.
+- **Milestone 4:** the field resets between runs and the code follows the robot; robots
+  rebuilt from videos of the real meta designs; competitive robot-specific autons;
+  the official field model (loaded locally) and a more realistic look.
 
 Next up are more drivetrains and driver control. See
 [docs/prototype-report.md](docs/prototype-report.md) for the feasibility study behind the
