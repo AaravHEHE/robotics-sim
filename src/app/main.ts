@@ -23,6 +23,7 @@ import {
   projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
 import { MapPanel } from './map-panel.ts';
+import { LayoutEditor } from './robot-editor/index.ts';
 import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
 
@@ -1076,6 +1077,22 @@ $('btn-samples').onclick = () => {
 // ---------------- robot editor dialog ----------------
 
 let robotEditor: ReturnType<typeof jsonEditor> | null = null;
+let layoutEditor: LayoutEditor | null = null;
+
+/** The robot dialog's tabs: the visual layout editor, or the JSON. */
+function showRobotTab(tab: 'layout' | 'json') {
+  document.querySelectorAll<HTMLButtonElement>('[data-rtab]').forEach((b) => b.classList.toggle('active', b.dataset.rtab === tab));
+  $('robot-layout').hidden = tab !== 'layout';
+  $('robot-json').hidden = tab !== 'json';
+}
+document.querySelectorAll<HTMLButtonElement>('[data-rtab]').forEach((b) => (b.onclick = () => showRobotTab(b.dataset.rtab as 'layout' | 'json')));
+// Ctrl+Z in the layout editor (the JSON editor has its own)
+$('dlg-robot').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !$('robot-layout').hidden && !(e.target as HTMLElement).closest('input, textarea, select')) {
+    e.preventDefault();
+    layoutEditor?.undo();
+  }
+});
 let editingGlb: { assetId: string } | null = null;
 
 function robotSummary(r: RobotProfile): string {
@@ -1095,6 +1112,28 @@ function openRobotDialog() {
   const host = $('robot-json');
   robotEditor?.dispose();
   robotEditor = jsonEditor(host, JSON.stringify(r, null, 2));
+  // the layout editor writes into the JSON (where it is validated); a JSON edit redraws the layout
+  let fromLayout = false;
+  layoutEditor ??= new LayoutEditor(
+    {
+      top: $('rl-top'),
+      side: $('rl-side'),
+      preview: $('rl-preview'),
+      pick: $<HTMLSelectElement>('rl-pick'),
+      add: $<HTMLSelectElement>('rl-add'),
+      remove: $<HTMLButtonElement>('rl-remove'),
+      undo: $<HTMLButtonElement>('rl-undo'),
+      form: $('rl-form'),
+    },
+    (p) => {
+      fromLayout = true;
+      robotEditor?.setValue(JSON.stringify(p, null, 2));
+      fromLayout = false;
+    },
+  );
+  layoutEditor.reset();
+  layoutEditor.load(r);
+  showRobotTab('layout');
   editingGlb = r.model ? { assetId: r.model.assetId } : null;
   const validate = () => {
     let parsed: unknown;
@@ -1110,7 +1149,17 @@ function openRobotDialog() {
     $<HTMLButtonElement>('rb-save').disabled = errs.length > 0;
     return errs.length ? null : (parsed as RobotProfile);
   };
-  robotEditor.onDidChangeModelContent(validate);
+  robotEditor.onDidChangeModelContent(() => {
+    validate();
+    if (fromLayout) return;
+    try {
+      const p = JSON.parse(robotEditor!.getValue()) as RobotProfile;
+      // only a profile complete enough to draw
+      if (p?.size && p.drivetrain && Array.isArray(p.mechanisms) && Array.isArray(p.devices)) layoutEditor?.load(p);
+    } catch {
+      /* mid-edit JSON: the layout waits for valid JSON */
+    }
+  });
   validate();
   $<HTMLButtonElement>('rb-delete').hidden = isPreset;
   $<HTMLButtonElement>('rb-save').textContent = isPreset ? 'Save as my robot (copy)' : 'Save';

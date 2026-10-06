@@ -155,7 +155,31 @@
       <h2 id="robot-title">Robot profile</h2>
       <p class="muted">Real measurements in inches. The profile decides size, collisions and speed; a 3D model is only cosmetic. Drive ports are signed the way your code must declare them to drive forward.</p>
       <div class="robot-grid">
-        <div id="robot-json" class="json-editor"></div>
+        <div class="robot-main">
+          <div class="seg rl-tabs" role="tablist" aria-label="Edit as">
+            <button type="button" data-rtab="layout" class="active" role="tab">Layout</button><button type="button" data-rtab="json" role="tab">JSON</button>
+          </div>
+          <div id="robot-layout" class="robot-layout">
+            <p class="muted rl-hint">Drag the shapes: the chassis and Toggle tools from their corners, lift tips, pivots and sensors anywhere (snaps to ¼″, Shift for ½″). Pick a part to edit its details. Ctrl+Z undoes.</p>
+            <div class="rl-views">
+              <figure><figcaption>From above</figcaption><div id="rl-top" class="rl-view"></div></figure>
+              <figure><figcaption>From the side</figcaption><div id="rl-side" class="rl-view"></div></figure>
+            </div>
+            <div class="rl-bottom">
+              <div id="rl-preview" class="rl-preview" aria-label="3D preview"></div>
+              <div class="rl-props">
+                <div class="rl-props-head">
+                  <select id="rl-pick" aria-label="Part to edit"></select>
+                  <select id="rl-add" aria-label="Add a mechanism or sensor"></select>
+                  <button type="button" id="rl-remove" class="ghost danger">Remove</button>
+                  <button type="button" id="rl-undo" class="ghost" disabled title="Undo (Ctrl+Z)">Undo</button>
+                </div>
+                <div id="rl-form"></div>
+              </div>
+            </div>
+          </div>
+          <div id="robot-json" class="json-editor" hidden></div>
+        </div>
         <div class="robot-side">
           <div id="robot-summary" class="robot-summary"></div>
           <ul id="robot-errors" class="errors"></ul>

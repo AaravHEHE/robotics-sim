@@ -266,7 +266,11 @@ export class MapPanel {
     if (grab) {
       // dragging a point: the camera stays put
       this.host.viewer.setOrbitEnabled(false);
-      this.host.viewer.canvas.setPointerCapture(e.pointerId);
+      try {
+        this.host.viewer.canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* a pointer the browser no longer tracks */
+      }
       this.selected = grab.id;
       this.render();
     }
