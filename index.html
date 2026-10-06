@@ -140,7 +140,7 @@
   <dialog id="dlg-field" class="dialog">
     <form method="dialog">
       <h2>Field model</h2>
-      <p class="muted">Load the official field CAD (VEX publishes it as a ZIP of STEP files on its field CAD page) or any GLB / glTF / OBJ export of it. It stays in this browser: it is never uploaded or published. It only changes the look; the simulation still uses the measured field. Pins, Cups and Toggles in the model are left out, because the simulation draws them where they really are.</p>
+      <p class="muted">Load the official field CAD: the ZIP from VEX's field CAD page (e.g. <code>v5rc-override-fieldcad.zip</code>), or a GLB / OBJ export of it. Converting the full STEP field takes a few minutes the first time; after that it loads in a second. It stays in this browser: it is never uploaded or published. It only changes the look; the simulation still uses the measured field. Pins, Cups, Toggles and small hardware in the model are left out (the simulation draws the game pieces where they really are), and parts are colored by part number.</p>
       <div class="stack">
         <button type="button" id="fm-load" class="primary">Load a field model (.zip, .step, .glb, .obj)…</button>
         <p id="fm-status" class="muted" role="status" aria-live="polite">No model loaded: the built-in field is shown.</p>

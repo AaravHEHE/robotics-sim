@@ -38,8 +38,11 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
     Toggles, a Midfield park) and a **mechanism test** for every robot, which drives,
     turns and works each mechanism, printing PASS / FAIL per check.
   - **Official field model:** **Field › Model…** loads the official VEX field CAD (the
-    ZIP of STEP files, or a GLB / OBJ export) for the look of the field. It stays in your
-    browser and never changes the simulation.
+    ZIP from VEX's field CAD page, or a GLB / OBJ export) for the look of the field. The
+    130 MB STEP is converted in your browser in a few minutes, the first time only: it is
+    split into pieces the STEP reader can hold, its Pins, Cups, Toggles and screws are left
+    out, and its parts are colored by part number. It stays in your browser and never
+    changes the simulation.
 
 Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safari 27+.
 

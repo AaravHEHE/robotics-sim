@@ -136,7 +136,23 @@ export interface FieldDef {
   startPositions?: StartPosition[];
   /** Game module providing scoring rules (null for an empty practice field). */
   game: null | { id: string };
+  /**
+   * How to color an official field CAD model loaded for this field, part by part: the first
+   * rule whose `match` (a case-insensitive regex) finds "<assembly part>/<part>" in the
+   * part's name wins. Cosmetic only.
+   */
+  cadLook?: CadLookRule[];
   sources?: string[];
+}
+
+export interface CadLookRule {
+  match: string;
+  /** CSS hex color. */
+  color: string;
+  /** 0-1: below 1 the part is see-through (polycarbonate). */
+  opacity?: number;
+  roughness?: number;
+  metalness?: number;
 }
 
 export function validateField(f: unknown): string[] {

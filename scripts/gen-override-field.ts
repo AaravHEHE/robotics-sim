@@ -178,6 +178,26 @@ const field: FieldDef = {
   },
   startPositions,
   game: { id: 'override' },
+  // The official field CAD (276-9250-000, loaded by the visitor) carries no colors (every
+  // part is SolidWorks' default): its parts are colored by part number here.
+  cadLook: [
+    { match: '^Tape.*Red', color: '#d0312d', roughness: 0.6 },
+    { match: '^Tape.*Blue', color: '#2c6fd6', roughness: 0.6 },
+    { match: '^Tape', color: '#f2f2f0', roughness: 0.6 },
+    { match: 'Alliance Stations.*199c', color: '#c8102e', roughness: 0.8 },
+    { match: 'Alliance Stations.*299c', color: '#0072ce', roughness: 0.8 },
+    { match: '276-6904-001', color: '#6d7175', roughness: 1 }, // foam field tiles
+    { match: '276-7596-01[45]', color: '#e6eef4', opacity: 0.2, roughness: 0.05 }, // polycarbonate perimeter panels
+    { match: 'Red \\d/276-9250-003', color: '#c8282e', roughness: 0.55 }, // Goal bodies
+    { match: 'Blue \\d/276-9250-003', color: '#2a66d0', roughness: 0.55 },
+    { match: '276-9250-003', color: '#202226', roughness: 0.55 },
+    { match: '276-4847-011', color: '#3a3d42', roughness: 0.5, metalness: 0.3 }, // Goal base plates
+    { match: 'Red Loader', color: '#d8343a', roughness: 0.55 },
+    { match: 'Blue Loader', color: '#2f6fde', roughness: 0.55 },
+    { match: '276-9250-03[2-6]', color: '#eef4f8', opacity: 0.3, roughness: 0.05 }, // Loader chutes
+    { match: '^276-7596-000', color: '#c9cdd2', roughness: 0.35, metalness: 0.8 }, // perimeter extrusions
+    { match: '', color: '#2a2d31', roughness: 0.7 }, // everything else: black plastic
+  ],
   sources: [
     'VEX V5RC Override Game Manual v2.0 (2026-09-03), Appendix A drawings A5-A16, rules SC1-SC8, SG1-SG13, RSC1-RSC4',
     'https://content.vexrobotics.com/docs/2026-2027/override/files/override-2.0.pdf',

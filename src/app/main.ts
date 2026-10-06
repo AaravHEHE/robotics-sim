@@ -295,7 +295,7 @@ $('fm-load').onclick = async () => {
   const status = (m: string) => ($('fm-status').textContent = m);
   try {
     const model = await readFieldModel(file.name, await file.arrayBuffer(), status);
-    const { unit, removed } = fitToField(model, f);
+    const { unit, removed, hardware } = fitToField(model, f);
     status('Saving it in this browser…');
     const a: FieldAsset = {
       name: file.name,
@@ -308,7 +308,7 @@ $('fm-load').onclick = async () => {
     await queued(() => saveFieldAsset(f.id, a));
     if (field().id !== f.id) return;
     await showFieldModel();
-    fieldDialogShow(a, `Showing “${file.name}” (read as ${unit}${removed ? `; left out ${removed} moving part${removed > 1 ? 's' : ''}` : ''}).`);
+    fieldDialogShow(a, `Showing “${file.name}” (read as ${unit}${removed ? `; left out ${removed} moving part${removed > 1 ? 's' : ''}` : ''}${hardware ? ` and ${hardware} pieces of hardware` : ''}).`);
   } catch (e) {
     status(`Couldn't use that file: ${(e as Error).message}`);
   }

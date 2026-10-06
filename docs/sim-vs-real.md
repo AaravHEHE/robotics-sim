@@ -65,6 +65,7 @@ Runs now freeze their settings, and stale results are dropped. Errors are report
 | Picking a robot kept the code in the editor, so one program ran on every robot (with the wrong ports). | Picking a robot opens its own auton (after asking, if you edited the code), and a run whose code uses ports the robot doesn't have says so in the status bar. |
 | Robot presets were generic. | Nine presets are modelled on real robots from reveal videos ([robots.md](robots.md)), with chain bars on cascades, intakes that hand off to an arm folded over them, and roller claws. |
 | A dropped piece inside the robot's outline could be pushed out sideways, out of a claw's reach. | It is pushed out the shortest way. |
+| The field was drawn from the manual's drawings only. | The official field CAD can be loaded for the look (Field › Model…). The simulation still uses the manual's measurements; the CAD's Goals and Loaders line up with them. Its colors come from part numbers (the CAD has none), and screws and other hardware under 1″ are left out. |
 
 ## Still different
 

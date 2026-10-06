@@ -9,7 +9,9 @@ import { unzipSync } from 'fflate';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { FieldDef } from '../sim/field.ts';
+import { splitStep } from './step-split.ts';
 import { idb, safe } from './storage.ts';
 
 /** What the visitor chose for a field, stored per field id. */
@@ -38,10 +40,14 @@ export const clearFieldAsset = (fieldId: string) => safe(idb.del('models', key(f
 /**
  * Parts of the CAD that the simulation draws itself because they move (Pins, Cups,
  * Toggles) or aren't part of the field (robots): leaving them in the model would show
- * them twice, frozen in place. Hardware pins (hinge, dowel, ...) stay.
+ * them twice, frozen in place. Hardware pins (hinge, dowel, ...) stay. The official VEX
+ * CAD names parts by part number: 276-9250-80x are the Pins, 276-9250-81x the Cups and
+ * 276-9250-120 the Toggles (V5RC Override field, 276-9250-000).
  */
 export const MOVING_PART =
-  /(^|[^a-z])((?<!(hinge|shoulder|dowel|clevis|cotter|roll|spring|pivot|hitch|lock|detent|ball|guide)[\s_-]?)pins?|cups?|toggles?|robots?|scoring objects?)(?![a-z])/i;
+  /(^|[^a-z])((?<!(hinge|shoulder|dowel|clevis|cotter|roll|spring|pivot|hitch|lock|detent|ball|guide)[\s_-]?)pins?|cups?|toggles?(?!\s*zones?)|robots?|scoring objects?)(?![a-z])|276-9250-8[01]x|276-9250-120(?!\d)/i;
+/** Parts smaller than this (in) are hardware (screws, nuts, standoffs): left out to keep the model light. */
+export const HARDWARE_IN = 1;
 
 const ext = (name: string) => name.toLowerCase().split('.').pop() ?? '';
 // (.gltf only as a single self-contained file: a separate .bin can't be found)
@@ -75,56 +81,144 @@ export async function readFieldModel(name: string, data: ArrayBuffer, progress: 
 // ---------------- STEP ----------------
 
 const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/';
-interface OcctMesh {
-  name?: string;
-  color?: [number, number, number];
-  attributes: { position: { array: number[] }; normal?: { array: number[] } };
-  index: { array: number[] };
-}
-interface Occt {
-  ReadStepFile(data: Uint8Array, params: null): { success: boolean; meshes: OcctMesh[] };
-}
-let occt: Promise<Occt> | null = null;
+/** Triangle sizes: within 3 mm of the true surface, and 0.8 rad between facets. */
+const TESSELLATION = { linearDeflectionType: 'absolute_value', linearDeflection: 3, angularDeflection: 0.8 };
 
-function loadOcct(): Promise<Occt> {
-  occt ??= new Promise<Occt>((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = OCCT + 'occt-import-js.js';
-    s.onload = () => {
-      const init = (window as unknown as { occtimportjs?: (o: object) => Promise<Occt> }).occtimportjs;
-      if (!init) return reject(new Error('The STEP reader did not load.'));
-      init({ locateFile: (f: string) => OCCT + f }).then(resolve, reject);
+interface ChunkMesh {
+  /** The top-level assembly part it belongs to (its index and name). */
+  top: number;
+  topName: string;
+  name: string;
+  /** Its triangles by color (CAD often colors faces, not whole parts), each with its own vertices. */
+  parts: Array<{ color: [number, number, number] | null; position: Float32Array; index: Uint32Array }>;
+}
+
+/**
+ * Reads one STEP chunk into triangles in a worker of its own (a fresh reader each time:
+ * its memory can't shrink, and the page stays responsive during a multi-minute read).
+ */
+const WORKER = `
+importScripts('${OCCT}occt-import-js.js');
+onmessage = async (e) => {
+  try {
+    const occt = await occtimportjs({ locateFile: (f) => '${OCCT}' + f });
+    const res = occt.ReadStepFile(new TextEncoder().encode(e.data.text), e.data.params);
+    if (!res.success) throw new Error('This STEP file could not be read.');
+    let top = res.root;
+    if (top.meshes.length === 0 && top.children.length === 1) top = top.children[0];
+    const out = [], transfer = [];
+    const walk = (node, i, name) => {
+      for (const mi of node.meshes) {
+        const m = res.meshes[mi];
+        if (!m.index.array.length) continue;
+        const pos = m.attributes.position.array;
+        const idx = m.index.array;
+        // split the triangles by face color (the part's own color where a face has none)
+        const byColor = new Map();
+        const add = (color, from, to) => {
+          const key = color ? color.join() : '';
+          let e = byColor.get(key);
+          if (!e) byColor.set(key, (e = { color, tris: [] }));
+          e.tris.push([from, to]);
+        };
+        const faces = m.brep_faces || [];
+        let covered = 0;
+        for (const f of faces) if (f.last >= f.first) { add(f.color || m.color || null, f.first, f.last); covered += f.last - f.first + 1; }
+        if (!covered) add(m.color || null, 0, idx.length / 3 - 1);
+        const parts = [];
+        for (const e of byColor.values()) {
+          let n = 0;
+          for (const [a, b] of e.tris) n += b - a + 1;
+          // only the vertices these triangles use
+          const index = new Uint32Array(n * 3);
+          const remap = new Map();
+          const verts = [];
+          let o = 0;
+          for (const [a, b] of e.tris) {
+            for (let t = a * 3; t < (b + 1) * 3; t++) {
+              const v = idx[t];
+              let w = remap.get(v);
+              if (w === undefined) {
+                w = remap.size;
+                remap.set(v, w);
+                verts.push(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
+              }
+              index[o++] = w;
+            }
+          }
+          const position = new Float32Array(verts);
+          parts.push({ color: e.color, position, index });
+          transfer.push(index.buffer, position.buffer);
+        }
+        out.push({ top: i, topName: name, name: m.name || '', parts });
+      }
+      for (const c of node.children) walk(c, i, name);
     };
-    s.onerror = () => reject(new Error('Could not download the STEP reader (occt-import-js). Check the connection, or export the model as GLB.'));
-    document.head.appendChild(s);
-  }).catch((e) => {
-    occt = null;
-    throw e;
+    top.children.forEach((c, i) => walk(c, i, c.name || ''));
+    if (top.meshes.length) walk({ meshes: top.meshes, children: [] }, -1, top.name || '');
+    postMessage({ ok: true, meshes: out }, transfer);
+  } catch (err) {
+    postMessage({ ok: false, message: String(err && err.message || err) });
+  }
+};`;
+
+function readChunk(text: string): Promise<ChunkMesh[]> {
+  const url = URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }));
+  const w = new Worker(url);
+  URL.revokeObjectURL(url);
+  return new Promise((resolve, reject) => {
+    w.onmessage = (e: MessageEvent<{ ok: boolean; meshes?: ChunkMesh[]; message?: string }>) => {
+      w.terminate();
+      if (e.data.ok) resolve(e.data.meshes!);
+      else reject(new Error(e.data.message));
+    };
+    w.onerror = (e) => {
+      w.terminate();
+      reject(new Error(e.message || 'Could not download the STEP reader (occt-import-js). Check the connection, or export the model as GLB.'));
+    };
+    w.postMessage({ text, params: TESSELLATION });
   });
-  return occt;
+}
+
+/**
+ * A material for a CAD color: clear parts (light, unsaturated colors on polycarbonate) are
+ * see-through, and nothing is mirror-like.
+ */
+function cadMaterial(c: number[]): THREE.MeshStandardMaterial {
+  const color = new THREE.Color(c[0], c[1], c[2]);
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
 }
 
 async function readStep(data: Uint8Array, progress: (msg: string) => void): Promise<THREE.Group> {
-  progress('Loading the STEP reader (about 7 MB, first time only)…');
-  const reader = await loadOcct();
-  progress('Converting STEP to triangles (this can take a while for a whole field)…');
+  progress('Splitting the STEP file into parts the reader can hold…');
   await new Promise((r) => setTimeout(r, 30)); // let the message paint
-  const res = reader.ReadStepFile(data, null);
-  if (!res.success) throw new Error('This STEP file could not be read.');
+  // a whole field is too big for the reader's memory at once: it goes in chunks
+  const chunks = splitStep(new TextDecoder('latin1').decode(data));
   const group = new THREE.Group();
-  const mats = new Map<string, THREE.Material>();
-  for (const m of res.meshes) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
-    if (m.attributes.normal) geo.setAttribute('normal', new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
-    else geo.computeVertexNormals();
-    geo.setIndex(m.index.array);
-    const c = m.color ?? [0.7, 0.72, 0.75];
-    const k = c.map((v) => v.toFixed(3)).join();
-    if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: 0.6, metalness: 0.1 }));
-    const mesh = new THREE.Mesh(geo, mats.get(k));
-    mesh.name = m.name ?? '';
-    group.add(mesh);
+  const tops = new Map<number, THREE.Group>();
+  const mats = new Map<string, THREE.MeshStandardMaterial>();
+  for (const [i, chunk] of chunks.entries()) {
+    progress(`Converting STEP to triangles: part ${i + 1} of ${chunks.length} (a whole field takes a few minutes)…`);
+    for (const m of await readChunk(chunk)) {
+      let top = tops.get(m.top);
+      if (!top) {
+        top = new THREE.Group();
+        top.name = m.topName;
+        tops.set(m.top, top);
+        group.add(top);
+      }
+      for (const part of m.parts) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(part.position, 3));
+        geo.setIndex(new THREE.BufferAttribute(part.index, 1));
+        const c = part.color ?? [0.7, 0.72, 0.75];
+        const k = c.map((v) => v.toFixed(3)).join();
+        if (!mats.has(k)) mats.set(k, cadMaterial(c));
+        const mesh = new THREE.Mesh(geo, mats.get(k));
+        mesh.name = m.name;
+        top.add(mesh);
+      }
+    }
   }
   return group;
 }
@@ -140,7 +234,7 @@ const UNITS: Array<[string, number]> = [['mm', 1 / 25.4], ['cm', 1 / 2.54], ['m'
  * size of the field (perimeter included). Removes the moving parts (see MOVING_PART).
  * Returns what it did, for the dialog.
  */
-export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: string; removed: number } {
+export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: string; removed: number; hardware: number } {
   let removed = 0;
   const drop: THREE.Object3D[] = [];
   model.traverse((o) => {
@@ -168,18 +262,111 @@ export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: stri
   const box = new THREE.Box3().setFromObject(root);
   const c = box.getCenter(new THREE.Vector3());
   root.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+  root.updateMatrixWorld(true);
+  // the floor is the top of the tiles, not the bottom of the model
+  root.position.y -= tileTop(root, field);
+  applyCadLook(root, field);
+  // hardware (screws, nuts) is invisible at field scale but a large share of the triangles
+  root.updateMatrixWorld(true);
+  const tiny: THREE.Object3D[] = [];
+  const extent = new THREE.Vector3();
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && new THREE.Box3().setFromObject(o).getSize(extent).length() < HARDWARE_IN * Math.SQRT2) tiny.push(o);
+  });
+  for (const o of tiny) o.removeFromParent();
+  mergeByMaterial(root);
   model.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {
-      m.castShadow = true;
+      m.castShadow = false; // millions of triangles: drawing them again for shadows halves the frame rate
       m.receiveShadow = true;
     }
   });
-  return { unit: unit[0], removed };
+  return { unit: unit[0], removed, hardware: tiny.length };
+}
+
+/**
+ * Color the parts by the field's `cadLook` rules (official CAD often has no real colors).
+ * Each part is matched by "<top-level assembly part>/<part>".
+ */
+function applyCadLook(root: THREE.Object3D, field: FieldDef): void {
+  const rules = (field.cadLook ?? []).map((rule) => ({ rule, re: new RegExp(rule.match, 'i'), mat: null as THREE.MeshStandardMaterial | null }));
+  if (!rules.length) return;
+  // the assembly part it is in: its nearest named group
+  const topOf = (o: THREE.Object3D) => {
+    for (let t = o.parent; t && t !== root; t = t.parent) if (t.name) return t.name;
+    return '';
+  };
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const key = `${topOf(m)}/${m.name}`;
+    const hit = rules.find((x) => x.re.test(key));
+    if (!hit) return;
+    const { color, opacity = 1, roughness = 0.6, metalness = 0 } = hit.rule;
+    hit.mat ??= new THREE.MeshStandardMaterial({ color, roughness, metalness, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+    m.material = hit.mat;
+  });
+}
+
+/**
+ * Height of the tiles' top surface above the model's bottom: looking straight down at four
+ * open spots of the field (between the Goals), the median of the first surface low enough
+ * to be the floor (under 3 in). 0 when nothing is found.
+ */
+function tileTop(root: THREE.Object3D, field: FieldDef): number {
+  const r = field.perimeter.inside / 4;
+  const ray = new THREE.Raycaster();
+  const heights: number[] = [];
+  for (const [x, z] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+    ray.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
+    const hit = ray.intersectObject(root, true).find((h) => h.point.y < 3);
+    if (hit) heights.push(hit.point.y);
+  }
+  if (!heights.length) return 0;
+  heights.sort((a, b) => a - b);
+  return heights[Math.floor(heights.length / 2)];
+}
+
+/** One mesh per material within each group: thousands of parts draw in a few calls. */
+function mergeByMaterial(root: THREE.Object3D): void {
+  const parents = new Set<THREE.Object3D>();
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && o.parent) parents.add(o.parent);
+  });
+  for (const parent of parents) {
+    const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const c of parent.children) {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material) || m.children.length) continue;
+      byMat.set(m.material, [...(byMat.get(m.material) ?? []), m]);
+    }
+    for (const [mat, meshes] of byMat) {
+      if (meshes.length < 2) continue;
+      const geos = meshes.map((m) => {
+        m.updateMatrix();
+        const g = (m.geometry.index ? m.geometry : m.geometry.toNonIndexed()).clone().applyMatrix4(m.matrix);
+        for (const name of Object.keys(g.attributes)) if (name !== 'position') g.deleteAttribute(name);
+        if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+        return g;
+      });
+      const merged = mergeGeometries(geos);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.name = meshes[0].name;
+      for (const m of meshes) m.removeFromParent();
+      parent.add(mesh);
+    }
+  }
 }
 
 /** The fitted model as GLB, to store. */
 export async function toGlb(model: THREE.Object3D): Promise<ArrayBuffer> {
+  // normals are recomputed when it is loaded: storing them would double the size
+  model.traverse((o) => {
+    const g = (o as THREE.Mesh).geometry;
+    if (g?.attributes.normal) g.deleteAttribute('normal');
+  });
   return (await new GLTFExporter().parseAsync(model, { binary: true })) as ArrayBuffer;
 }
 
@@ -189,7 +376,8 @@ export async function fieldModelFrom(a: FieldAsset): Promise<THREE.Object3D> {
   scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {
-      m.castShadow = true;
+      if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
+      m.castShadow = false; // millions of triangles: drawing them again for shadows halves the frame rate
       m.receiveShadow = true;
     }
   });
