@@ -32,9 +32,11 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
     modelled on real robots (the Banshee, an 8059A-style DR4B, the Claw Gate, ACE, the
     Flex hero bot and more); see [docs/robots.md](docs/robots.md).
   - **Samples:** a competitive 15 s auton for every robot, each written for that robot
-    and using all of its mechanisms. The four meta robots each build a 3-Pin stack and
-    turn a Toggle (55 points and the Autonomous Win Point), in PROS, LemLib (one starting
-    from the GPS) or EZ-Template. There are also two Skills runs (Match Loads, both
+    and using all of its mechanisms. Each of the four meta robots scores three Pins and
+    turns a Toggle (55 points and the Autonomous Win Point): the Banshee, ACE and the DR4B
+    build a 3-Pin stack, and the Claw Gate splits its Pins between two Goals. They use
+    LemLib (one starting from the GPS) or EZ-Template; the Flex hero bot's auton is plain
+    PROS. There are also two Skills runs (Match Loads, both
     Toggles, a Midfield park) and a **mechanism test** for every robot, which drives,
     turns and works each mechanism, printing PASS / FAIL per check.
   - **Official field model:** **Field › Model…** loads the official VEX field CAD (the

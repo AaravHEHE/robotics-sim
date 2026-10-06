@@ -93,6 +93,20 @@ function closure(m: Model, roots: number[], marks: Uint8Array, mark: number, sto
   return count;
 }
 
+/** How many entities are reachable from `root`; marks them with generation `gen` in `stamp`. */
+function countReachable(m: Model, root: number, stamp: Uint32Array, gen: number): number {
+  const stack = [root];
+  let count = 0;
+  while (stack.length) {
+    const k = stack.pop()!;
+    if (k < 0 || stamp[k] === gen) continue;
+    stamp[k] = gen;
+    count++;
+    for (let p = m.refStart[k]; p < m.refStart[k + 1]; p++) stack.push(m.refs[p]);
+  }
+  return count;
+}
+
 /**
  * Split into chunks of about `maxEntities` geometry entities each. A STEP small enough to
  * read in one go comes back whole.
@@ -101,11 +115,12 @@ export function splitStep(text: string, maxEntities = 250_000): string[] {
   const m = parse(text);
   const n = m.id.length;
   const solids: Array<{ k: number; size: number }> = [];
-  const probe = new Uint8Array(n);
+  // each solid's size: a visit stamp per solid instead of clearing a mark array every time
+  const stamp = new Uint32Array(n);
+  let gen = 0;
   for (let k = 0; k < n; k++) {
     if (!SOLIDS.has(m.type[k])) continue;
-    probe.fill(0);
-    solids.push({ k, size: closure(m, [k], probe, 1) });
+    solids.push({ k, size: countReachable(m, k, stamp, ++gen) });
   }
   const geometry = solids.reduce((a, b) => a + b.size, 0);
   const count = Math.max(1, Math.ceil(geometry / maxEntities));

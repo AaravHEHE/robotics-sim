@@ -121,11 +121,12 @@ void autonomous() {
   chassis.pid_wait();
 
   // Two presses with the front bumper. The wall stops the robot, so these use plain power
-  // for a set time rather than a PID drive (which would never reach its target).
+  // for a set time rather than a PID drive (which would never reach its target). Power 58
+  // is about 35 in/s: a Toggle hit faster than 40 in/s turns two faces at once.
   chassis.drive_mode_set(ez::DISABLE);
   for (int i = 0; i < 2; i++) {
-    chassis.drive_set(70, 70);
-    pros::delay(450);
+    chassis.drive_set(58, 58);
+    pros::delay(700);
     chassis.drive_set(-60, -60);
     pros::delay(250);
   }

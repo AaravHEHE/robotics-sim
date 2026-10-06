@@ -11,15 +11,17 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { FieldDef } from '../sim/field.ts';
-import { splitStep } from './step-split.ts';
 import { idb, safe } from './storage.ts';
 
-/** What the visitor chose for a field, stored per field id. */
-export interface FieldAsset {
+/** A converted field model as stored: GLB in field inches with +y up (fast to load next time). */
+export interface FieldModel {
   /** File it came from (for display). */
   name: string;
-  /** The model, converted to GLB in field inches with +y up (fast to load next time). */
   glb: ArrayBuffer;
+}
+
+/** How the visitor placed the model; stored apart from the (large) model, so changing it is instant. */
+export interface FieldModelSettings {
   /** Quarter turns about the vertical axis, to put the red side where it belongs. */
   turns: number;
   /** Raise (+) or lower (-) the model (inches), to line its tile tops up with the floor. */
@@ -29,13 +31,36 @@ export interface FieldAsset {
   hideStatics: boolean;
 }
 
-const key = (fieldId: string) => `field:${fieldId}`;
-export const loadFieldAsset = (fieldId: string) => safe(idb.get<FieldAsset>('models', key(fieldId)), undefined);
-/** Throws when the browser can't store it (e.g. storage full, or a private window). */
-export const saveFieldAsset = async (fieldId: string, a: FieldAsset) => {
-  await idb.put('models', key(fieldId), a);
+export const DEFAULT_FIELD_SETTINGS: FieldModelSettings = { turns: 0, lift: 0, hideBase: true, hideStatics: true };
+
+const modelKey = (fieldId: string) => `field:${fieldId}`;
+const settingsKey = (fieldId: string) => `fieldModel:${fieldId}`;
+
+export const loadFieldModel = async (fieldId: string): Promise<FieldModel | undefined> => {
+  const r = await safe(idb.get<FieldModel>('models', modelKey(fieldId)), undefined);
+  return r?.glb ? { name: r.name, glb: r.glb } : undefined;
 };
-export const clearFieldAsset = (fieldId: string) => safe(idb.del('models', key(fieldId)), undefined);
+/** Throws when the browser can't store it (e.g. storage full, or a private window). */
+export const saveFieldModel = async (fieldId: string, m: FieldModel): Promise<void> => {
+  await idb.put('models', modelKey(fieldId), m);
+};
+export const loadFieldSettings = async (fieldId: string): Promise<FieldModelSettings> => {
+  const s = await safe(idb.get<FieldModelSettings>('settings', settingsKey(fieldId)), undefined);
+  // (models saved before settings were kept apart carry them in the model record)
+  const old = s ? undefined : await safe(idb.get<Partial<FieldModelSettings>>('models', modelKey(fieldId)), undefined);
+  const src = s ?? old ?? {};
+  return {
+    turns: Number.isInteger(src.turns) ? src.turns! : 0,
+    lift: Number.isFinite(src.lift) ? src.lift! : 0,
+    hideBase: src.hideBase ?? true,
+    hideStatics: src.hideStatics ?? true,
+  };
+};
+export const saveFieldSettings = (fieldId: string, s: FieldModelSettings) => safe(idb.put('settings', settingsKey(fieldId), s), undefined);
+export const clearFieldModel = async (fieldId: string): Promise<void> => {
+  await safe(idb.del('models', modelKey(fieldId)), undefined);
+  await safe(idb.del('settings', settingsKey(fieldId)), undefined);
+};
 
 /**
  * Parts of the CAD that the simulation draws itself because they move (Pins, Cups,
@@ -50,37 +75,77 @@ export const MOVING_PART =
 export const HARDWARE_IN = 1;
 
 const ext = (name: string) => name.toLowerCase().split('.').pop() ?? '';
-// (.gltf only as a single self-contained file: a separate .bin can't be found)
 export const FIELD_ASSET_TYPES = '.glb,.gltf,.obj,.step,.stp,.zip';
 
+/** Where a model came from: STEP is converted here (and colored by the field's rules); others keep their look. */
+export type ModelSource = 'step' | 'mesh';
+
+const cancelled = () => new DOMException('Cancelled', 'AbortError');
+
+/**
+ * The one model file of a ZIP to read: the best format there (STEP, then GLB, then a glTF
+ * with its data inside it, then OBJ), and of those the largest (the whole field, not a
+ * single element). Null when there is none.
+ */
+export function pickBestEntry(files: Array<{ name: string; data: Uint8Array }>): { name: string; data: Uint8Array } | null {
+  const rank = (f: { name: string; data: Uint8Array }): number => {
+    const e = ext(f.name);
+    if (e === 'step' || e === 'stp') return 4;
+    if (e === 'glb') return 3;
+    if (e === 'gltf') return selfContainedGltf(f.data) ? 2 : 0;
+    if (e === 'obj') return 1;
+    return 0;
+  };
+  let best: { name: string; data: Uint8Array } | null = null;
+  for (const f of files) {
+    if (f.name.startsWith('__MACOSX') || !rank(f)) continue;
+    if (!best || rank(f) > rank(best) || (rank(f) === rank(best) && f.data.length > best.data.length)) best = f;
+  }
+  return best;
+}
+
+/** A .gltf whose buffers and images are all inside it (no separate .bin or textures to find). */
+function selfContainedGltf(data: Uint8Array): boolean {
+  try {
+    const j = JSON.parse(new TextDecoder().decode(data)) as { buffers?: Array<{ uri?: string }>; images?: Array<{ uri?: string }> };
+    return [...(j.buffers ?? []), ...(j.images ?? [])].every((b) => !b.uri || b.uri.startsWith('data:'));
+  } catch {
+    return false;
+  }
+}
+
 /** Read a file the visitor picked into a model (any supported format, or a ZIP of them). */
-export async function readFieldModel(name: string, data: ArrayBuffer, progress: (msg: string) => void): Promise<THREE.Group> {
-  const group = new THREE.Group();
-  const files: Array<{ name: string; data: Uint8Array }> = [];
+export async function readFieldModel(
+  name: string,
+  data: ArrayBuffer,
+  progress: (msg: string) => void,
+  signal?: AbortSignal,
+): Promise<{ model: THREE.Group; source: ModelSource }> {
+  let file: { name: string; data: Uint8Array } = { name, data: new Uint8Array(data) };
   if (ext(name) === 'zip') {
     progress('Unzipping…');
     const all = unzipSync(new Uint8Array(data));
-    for (const [n, d] of Object.entries(all)) if (['glb', 'gltf', 'obj', 'step', 'stp'].includes(ext(n)) && !n.startsWith('__MACOSX')) files.push({ name: n, data: d });
-    // one format is enough: prefer a ready-made GLB, then STEP, then OBJ
-    const best = ['glb', 'gltf', 'step', 'stp', 'obj'].find((e) => files.some((f) => ext(f.name) === e));
-    const pick = files.filter((f) => ext(f.name) === best || (best === 'step' && ext(f.name) === 'stp'));
-    files.splice(0, files.length, ...pick);
-    if (!files.length) throw new Error('The ZIP has no .glb, .gltf, .step or .obj file in it.');
-  } else files.push({ name, data: new Uint8Array(data) });
-
-  for (const f of files) {
-    progress(`Reading ${f.name}…`);
-    const e = ext(f.name);
-    if (e === 'glb' || e === 'gltf') group.add((await new GLTFLoader().parseAsync(f.data.slice().buffer, '')).scene);
-    else if (e === 'obj') group.add(new OBJLoader().parse(new TextDecoder().decode(f.data)));
-    else group.add(await readStep(f.data, progress));
+    const best = pickBestEntry(Object.entries(all).map(([n, d]) => ({ name: n, data: d })));
+    if (!best) throw new Error('The ZIP has no .step, .glb, self-contained .gltf or .obj file in it.');
+    file = best;
   }
-  return group;
+  if (signal?.aborted) throw cancelled();
+  progress(`Reading ${file.name}…`);
+  const e = ext(file.name);
+  const model = new THREE.Group();
+  if (e === 'glb' || e === 'gltf') model.add((await new GLTFLoader().parseAsync(file.data.slice().buffer, '')).scene);
+  else if (e === 'obj') model.add(new OBJLoader().parse(new TextDecoder().decode(file.data)));
+  else if (e === 'step' || e === 'stp') {
+    model.add(await readStep(file.data, progress, signal));
+    return { model, source: 'step' };
+  } else throw new Error(`Can't read .${e} files: use .zip, .step, .glb, .gltf or .obj.`);
+  return { model, source: 'mesh' };
 }
 
 // ---------------- STEP ----------------
 
 const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/';
+const NO_READER = 'Could not download the STEP reader (occt-import-js from cdn.jsdelivr.net). Check the connection, or export the model as GLB.';
 /** Triangle sizes: within 3 mm of the true surface, and 0.8 rad between facets. */
 const TESSELLATION = { linearDeflectionType: 'absolute_value', linearDeflection: 3, angularDeflection: 0.8 };
 
@@ -98,7 +163,7 @@ interface ChunkMesh {
  * its memory can't shrink, and the page stays responsive during a multi-minute read).
  */
 const WORKER = `
-importScripts('${OCCT}occt-import-js.js');
+try { importScripts('${OCCT}occt-import-js.js'); } catch (err) { postMessage({ ok: false, noReader: true, message: String(err && err.message || err) }); }
 onmessage = async (e) => {
   try {
     const occt = await occtimportjs({ locateFile: (f) => '${OCCT}' + f });
@@ -162,44 +227,58 @@ onmessage = async (e) => {
   }
 };`;
 
-function readChunk(text: string): Promise<ChunkMesh[]> {
-  const url = URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }));
-  const w = new Worker(url);
-  URL.revokeObjectURL(url);
-  return new Promise((resolve, reject) => {
-    w.onmessage = (e: MessageEvent<{ ok: boolean; meshes?: ChunkMesh[]; message?: string }>) => {
+/** Run a worker for one request: resolves with its reply, rejects on an error or when cancelled. */
+function runWorker<T>(w: Worker, request: unknown, transfer: Transferable[], signal: AbortSignal | undefined, onSettle: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const done = (fn: () => void) => {
       w.terminate();
-      if (e.data.ok) resolve(e.data.meshes!);
-      else reject(new Error(e.data.message));
+      signal?.removeEventListener('abort', abort);
+      onSettle();
+      fn();
+    };
+    const abort = () => done(() => reject(cancelled()));
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort);
+    w.onmessage = (e: MessageEvent<{ ok: boolean; noReader?: boolean; message?: string } & T>) => {
+      if (e.data.ok) done(() => resolve(e.data));
+      else done(() => reject(new Error(e.data.noReader ? `${NO_READER} (${e.data.message})` : e.data.message)));
     };
     w.onerror = (e) => {
-      w.terminate();
-      reject(new Error(e.message || 'Could not download the STEP reader (occt-import-js). Check the connection, or export the model as GLB.'));
+      e.preventDefault();
+      done(() => reject(new Error(e.message ? `${NO_READER} (${e.message})` : NO_READER)));
     };
-    w.postMessage({ text, params: TESSELLATION });
+    w.postMessage(request, transfer);
   });
 }
 
-/**
- * A material for a CAD color: clear parts (light, unsaturated colors on polycarbonate) are
- * see-through, and nothing is mirror-like.
- */
-function cadMaterial(c: number[]): THREE.MeshStandardMaterial {
-  const color = new THREE.Color(c[0], c[1], c[2]);
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
+function readChunk(text: string, signal?: AbortSignal): Promise<ChunkMesh[]> {
+  const url = URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }));
+  // (the URL is revoked once the worker is done with it: some browsers still need it while it starts)
+  return runWorker<{ meshes: ChunkMesh[] }>(new Worker(url), { text, params: TESSELLATION }, [], signal, () => URL.revokeObjectURL(url)).then((r) => r.meshes);
 }
 
-async function readStep(data: Uint8Array, progress: (msg: string) => void): Promise<THREE.Group> {
+/** Split the STEP into chunks the reader can hold, in a worker (parsing 100+ MB of text takes seconds). */
+function splitInWorker(data: Uint8Array, signal?: AbortSignal): Promise<string[]> {
+  const w = new Worker(new URL('./step-split.worker.ts', import.meta.url), { type: 'module' });
+  const copy = data.slice();
+  return runWorker<{ chunks: string[] }>(w, { data: copy }, [copy.buffer], signal, () => {}).then((r) => r.chunks);
+}
+
+function cadMaterial(c: number[]): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: 0.55, metalness: 0.05 });
+}
+
+async function readStep(data: Uint8Array, progress: (msg: string) => void, signal?: AbortSignal): Promise<THREE.Group> {
   progress('Splitting the STEP file into parts the reader can hold…');
-  await new Promise((r) => setTimeout(r, 30)); // let the message paint
   // a whole field is too big for the reader's memory at once: it goes in chunks
-  const chunks = splitStep(new TextDecoder('latin1').decode(data));
+  const chunks = await splitInWorker(data, signal);
   const group = new THREE.Group();
   const tops = new Map<number, THREE.Group>();
   const mats = new Map<string, THREE.MeshStandardMaterial>();
+  let part = 0;
   for (const [i, chunk] of chunks.entries()) {
     progress(`Converting STEP to triangles: part ${i + 1} of ${chunks.length} (a whole field takes a few minutes)…`);
-    for (const m of await readChunk(chunk)) {
+    for (const m of await readChunk(chunk, signal)) {
       let top = tops.get(m.top);
       if (!top) {
         top = new THREE.Group();
@@ -207,15 +286,18 @@ async function readStep(data: Uint8Array, progress: (msg: string) => void): Prom
         tops.set(m.top, top);
         group.add(top);
       }
-      for (const part of m.parts) {
+      part++;
+      for (const p of m.parts) {
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(part.position, 3));
-        geo.setIndex(new THREE.BufferAttribute(part.index, 1));
-        const c = part.color ?? [0.7, 0.72, 0.75];
+        geo.setAttribute('position', new THREE.BufferAttribute(p.position, 3));
+        geo.setIndex(new THREE.BufferAttribute(p.index, 1));
+        const c = p.color ?? [0.7, 0.72, 0.75];
         const k = c.map((v) => v.toFixed(3)).join();
         if (!mats.has(k)) mats.set(k, cadMaterial(c));
         const mesh = new THREE.Mesh(geo, mats.get(k));
         mesh.name = m.name;
+        // the color pieces of one part stay one part (for the hardware size check)
+        mesh.userData.part = part;
         top.add(mesh);
       }
     }
@@ -228,13 +310,22 @@ async function readStep(data: Uint8Array, progress: (msg: string) => void): Prom
 /** Unit factors to inches: mm, cm, m, in, ft. */
 const UNITS: Array<[string, number]> = [['mm', 1 / 25.4], ['cm', 1 / 2.54], ['m', 39.3701], ['in', 1], ['ft', 12]];
 
+export interface FitReport {
+  unit: string;
+  /** Moving parts left out (Pins, Cups, Toggles, robots). */
+  removed: number;
+  /** Small hardware left out. */
+  hardware: number;
+}
+
 /**
  * Put a raw model into field inches with +y up: CAD is usually Z-up and in millimeters.
  * The flattest axis is taken as up, and the unit is the one that makes the model about the
- * size of the field (perimeter included). Removes the moving parts (see MOVING_PART).
- * Returns what it did, for the dialog.
+ * size of the field (perimeter included). Removes the moving parts (see MOVING_PART) and
+ * hardware. A converted STEP is colored by the field's `cadLook` rules; other models keep
+ * their own look. Returns what it did, for the dialog.
  */
-export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: string; removed: number; hardware: number } {
+export function fitToField(model: THREE.Object3D, field: FieldDef, source: ModelSource = 'mesh'): FitReport {
   let removed = 0;
   const drop: THREE.Object3D[] = [];
   model.traverse((o) => {
@@ -265,15 +356,9 @@ export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: stri
   root.updateMatrixWorld(true);
   // the floor is the top of the tiles, not the bottom of the model
   root.position.y -= tileTop(root, field);
-  applyCadLook(root, field);
-  // hardware (screws, nuts) is invisible at field scale but a large share of the triangles
+  if (source === 'step') applyCadLook(root, field);
   root.updateMatrixWorld(true);
-  const tiny: THREE.Object3D[] = [];
-  const extent = new THREE.Vector3();
-  root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh && new THREE.Box3().setFromObject(o).getSize(extent).length() < HARDWARE_IN * Math.SQRT2) tiny.push(o);
-  });
-  for (const o of tiny) o.removeFromParent();
+  const hardware = dropHardware(root);
   mergeByMaterial(root);
   model.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -282,12 +367,47 @@ export function fitToField(model: THREE.Object3D, field: FieldDef): { unit: stri
       m.receiveShadow = true;
     }
   });
-  return { unit: unit[0], removed, hardware: tiny.length };
+  return { unit: unit[0], removed, hardware };
+}
+
+/**
+ * Leave out hardware (screws, nuts): invisible at field scale but a large share of the
+ * triangles. A part's size is that of all its pieces (a big part with a small colored
+ * face keeps the face). Returns how many parts were left out.
+ */
+function dropHardware(root: THREE.Object3D): number {
+  const parts = new Map<unknown, { box: THREE.Box3; meshes: THREE.Object3D[] }>();
+  root.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return;
+    const key = o.userData.part ?? o;
+    let p = parts.get(key);
+    if (!p) parts.set(key, (p = { box: new THREE.Box3(), meshes: [] }));
+    p.box.union(new THREE.Box3().setFromObject(o));
+    p.meshes.push(o);
+  });
+  const extent = new THREE.Vector3();
+  let n = 0;
+  for (const p of parts.values()) {
+    if (p.box.getSize(extent).length() >= HARDWARE_IN * Math.SQRT2) continue;
+    for (const m of p.meshes) m.removeFromParent();
+    n++;
+  }
+  return n;
+}
+
+/** What a fit did, in words: "read as mm; left out 123 moving parts and 776 pieces of hardware". */
+export function statusText(r: FitReport): string {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const left = [
+    r.removed ? plural(r.removed, 'moving part', 'moving parts') : '',
+    r.hardware ? plural(r.hardware, 'piece of hardware', 'pieces of hardware') : '',
+  ].filter(Boolean);
+  return `read as ${r.unit}${left.length ? `; left out ${left.join(' and ')}` : ''}`;
 }
 
 /**
  * Color the parts by the field's `cadLook` rules (official CAD often has no real colors).
- * Each part is matched by "<top-level assembly part>/<part>".
+ * Each part is matched by "<assembly part>/<part>".
  */
 function applyCadLook(root: THREE.Object3D, field: FieldDef): void {
   const rules = (field.cadLook ?? []).map((rule) => ({ rule, re: new RegExp(rule.match, 'i'), mat: null as THREE.MeshStandardMaterial | null }));
@@ -328,25 +448,33 @@ function tileTop(root: THREE.Object3D, field: FieldDef): number {
   return heights[Math.floor(heights.length / 2)];
 }
 
-/** One mesh per material within each group: thousands of parts draw in a few calls. */
+/**
+ * One mesh per material within each group: thousands of parts draw in a few calls. Meshes
+ * merge only with meshes that have the same attributes (UVs, vertex colors), which they
+ * keep; normals are recomputed later.
+ */
 function mergeByMaterial(root: THREE.Object3D): void {
   const parents = new Set<THREE.Object3D>();
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh && o.parent) parents.add(o.parent);
   });
+  const attrs = (g: THREE.BufferGeometry) => Object.keys(g.attributes).filter((a) => a !== 'normal').sort().join();
   for (const parent of parents) {
-    const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+    const groups = new Map<string, { mat: THREE.Material; meshes: THREE.Mesh[] }>();
     for (const c of parent.children) {
       const m = c as THREE.Mesh;
-      if (!m.isMesh || Array.isArray(m.material) || m.children.length) continue;
-      byMat.set(m.material, [...(byMat.get(m.material) ?? []), m]);
+      if (!m.isMesh || Array.isArray(m.material) || m.children.length || m.geometry.morphAttributes.position) continue;
+      const key = `${m.material.uuid}|${attrs(m.geometry)}`;
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = { mat: m.material, meshes: [] }));
+      g.meshes.push(m);
     }
-    for (const [mat, meshes] of byMat) {
+    for (const { mat, meshes } of groups.values()) {
       if (meshes.length < 2) continue;
       const geos = meshes.map((m) => {
         m.updateMatrix();
         const g = (m.geometry.index ? m.geometry : m.geometry.toNonIndexed()).clone().applyMatrix4(m.matrix);
-        for (const name of Object.keys(g.attributes)) if (name !== 'position') g.deleteAttribute(name);
+        if (g.attributes.normal) g.deleteAttribute('normal');
         if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
         return g;
       });
@@ -370,9 +498,9 @@ export async function toGlb(model: THREE.Object3D): Promise<ArrayBuffer> {
   return (await new GLTFExporter().parseAsync(model, { binary: true })) as ArrayBuffer;
 }
 
-/** A stored asset, ready to show: its turns and lift applied. */
-export async function fieldModelFrom(a: FieldAsset): Promise<THREE.Object3D> {
-  const scene = (await new GLTFLoader().parseAsync(a.glb.slice(0), '')).scene;
+/** A stored model, ready to show (place it with applyFieldSettings). */
+export async function fieldModelFrom(glb: ArrayBuffer): Promise<THREE.Object3D> {
+  const scene = (await new GLTFLoader().parseAsync(glb.slice(0), '')).scene;
   scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {
@@ -383,7 +511,12 @@ export async function fieldModelFrom(a: FieldAsset): Promise<THREE.Object3D> {
   });
   const holder = new THREE.Group();
   holder.add(scene);
-  holder.rotation.y = (a.turns * Math.PI) / 2;
-  holder.position.y = a.lift;
   return holder;
+}
+
+/** Turn and raise a shown model (instant: the model itself isn't touched). */
+export function applyFieldSettings(holder: THREE.Object3D, s: FieldModelSettings): void {
+  holder.rotation.y = (s.turns * Math.PI) / 2;
+  holder.position.y = s.lift;
+  holder.updateMatrixWorld(true);
 }

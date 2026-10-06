@@ -1,6 +1,7 @@
 // App entry: wires the editor, compiler worker, simulation sandbox, 3D viewer,
 // timeline, robot profiles and browser storage together.
 
+import type * as THREE from 'three';
 import type { BuildResult } from '../compiler/build.ts';
 import type { Diagnostic } from '../compiler/diagnostics.ts';
 import type { CompilerRequest, CompilerResponse } from '../compiler/worker.ts';
@@ -11,7 +12,10 @@ import { simulatedEnvNames } from '../sim/pros-api.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { PlaceMode } from '../sim/runtime.ts';
 import type { SimRequest, SimResponse } from '../sim/worker.ts';
-import { clearFieldAsset, FIELD_ASSET_TYPES, fieldModelFrom, fitToField, loadFieldAsset, readFieldModel, saveFieldAsset, toGlb, type FieldAsset } from './field-assets.ts';
+import {
+  applyFieldSettings, clearFieldModel, DEFAULT_FIELD_SETTINGS, FIELD_ASSET_TYPES, fieldModelFrom, fitToField, loadFieldModel, loadFieldSettings,
+  readFieldModel, saveFieldModel, saveFieldSettings, statusText, toGlb, type FieldModelSettings,
+} from './field-assets.ts';
 import { jsonEditor, ProjectEditor } from './editor.ts';
 import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
@@ -254,90 +258,149 @@ function applyField() {
 
 // ---------------- field model (official CAD, local only) ----------------
 
+/** The field model on screen (if any), and a conversion in progress (if any). */
+const fieldModel = {
+  shown: null as null | { fieldId: string; name: string; glb: ArrayBuffer; holder: THREE.Object3D; saved: boolean },
+  settings: { ...DEFAULT_FIELD_SETTINGS } as FieldModelSettings,
+  /** A stored model that could not be shown (why). */
+  broken: '',
+  busy: null as null | { fieldId: string; abort: AbortController; progress: string },
+};
 let fieldModelLoad = 0;
+
 /** Show the visitor's stored model of the current field, if any. */
-async function showFieldModel(): Promise<FieldAsset | undefined> {
+async function showFieldModel(): Promise<void> {
   const token = ++fieldModelLoad;
   const id = field().id;
-  const a = await loadFieldAsset(id);
-  const model = a ? await fieldModelFrom(a).catch(() => null) : null;
-  if (token !== fieldModelLoad) return a;
-  viewer.setFieldModel(model, { base: !!a?.hideBase, statics: !!a?.hideStatics });
-  return a;
+  const [m, settings] = await Promise.all([loadFieldModel(id), loadFieldSettings(id)]);
+  let holder: THREE.Object3D | null = null;
+  let broken = '';
+  if (m) {
+    try {
+      holder = await fieldModelFrom(m.glb);
+      applyFieldSettings(holder, settings);
+    } catch (e) {
+      broken = (e as Error).message;
+    }
+  }
+  if (token !== fieldModelLoad) return;
+  fieldModel.shown = m && holder ? { fieldId: id, name: m.name, glb: m.glb, holder, saved: true } : null;
+  fieldModel.settings = settings;
+  fieldModel.broken = broken;
+  viewer.setFieldModel(holder, { base: settings.hideBase, statics: settings.hideStatics });
+  if (broken) setStatus(`The saved field model can't be shown (${broken}). Remove it in Field › Model… and load it again.`, 'err');
 }
 
-function fieldDialogShow(a: FieldAsset | undefined, msg?: string) {
-  $('fm-status').textContent = msg ?? (a ? `Showing “${a.name}”.` : 'No model loaded: the built-in field is shown.');
-  $<HTMLInputElement>('fm-hide-base').checked = a?.hideBase ?? true;
-  $<HTMLInputElement>('fm-hide-statics').checked = a?.hideStatics ?? true;
-  $<HTMLSelectElement>('fm-turns').value = String(a?.turns ?? 0);
-  $<HTMLInputElement>('fm-lift').value = String(a?.lift ?? 0);
-  for (const id of ['fm-hide-base', 'fm-hide-statics', 'fm-turns', 'fm-lift', 'fm-clear']) $<HTMLInputElement>(id).disabled = !a;
+function fieldDialogShow(msg?: string) {
+  const { shown, settings, broken, busy } = fieldModel;
+  const here = busy?.fieldId === field().id ? busy : null;
+  $('fm-status').textContent =
+    msg ??
+    (here
+      ? here.progress
+      : broken
+        ? `The saved model can't be shown (${broken}). Remove it and load it again.`
+        : shown
+          ? `Showing “${shown.name}”.${shown.saved ? '' : ' It could not be kept in this browser (storage full, or a private window): download it to keep it.'}`
+          : 'No model loaded: the built-in field is shown.');
+  $<HTMLInputElement>('fm-hide-base').checked = settings.hideBase;
+  $<HTMLInputElement>('fm-hide-statics').checked = settings.hideStatics;
+  $<HTMLSelectElement>('fm-turns').value = String(settings.turns);
+  $<HTMLInputElement>('fm-lift').value = String(settings.lift);
+  for (const id of ['fm-hide-base', 'fm-hide-statics', 'fm-turns', 'fm-lift']) $<HTMLInputElement>(id).disabled = !shown;
+  $<HTMLButtonElement>('fm-load').disabled = !!busy;
+  $<HTMLButtonElement>('fm-clear').disabled = !!busy || (!shown && !broken);
+  $('fm-cancel').hidden = !busy;
+  $('fm-download').hidden = !shown;
 }
 
-$('btn-field-look').onclick = async () => {
-  fieldDialogShow(await loadFieldAsset(field().id));
+$('btn-field-look').onclick = () => {
+  fieldDialogShow();
   $<HTMLDialogElement>('dlg-field').showModal();
-};
-/** Field-model changes, one after another (each rewrites the stored model). */
-let fieldAssetQueue: Promise<unknown> = Promise.resolve();
-const queued = <T>(fn: () => Promise<T>): Promise<T> => {
-  const next = fieldAssetQueue.then(fn, fn);
-  fieldAssetQueue = next.catch(() => undefined);
-  return next;
 };
 
 $('fm-load').onclick = async () => {
+  if (fieldModel.busy) return;
   const file = await pickFile(FIELD_ASSET_TYPES);
-  if (!file) return;
+  if (!file || fieldModel.busy) return;
   // the field it was loaded for, even if the visitor switches fields while it reads
   const f = field();
-  const status = (m: string) => ($('fm-status').textContent = m);
+  const busy = (fieldModel.busy = { fieldId: f.id, abort: new AbortController(), progress: 'Reading the file…' });
+  const progress = (m: string) => {
+    busy.progress = m;
+    setStatus(`Field model: ${m}`);
+    if ($<HTMLDialogElement>('dlg-field').open) fieldDialogShow();
+  };
+  fieldDialogShow();
+  let done = '';
   try {
-    const model = await readFieldModel(file.name, await file.arrayBuffer(), status);
-    const { unit, removed, hardware } = fitToField(model, f);
-    status('Saving it in this browser…');
-    const a: FieldAsset = {
-      name: file.name,
-      glb: await toGlb(model),
-      turns: 0,
-      lift: 0,
+    const { model, source } = await readFieldModel(file.name, await file.arrayBuffer(), progress, busy.abort.signal);
+    const report = fitToField(model, f, source);
+    progress('Saving it in this browser…');
+    const glb = await toGlb(model);
+    const settings: FieldModelSettings = {
+      ...DEFAULT_FIELD_SETTINGS,
       hideBase: $<HTMLInputElement>('fm-hide-base').checked,
       hideStatics: $<HTMLInputElement>('fm-hide-statics').checked,
     };
-    await queued(() => saveFieldAsset(f.id, a));
-    if (field().id !== f.id) return;
-    await showFieldModel();
-    fieldDialogShow(a, `Showing “${file.name}” (read as ${unit}${removed ? `; left out ${removed} moving part${removed > 1 ? 's' : ''}` : ''}${hardware ? ` and ${hardware} pieces of hardware` : ''}).`);
+    let saved = true;
+    try {
+      await saveFieldModel(f.id, { name: file.name, glb });
+      await saveFieldSettings(f.id, settings);
+    } catch {
+      saved = false; // shown for this session anyway, and it can be downloaded
+    }
+    if (field().id === f.id) {
+      const holder = await fieldModelFrom(glb);
+      applyFieldSettings(holder, settings);
+      ++fieldModelLoad; // a slower load of the old model must not replace this one
+      fieldModel.shown = { fieldId: f.id, name: file.name, glb, holder, saved };
+      fieldModel.settings = settings;
+      fieldModel.broken = '';
+      viewer.setFieldModel(holder, { base: settings.hideBase, statics: settings.hideStatics });
+    }
+    done = `Showing “${file.name}” (${statusText(report)}).${saved ? '' : ' It could not be kept in this browser (storage full, or a private window): download it to keep it.'}`;
+    setStatus(`Field model loaded: ${file.name}.`, saved ? 'ok' : 'err');
   } catch (e) {
-    status(`Couldn't use that file: ${(e as Error).message}`);
+    const err = e as Error;
+    done = err.name === 'AbortError' ? 'Cancelled.' : `Couldn't use that file: ${err.message}`;
+    setStatus(`Field model: ${done}`, err.name === 'AbortError' ? undefined : 'err');
+  } finally {
+    fieldModel.busy = null;
   }
+  fieldDialogShow(done);
 };
-function updateFieldAsset(change: Partial<FieldAsset>) {
-  const id = field().id;
-  return queued(async () => {
-    const a = await loadFieldAsset(id);
-    if (!a) return;
-    await saveFieldAsset(id, { ...a, ...change });
-    await showFieldModel();
-  }).catch((e) => ($('fm-status').textContent = `Couldn't save that change: ${(e as Error).message}`));
+$('fm-cancel').onclick = () => fieldModel.busy?.abort.abort();
+$('fm-download').onclick = () => {
+  const m = fieldModel.shown;
+  if (m) download(`${m.name.replace(/\.[^.]+$/, '')}.glb`, new Uint8Array(m.glb), 'model/gltf-binary');
+};
+
+/** A placement change: instant (the model isn't touched), and remembered for this field. */
+function updateFieldSettings(change: Partial<FieldModelSettings>) {
+  const m = fieldModel.shown;
+  if (!m) return;
+  fieldModel.settings = { ...fieldModel.settings, ...change };
+  applyFieldSettings(m.holder, fieldModel.settings);
+  viewer.setFieldModelHidden({ base: fieldModel.settings.hideBase, statics: fieldModel.settings.hideStatics });
+  void saveFieldSettings(m.fieldId, fieldModel.settings);
 }
-$<HTMLInputElement>('fm-hide-base').onchange = (e) => void updateFieldAsset({ hideBase: (e.target as HTMLInputElement).checked });
-$<HTMLInputElement>('fm-hide-statics').onchange = (e) => void updateFieldAsset({ hideStatics: (e.target as HTMLInputElement).checked });
-$<HTMLSelectElement>('fm-turns').onchange = (e) => void updateFieldAsset({ turns: Number((e.target as HTMLSelectElement).value) });
-$<HTMLInputElement>('fm-lift').onchange = (e) => void updateFieldAsset({ lift: Number((e.target as HTMLInputElement).value) || 0 });
+$<HTMLInputElement>('fm-hide-base').onchange = (e) => updateFieldSettings({ hideBase: (e.target as HTMLInputElement).checked });
+$<HTMLInputElement>('fm-hide-statics').onchange = (e) => updateFieldSettings({ hideStatics: (e.target as HTMLInputElement).checked });
+$<HTMLSelectElement>('fm-turns').onchange = (e) => updateFieldSettings({ turns: Number((e.target as HTMLSelectElement).value) });
+$<HTMLInputElement>('fm-lift').onchange = (e) => updateFieldSettings({ lift: Number((e.target as HTMLInputElement).value) || 0 });
 // Enter in the number box would submit (close) the dialog
 $<HTMLInputElement>('fm-lift').onkeydown = (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    (e.target as HTMLInputElement).dispatchEvent(new Event('change'));
+    (e.target as HTMLInputElement).blur(); // its change event applies it (once)
   }
 };
 $('fm-clear').onclick = async () => {
-  const id = field().id;
-  await queued(() => clearFieldAsset(id));
+  if (fieldModel.busy || !confirm('Remove the field model from this browser? Loading it again converts it again.')) return;
+  await clearFieldModel(field().id);
   await showFieldModel();
-  fieldDialogShow(undefined);
+  fieldDialogShow();
 };
 
 /**

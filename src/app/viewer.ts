@@ -357,6 +357,18 @@ export class FieldViewer {
     this.applyHidden();
   }
 
+  /** Show or hide the built-in parts a field model replaces (the model stays as it is). */
+  setFieldModelHidden(hide: { base: boolean; statics: boolean }) {
+    if (!this.fieldModel.children.length) return;
+    this.hideBuiltIn = hide;
+    this.applyHidden();
+  }
+
+  /** Draw the next frame (after changing something in the scene from outside). */
+  requestRender() {
+    this.needsRender = true;
+  }
+
   private applyHidden() {
     this.baseGroup.visible = !this.hideBuiltIn.base;
     this.staticGroup.visible = !this.hideBuiltIn.statics;

@@ -105,16 +105,16 @@
     </section>
   </main>
 
-  <dialog id="dlg-samples" class="dialog">
+  <dialog id="dlg-samples" class="dialog" aria-labelledby="dlg-samples-title">
     <form method="dialog">
-      <h2>Sample projects</h2>
+      <h2 id="dlg-samples-title">Sample projects</h2>
       <p class="muted">Opening a sample replaces the code in the editor (export first if you want to keep it).</p>
       <div id="sample-list" class="cards"></div>
       <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
     </form>
   </dialog>
 
-  <dialog id="dlg-robot" class="dialog wide">
+  <dialog id="dlg-robot" class="dialog wide" aria-labelledby="robot-title">
     <form method="dialog" id="robot-form">
       <h2 id="robot-title">Robot profile</h2>
       <p class="muted">Real measurements in inches. The profile decides size, collisions and speed; a 3D model is only cosmetic. Drive ports are signed the way your code must declare them to drive forward.</p>
@@ -137,10 +137,10 @@
     </form>
   </dialog>
 
-  <dialog id="dlg-field" class="dialog">
+  <dialog id="dlg-field" class="dialog" aria-labelledby="dlg-field-title">
     <form method="dialog">
-      <h2>Field model</h2>
-      <p class="muted">Load the official field CAD: the ZIP from VEX's field CAD page (e.g. <code>v5rc-override-fieldcad.zip</code>), or a GLB / OBJ export of it. Converting the full STEP field takes a few minutes the first time; after that it loads in a second. It stays in this browser: it is never uploaded or published. It only changes the look; the simulation still uses the measured field. Pins, Cups, Toggles and small hardware in the model are left out (the simulation draws the game pieces where they really are), and parts are colored by part number.</p>
+      <h2 id="dlg-field-title">Field model</h2>
+      <p class="muted">Load the official field CAD: the ZIP from VEX's field CAD page (e.g. <code>v5rc-override-fieldcad.zip</code>), or a GLB / OBJ export of it. Converting the full STEP field takes a few minutes the first time; after that it loads in a second. It stays in this browser: it is never uploaded or published. It only changes the look; the simulation still uses the measured field. Pins, Cups, Toggles and small hardware in the model are left out (the simulation draws the game pieces where they really are), and a converted STEP is colored by part number (other models keep their own colors).</p>
       <div class="stack">
         <button type="button" id="fm-load" class="primary">Load a field model (.zip, .step, .glb, .obj)…</button>
         <p id="fm-status" class="muted" role="status" aria-live="polite">No model loaded: the built-in field is shown.</p>
@@ -148,6 +148,8 @@
         <label><input type="checkbox" id="fm-hide-statics" checked /> Hide the built-in Goals and Loaders</label>
         <label>Turn <select id="fm-turns"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select> so the red side matches</label>
         <label>Raise by <input id="fm-lift" type="number" step="0.1" value="0" style="width: 5em" /> in (to line the model's tile tops up with the floor)</label>
+        <button type="button" id="fm-cancel" class="ghost" hidden>Cancel loading</button>
+        <button type="button" id="fm-download" class="ghost" hidden>Download the converted model (.glb)</button>
         <button type="button" id="fm-clear" class="ghost danger">Remove the model</button>
       </div>
       <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>

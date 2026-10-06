@@ -90,6 +90,21 @@
       "items": { "type": "object", "required": ["id", "name", "alliance", "zone", "x", "y", "theta", "layouts"] }
     },
     "game": { "oneOf": [{ "type": "null" }, { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } }] },
+    "cadLook": {
+      "description": "Colors for an official field CAD model loaded for this field: the first rule whose match (a case-insensitive regex) finds '<assembly part>/<part>' wins. Cosmetic only.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["match", "color"],
+        "properties": {
+          "match": { "type": "string" },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "roughness": { "type": "number", "minimum": 0, "maximum": 1 },
+          "metalness": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
     "sources": { "type": "array", "items": { "type": "string" } }
   }
 }
