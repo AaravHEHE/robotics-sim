@@ -19,11 +19,13 @@ import {
 import { jsonEditor, ProjectEditor } from './editor.ts';
 import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
-  deleteCustomRobot, download, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
+  deleteCustomRobot, download, loadAssembly, saveAssembly, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
   projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
 import { MapPanel } from './map-panel.ts';
 import { LayoutEditor } from './robot-editor/index.ts';
+import { validateAssembly, type Assembly } from './parts/assembly.ts';
+import { CATALOG, PartsBuilder } from './parts/builder.ts';
 import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
 
@@ -1078,6 +1080,7 @@ $('btn-samples').onclick = () => {
 
 let robotEditor: ReturnType<typeof jsonEditor> | null = null;
 let layoutEditor: LayoutEditor | null = null;
+let partsBuilder: PartsBuilder | null = null;
 
 /** The robot dialog's tabs: the visual layout editor, or the JSON. */
 function showRobotTab(tab: 'layout' | 'json') {
@@ -1149,6 +1152,51 @@ function openRobotDialog() {
     $<HTMLButtonElement>('rb-save').disabled = errs.length > 0;
     return errs.length ? null : (parsed as RobotProfile);
   };
+  const parseRobotJson = (): RobotProfile | null => {
+    try {
+      const p = JSON.parse(robotEditor!.getValue()) as RobotProfile;
+      return p?.size && p.drivetrain ? p : null;
+    } catch {
+      return null;
+    }
+  };
+  /** Change the profile in the JSON editor (it is validated and the layout redrawn). */
+  const editRobotJson = (change: (p: RobotProfile) => void) => {
+    const p = parseRobotJson();
+    if (!p) return;
+    change(p);
+    robotEditor!.setValue(JSON.stringify(p, null, 2));
+  };
+  $('pk-undo').onclick = () => partsBuilder?.undo();
+  $('pk-clear').onclick = () => partsBuilder?.clear();
+  $('pk-fit').onclick = () => {
+    const s = partsBuilder?.suggestion();
+    if (!s?.size) return setStatus('Place some parts first.', 'err');
+    const what = [`size ${s.size.width}″ × ${s.size.length}″ × ${s.size.height}″`, s.trackWidth ? `track width ${s.trackWidth}″` : '', s.wheelDiameter ? `${s.wheelDiameter}″ wheels` : ''].filter(Boolean).join(', ');
+    if (!confirm(`Set the robot's ${what} from the build? (This changes how it drives and collides.)`)) return;
+    editRobotJson((p) => {
+      p.size = { ...s.size! };
+      if (s.trackWidth) p.drivetrain.trackWidth = s.trackWidth;
+      if (s.wheelDiameter) p.drivetrain.wheelDiameter = s.wheelDiameter;
+    });
+    setStatus(`Robot set to ${what}. Save the robot to keep it.`, 'ok');
+  };
+  $('pk-use').onclick = async () => {
+    const b = partsBuilder;
+    if (!b || !b.asm.parts.length) return setStatus('Place some parts first.', 'err');
+    const assetId = 'glb-' + Date.now().toString(36);
+    try {
+      await saveModel(assetId, await b.toGlb());
+      await saveAssembly(assetId, b.asm);
+    } catch (e) {
+      return setStatus(`Couldn't keep the model: ${(e as Error).message}`, 'err');
+    }
+    editingGlb = { assetId };
+    // real inches: no fitting to the footprint
+    editRobotJson((p) => (p.model = { assetId, scale: 1 }));
+    $<HTMLDialogElement>('dlg-parts').close();
+    setStatus(`The ${b.asm.parts.length}-part build is the robot's model now. Save the robot to keep it.`, 'ok');
+  };
   robotEditor.onDidChangeModelContent(() => {
     validate();
     if (fromLayout) return;
@@ -1183,6 +1231,23 @@ function openRobotDialog() {
     $<HTMLDialogElement>('dlg-robot').close();
     setStatus(`Saved robot “${p.name}” in this browser.`, 'ok');
   };
+  $('rb-parts').onclick = async () => {
+    const p = parseRobotJson();
+    if (!p) return setStatus('Fix the robot profile first (see the errors).', 'err');
+    partsBuilder ??= new PartsBuilder({
+      view: $('pk-view'),
+      palette: $('pk-palette'),
+      length: $<HTMLSelectElement>('pk-length'),
+      cartridge: $<HTMLSelectElement>('pk-cartridge'),
+      level: $<HTMLInputElement>('pk-level'),
+      info: $('pk-info'),
+      count: $('pk-count'),
+    });
+    if (import.meta.env.DEV) Object.assign(window, { __parts: partsBuilder });
+    partsBuilder.load(editingGlb ? ((await loadAssembly(editingGlb.assetId)) ?? null) : null, p.size);
+    $<HTMLDialogElement>('dlg-parts').showModal();
+    partsBuilder.refresh();
+  };
   $('rb-model').onclick = async () => {
     const f = await pickFile('.glb,model/gltf-binary');
     if (!f) return;
@@ -1214,6 +1279,8 @@ function openRobotDialog() {
         if (z.glb) {
           const assetId = 'glb-' + Date.now().toString(36);
           await saveModel(assetId, z.glb.slice().buffer);
+          // its VEX parts build, to keep editing it
+          if (z.assembly && !validateAssembly(z.assembly, CATALOG).length) await saveAssembly(assetId, z.assembly as Assembly);
           editingGlb = { assetId };
         }
       } else profile = JSON.parse(new TextDecoder().decode(bytes));

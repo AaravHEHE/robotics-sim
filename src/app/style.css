@@ -344,3 +344,19 @@ select, input[type='number'] {
 @media (max-width: 900px) {
   .rl-views, .rl-bottom { grid-template-columns: 1fr; }
 }
+
+/* ---------------- VEX parts kit ---------------- */
+.pk-grid { display: grid; grid-template-columns: 210px 1fr; gap: 10px; }
+.pk-palette { display: flex; flex-direction: column; gap: 3px; max-height: min(62vh, 560px); overflow: auto; }
+.pk-part { text-align: left; font-size: 12px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); }
+.pk-part.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.pk-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pk-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12px; }
+.pk-bar label { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.pk-view { height: min(55vh, 500px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.pk-view canvas { outline: none; }
+.pk-info { margin: 0; font-size: 12px; min-height: 2.6em; }
+@media (max-width: 900px) {
+  .pk-grid { grid-template-columns: 1fr; }
+  .pk-palette { flex-direction: row; flex-wrap: wrap; max-height: 120px; }
+}

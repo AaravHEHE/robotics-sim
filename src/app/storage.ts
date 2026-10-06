@@ -4,6 +4,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { RobotProfile } from '../sim/profile.ts';
 import type { MapPlan } from './mapping.ts';
+import type { Assembly } from './parts/assembly.ts';
 
 const DB_NAME = 'vexsim';
 // 2: plans (auton mapping)
@@ -134,21 +135,29 @@ export const saveModel = (id: string, glb: ArrayBuffer) => safe(idb.put('models'
 export const loadModel = (id: string) => safe(idb.get<ArrayBuffer>('models', id), undefined);
 
 /** Export a robot as a .zip containing robot.json and, if present, model.glb. */
+/** A robot's VEX parts build (the parts kit), kept with the model it made. */
+export const saveAssembly = (assetId: string, asm: Assembly) => safe(idb.put('models', `asm:${assetId}`, asm), undefined);
+export const loadAssembly = (assetId: string) => safe(idb.get<Assembly>('models', `asm:${assetId}`), undefined);
+
 export async function robotToZip(r: RobotProfile): Promise<Uint8Array> {
   const entries: Record<string, Uint8Array> = { 'robot.json': strToU8(JSON.stringify(r, null, 2)) };
   if (r.model) {
     const glb = await loadModel(r.model.assetId);
     if (glb) entries['model.glb'] = new Uint8Array(glb);
+    const asm = await loadAssembly(r.model.assetId);
+    if (asm) entries['parts-build.json'] = strToU8(JSON.stringify(asm));
   }
   return zipSync(entries);
 }
 
-export function robotFromZip(data: Uint8Array): { profile: unknown; glb?: Uint8Array } {
+export function robotFromZip(data: Uint8Array): { profile: unknown; glb?: Uint8Array; assembly?: unknown } {
   const e = unzipSync(data);
-  const json = Object.entries(e).find(([p]) => p.endsWith('.json'));
+  const files = Object.entries(e);
+  const json = files.find(([p]) => /(^|\/)robot\.json$/i.test(p)) ?? files.find(([p]) => p.endsWith('.json') && !/parts-build\.json$/i.test(p));
   if (!json) throw new Error('The zip has no robot .json file.');
-  const glb = Object.entries(e).find(([p]) => /\.glb$/i.test(p))?.[1];
-  return { profile: JSON.parse(strFromU8(json[1])), glb };
+  const glb = files.find(([p]) => /\.glb$/i.test(p))?.[1];
+  const asm = files.find(([p]) => /parts-build\.json$/i.test(p))?.[1];
+  return { profile: JSON.parse(strFromU8(json[1])), glb, assembly: asm ? JSON.parse(strFromU8(asm)) : undefined };
 }
 
 // ---------------- downloads ----------------

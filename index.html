@@ -185,6 +185,7 @@
           <ul id="robot-errors" class="errors"></ul>
           <div class="stack">
             <button type="button" id="rb-save" class="primary">Save as my robot</button>
+            <button type="button" id="rb-parts" class="ghost" title="Build the robot's look from C-channel, wheels, motors and more">Build the model from VEX parts…</button>
             <button type="button" id="rb-model" class="ghost">Attach 3D model (.glb)…</button>
             <button type="button" id="rb-model-clear" class="ghost">Remove 3D model</button>
             <button type="button" id="rb-import" class="ghost">Import robot (.json / .zip)…</button>
@@ -194,6 +195,33 @@
         </div>
       </div>
       <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-parts" class="dialog wide" aria-labelledby="dlg-parts-title">
+    <form method="dialog">
+      <h2 id="dlg-parts-title">Build from VEX parts</h2>
+      <p class="muted">Snap C-channel, wheels, motors, gears and more together on VEX's ½″ hole grid. The build becomes the robot's 3D model: it is only how the robot looks. How it drives and what it can do still come from its profile (the blue box is its size).</p>
+      <div class="pk-grid">
+        <div id="pk-palette" class="pk-palette" aria-label="Parts"></div>
+        <div class="pk-main">
+          <div class="pk-bar">
+            <label>Length <select id="pk-length"></select></label>
+            <label>Cartridge <select id="pk-cartridge"><option value="red">red (100 rpm)</option><option value="green" selected>green (200 rpm)</option><option value="blue">blue (600 rpm)</option></select></label>
+            <label>Build level <input id="pk-level" type="number" step="1" value="0" style="width: 4em" /> holes up</label>
+            <span id="pk-count" class="muted"></span>
+          </div>
+          <div id="pk-view" class="pk-view"></div>
+          <p id="pk-info" class="muted pk-info"></p>
+        </div>
+      </div>
+      <div class="dlg-actions">
+        <button type="button" id="pk-undo" class="ghost">Undo</button>
+        <button type="button" id="pk-clear" class="ghost danger">Clear</button>
+        <button type="button" id="pk-fit" class="ghost" title="Set the robot's size, track width and wheels from the build">Fit the robot's size to the build</button>
+        <button type="button" id="pk-use" class="primary">Use as the robot's model</button>
+        <button value="cancel" class="ghost">Close</button>
+      </div>
     </form>
   </dialog>
 

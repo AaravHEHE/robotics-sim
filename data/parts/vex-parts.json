@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "note": "VEX V5 structure and motion parts for the cosmetic parts kit. Inches. Approximate published dimensions (vexrobotics.com product pages); check against VEX's own CAD before relying on them. Holes are on a 0.5 in grid; lengths are in holes (0.5 in each). Each part's box is its outer size before rotation: x along its length, y across, z up.",
+  "pitch": 0.5,
+  "parts": [
+    { "id": "c-channel-1x2x1", "name": "C-channel 1×2×1", "kind": "channel", "web": 2, "flange": 1, "lengths": [5, 10, 15, 20, 25, 35], "length": 25 },
+    { "id": "c-channel-1x3x1", "name": "C-channel 1×3×1", "kind": "channel", "web": 3, "flange": 1, "lengths": [5, 10, 15, 20, 25, 35], "length": 25 },
+    { "id": "c-channel-1x5x1", "name": "C-channel 1×5×1", "kind": "channel", "web": 5, "flange": 1, "lengths": [5, 10, 15, 20, 25, 35], "length": 25 },
+    { "id": "angle-1x1", "name": "Angle 1×1", "kind": "angle", "web": 1, "flange": 1, "lengths": [5, 10, 15, 20, 25, 35], "length": 25 },
+    { "id": "angle-2x2", "name": "Angle 2×2", "kind": "angle", "web": 2, "flange": 2, "lengths": [5, 10, 15, 20, 25, 35], "length": 25 },
+    { "id": "plate-5", "name": "Flat plate 5 wide", "kind": "plate", "web": 5, "lengths": [5, 10, 15, 25], "length": 15 },
+    { "id": "omni-2.75", "name": "Omni wheel 2.75″", "kind": "wheel", "diameter": 2.75, "width": 1.06, "style": "omni" },
+    { "id": "omni-3.25", "name": "Omni wheel 3.25″", "kind": "wheel", "diameter": 3.25, "width": 1.06, "style": "omni" },
+    { "id": "omni-4", "name": "Omni wheel 4″", "kind": "wheel", "diameter": 4.125, "width": 1.13, "style": "omni" },
+    { "id": "traction-3.25", "name": "Traction wheel 3.25″", "kind": "wheel", "diameter": 3.25, "width": 1.06, "style": "traction" },
+    { "id": "traction-4", "name": "Traction wheel 4″", "kind": "wheel", "diameter": 4.0, "width": 1.13, "style": "traction" },
+    { "id": "v5-motor", "name": "V5 Smart Motor (11 W)", "kind": "motor", "size": [2.5, 2.25, 1.25], "cartridges": ["red", "green", "blue"], "cartridge": "green" },
+    { "id": "exp-motor", "name": "V5 Smart Motor (5.5 W)", "kind": "motor", "size": [1.9, 1.75, 1.0], "cartridges": ["red", "green", "blue"], "cartridge": "green" },
+    { "id": "gear-12", "name": "Gear 12T", "kind": "gear", "teeth": 12 },
+    { "id": "gear-36", "name": "Gear 36T", "kind": "gear", "teeth": 36 },
+    { "id": "gear-48", "name": "Gear 48T", "kind": "gear", "teeth": 48 },
+    { "id": "gear-60", "name": "Gear 60T", "kind": "gear", "teeth": 60 },
+    { "id": "gear-72", "name": "Gear 72T", "kind": "gear", "teeth": 72 },
+    { "id": "gear-84", "name": "Gear 84T", "kind": "gear", "teeth": 84 },
+    { "id": "standoff", "name": "Standoff 8-32", "kind": "standoff", "lengths": [1, 2, 3, 4, 6, 8, 12], "length": 4 },
+    { "id": "shaft", "name": "Square shaft ⅛″", "kind": "shaft", "lengths": [4, 6, 8, 12, 16, 24], "length": 8 },
+    { "id": "v5-brain", "name": "V5 Robot Brain", "kind": "box", "size": [5.5, 4.2, 1.3], "color": "#1f2125", "accent": "#3a6fd8" },
+    { "id": "v5-battery", "name": "V5 Robot Battery", "kind": "box", "size": [4.9, 2.5, 1.6], "color": "#1f2125", "accent": "#d8343a" },
+    { "id": "air-tank", "name": "Air tank", "kind": "cylinder", "diameter": 1.6, "length": 4.6, "color": "#d8dde3" },
+    { "id": "piston", "name": "Pneumatic cylinder", "kind": "cylinder", "diameter": 0.75, "length": 3.5, "color": "#c9cdd2" }
+  ]
+}
