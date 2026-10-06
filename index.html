@@ -73,6 +73,15 @@
             <span id="map-cursor" class="map-cursor" aria-live="off">x —, y —</span>
             <button id="map-clear" class="ghost">Clear points</button>
           </div>
+          <div class="map-bar plan-bar">
+            <label>Plan <input id="plan-name" placeholder="Untitled plan" maxlength="80" /></label>
+            <button id="plan-save" title="Keep this plan in this browser">Save</button>
+            <select id="plan-open" aria-label="Open a saved plan"><option value="">Open a saved plan…</option></select>
+            <button id="plan-delete" class="ghost danger" title="Delete this saved plan">Delete</button>
+            <button id="plan-export" class="ghost" title="Download this plan as a file">Export file</button>
+            <button id="plan-import" class="ghost" title="Open a plan file">Import file</button>
+            <button id="plan-link" class="ghost" title="Copy a link that opens this plan">Copy link</button>
+          </div>
           <p id="map-help" class="muted map-help"></p>
           <div class="map-body">
             <table class="map-table">

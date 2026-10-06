@@ -1,23 +1,32 @@
 // Browser storage (IndexedDB) for the current project, custom robots and their GLB
-// models, plus file import/export. Everything stays on the visitor's machine.
+// models, auton plans, plus file import/export. Everything stays on the visitor's machine.
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { RobotProfile } from '../sim/profile.ts';
+import type { MapPlan } from './mapping.ts';
 
 const DB_NAME = 'vexsim';
-const DB_VERSION = 1;
-type Store = 'projects' | 'robots' | 'models' | 'settings';
+// 2: plans (auton mapping)
+const DB_VERSION = 2;
+type Store = 'projects' | 'robots' | 'models' | 'settings' | 'plans';
 
 let dbP: Promise<IDBDatabase> | null = null;
 function db(): Promise<IDBDatabase> {
   dbP ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      for (const s of ['projects', 'robots', 'models', 'settings']) {
+      for (const s of ['projects', 'robots', 'models', 'settings', 'plans']) {
         if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // another tab opening a newer version: let it upgrade (this tab reopens on next use)
+      req.result.onversionchange = () => {
+        req.result.close();
+        dbP = null;
+      };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbP;
@@ -169,3 +178,21 @@ export const toBase64 = (b: Uint8Array) => {
   return btoa(s);
 };
 export const fromBase64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+// ---------------- auton mapping plans ----------------
+
+
+export interface SavedPlan extends MapPlan {
+  /** Storage key. */
+  id: string;
+}
+export const listPlans = async (): Promise<SavedPlan[]> => {
+  const keys = (await safe(idb.keys('plans'), [])) as string[];
+  const plans = await Promise.all(keys.map((k) => safe(idb.get<SavedPlan>('plans', k), undefined)));
+  return plans.filter((x): x is SavedPlan => !!x).sort((a, b) => a.name.localeCompare(b.name));
+};
+/** Throws when the browser can't store it. */
+export const savePlan = async (p: SavedPlan): Promise<void> => {
+  await idb.put('plans', p.id, p);
+};
+export const deletePlan = (id: string) => safe(idb.del('plans', id), undefined);

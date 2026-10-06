@@ -264,7 +264,7 @@ function applyField() {
 
 let mapPanel: MapPanel | null = null;
 function initMap() {
-  mapPanel = new MapPanel({ viewer, field, layoutId, setStart, changed: () => {} });
+  mapPanel = new MapPanel({ viewer, field, layoutId, setStart, status: setStatus });
   mapPanel.setMode('off');
 }
 
@@ -1249,6 +1249,8 @@ async function boot() {
     setStatus('Welcome! This is a sample project: press Run to compile it in your browser. The first run downloads the compiler (~40 MB, cached afterwards).');
   }
   if (skipped.length) setStatus(`Skipped saved robot${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')}: ${skipped.length > 1 ? 'they no longer match' : 'it no longer matches'} the robot format. Open it from an exported file to fix it.`, 'err');
+  // the plan being worked on, or one shared in the link (which opens the Map tab)
+  if (await mapPanel?.restore()) showTab('map');
 }
 
 void boot()

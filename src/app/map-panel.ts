@@ -3,8 +3,11 @@
 // elements, to plan autonomous routes.
 
 import type { FieldDef } from '../sim/field.ts';
+import { deletePlan, download, idb, listPlans, pickFile, safe, savePlan, type SavedPlan } from './storage.ts';
 import { MapLayer } from './map-layer.ts';
-import { clampToField, measure, nearestPoi, pointsOfInterest, segments, snap, type MapPoint, type Poi } from './mapping.ts';
+import {
+  clampToField, decodePlan, encodePlan, measure, nearestPoi, pointsOfInterest, segments, snap, validatePlan, type MapPlan, type MapPoint, type Poi,
+} from './mapping.ts';
 import type { FieldViewer } from './viewer.ts';
 
 export type MapMode = 'off' | 'plot' | 'measure';
@@ -15,9 +18,14 @@ export interface MapHost {
   layoutId: () => string;
   /** Put the robot's start pose here. */
   setStart: (p: { x: number; y: number; theta: number }) => void;
-  /** The points changed (to keep the working plan). */
-  changed: () => void;
+  /** A message for the status bar. */
+  status: (text: string, kind?: '' | 'ok' | 'err') => void;
 }
+
+/** A link longer than this is better shared as a file. */
+const MAX_LINK = 8000;
+/** The plan being worked on, kept across reloads (settings store). */
+const WORKING_KEY = 'mapWorking';
 
 /** A spot to measure from or to: a point, a field element, or a spot on the floor. */
 interface Spot {
@@ -48,6 +56,9 @@ export class MapPanel {
   private to: Spot | null = null;
   private readonly layer = new MapLayer();
   private press: { x: number; y: number; t: number; id: number; drag: string | null } | null = null;
+  /** The plan being worked on: its saved id (null = not saved yet) and when it was made. */
+  private plan: { id: string | null; created: number } = { id: null, created: Date.now() };
+  private keepTimer = 0;
 
   private readonly host: MapHost;
 
@@ -67,7 +78,154 @@ export class MapPanel {
     };
     $<HTMLSelectElement>('map-from').onchange = () => this.pickMeasure();
     $<HTMLSelectElement>('map-to').onchange = () => this.pickMeasure();
+    $<HTMLInputElement>('plan-name').onchange = () => this.changed();
+    $('plan-save').onclick = () => void this.save();
+    $<HTMLSelectElement>('plan-open').onchange = (e) => void this.openSaved((e.target as HTMLSelectElement).value);
+    $('plan-delete').onclick = () => void this.deleteSaved();
+    $('plan-export').onclick = () => this.exportFile();
+    $('plan-import').onclick = () => void this.importFile();
+    $('plan-link').onclick = () => void this.copyLink();
     this.fieldChanged();
+  }
+
+  /**
+   * Restore the plan: one shared in the page link (#plan=...) if there is one, else the plan
+   * being worked on last time.
+   */
+  async restore(): Promise<boolean> {
+    const m = /[#&]plan=([A-Za-z0-9_-]+)/.exec(location.hash);
+    if (m) {
+      // the link has done its job: a reload shouldn't open it again over later edits
+      history.replaceState(null, '', location.pathname + location.search);
+      try {
+        this.open(decodePlan(m[1]), null);
+        this.host.status(`Opened the shared plan “${this.name()}”. It isn't saved here yet: press Save in the Map tab to keep it.`, 'ok');
+        this.warnField(this.lastOpened!);
+        await this.renderPlans();
+        return true;
+      } catch (e) {
+        this.host.status(`Couldn't open the shared plan: ${(e as Error).message}`, 'err');
+      }
+    } else {
+      const w = await safe(idb.get<{ name: string; id: string | null; created: number; points: MapPoint[] }>('settings', WORKING_KEY), undefined);
+      if (w && Array.isArray(w.points)) {
+        $<HTMLInputElement>('plan-name').value = w.name ?? '';
+        this.plan = { id: w.id ?? null, created: w.created ?? Date.now() };
+        this.setPoints(w.points, false);
+      }
+    }
+    await this.renderPlans();
+    return false;
+  }
+
+  // ---------------- plans ----------------
+
+  private lastOpened: MapPlan | null = null;
+  private name = () => $<HTMLInputElement>('plan-name').value.trim() || 'Untitled plan';
+
+  private current(): MapPlan {
+    return { v: 1, name: this.name(), field: this.host.field().id, layout: this.host.layoutId(), points: this.points.map((p) => ({ ...p })), created: this.plan.created };
+  }
+
+  private open(plan: MapPlan, id: string | null): void {
+    this.lastOpened = plan;
+    this.plan = { id, created: plan.created };
+    $<HTMLInputElement>('plan-name').value = plan.name;
+    this.setPoints(plan.points);
+  }
+
+  /** A plan made on another field or layout: its points may not mean much here. */
+  private warnField(plan: MapPlan): void {
+    if (plan.field !== this.host.field().id) this.host.status(`This plan was made on the “${plan.field}” field; the ${this.host.field().name} is selected.`, 'err');
+  }
+
+  /** Remember what is being worked on (debounced), so a reload keeps it. */
+  private changed(): void {
+    clearTimeout(this.keepTimer);
+    this.keepTimer = window.setTimeout(() => {
+      void safe(idb.put('settings', WORKING_KEY, { name: $<HTMLInputElement>('plan-name').value, id: this.plan.id, created: this.plan.created, points: this.points }), undefined);
+    }, 300);
+  }
+
+  private async renderPlans(): Promise<void> {
+    const plans = await listPlans();
+    const sel = $<HTMLSelectElement>('plan-open');
+    sel.innerHTML = `<option value="">${plans.length ? 'Open a saved plan…' : 'No saved plans yet'}</option>` +
+      plans.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${p.points.length} point${p.points.length === 1 ? '' : 's'}${p.field === this.host.field().id ? '' : ', ' + esc(p.field)})</option>`).join('');
+    sel.value = '';
+    $<HTMLButtonElement>('plan-delete').disabled = !this.plan.id;
+  }
+
+  private async save(): Promise<void> {
+    const plan: SavedPlan = { ...this.current(), id: this.plan.id ?? `plan-${Date.now().toString(36)}` };
+    try {
+      await savePlan(plan);
+      this.plan.id = plan.id;
+      $<HTMLInputElement>('plan-name').value = plan.name;
+      this.changed();
+      this.host.status(`Saved the plan “${plan.name}” in this browser.`, 'ok');
+    } catch (e) {
+      this.host.status(`Couldn't save the plan (${(e as Error).message}). Export it as a file instead.`, 'err');
+    }
+    await this.renderPlans();
+  }
+
+  private async openSaved(id: string): Promise<void> {
+    if (!id) return;
+    const plan = (await listPlans()).find((p) => p.id === id);
+    if (!plan) return;
+    if (this.points.length && !this.plan.id && !confirm(`Open “${plan.name}”? The ${this.points.length} unsaved points here will be replaced.`)) return void this.renderPlans();
+    this.open(plan, plan.id);
+    this.host.status(`Opened the plan “${plan.name}”.`, 'ok');
+    this.warnField(plan);
+    await this.renderPlans();
+  }
+
+  private async deleteSaved(): Promise<void> {
+    const id = this.plan.id;
+    if (!id || !confirm(`Delete the saved plan “${this.name()}” from this browser? (The points stay on the field until you clear them.)`)) return;
+    await deletePlan(id);
+    this.plan.id = null;
+    this.changed();
+    this.host.status('Deleted the saved plan.', 'ok');
+    await this.renderPlans();
+  }
+
+  private exportFile(): void {
+    const plan = this.current();
+    const file = plan.name.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'plan';
+    download(`${file}.vexplan.json`, JSON.stringify(plan, null, 2) + '\n', 'application/json');
+  }
+
+  private async importFile(): Promise<void> {
+    const f = await pickFile('.json,.vexplan');
+    if (!f) return;
+    try {
+      const plan = JSON.parse(await f.text()) as MapPlan;
+      const errs = validatePlan(plan);
+      if (errs.length) throw new Error(errs.join(' '));
+      plan.points = plan.points.map((q, i) => ({ ...q, id: q.id || `p${i + 1}` }));
+      this.open(plan, null);
+      this.host.status(`Imported the plan “${plan.name}”. Press Save to keep it in this browser.`, 'ok');
+      this.warnField(plan);
+      await this.renderPlans();
+    } catch (e) {
+      this.host.status(`Couldn't import that file: ${(e as Error).message}`, 'err');
+    }
+  }
+
+  private async copyLink(): Promise<void> {
+    const url = `${location.origin}${location.pathname}#plan=${encodePlan(this.current())}`;
+    if (url.length > MAX_LINK) {
+      this.host.status(`This plan is too big for a link (${url.length} characters): export it as a file instead.`, 'err');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      this.host.status('Copied a link to this plan. Anyone who opens it sees these points (nothing is uploaded: the plan is in the link).', 'ok');
+    } catch {
+      prompt('Copy this link to share the plan:', url);
+    }
   }
 
   /** The field or layout changed: its elements to measure to change too. */
@@ -76,14 +234,14 @@ export class MapPanel {
     this.render();
   }
 
-  setPoints(points: MapPoint[]): void {
+  setPoints(points: MapPoint[], keep = true): void {
     this.points = points.map((p) => ({ ...p }));
-    this.nextId = Math.max(0, ...this.points.map((p) => Number(p.id.replace(/\D/g, '')) || 0)) + 1;
+    this.nextId = Math.max(0, ...this.points.map((p) => Number(String(p.id ?? '').replace(/\D/g, '')) || 0)) + 1;
     for (const p of this.points) if (!p.id) p.id = `p${this.nextId++}`;
     this.selected = null;
     this.from = this.to = null;
     this.render();
-    this.host.changed();
+    if (keep) this.changed();
   }
 
   setMode(mode: MapMode): void {
@@ -132,7 +290,7 @@ export class MapPanel {
     if (press.drag) {
       this.host.viewer.setOrbitEnabled(true);
       this.host.viewer.canvas.releasePointerCapture(e.pointerId);
-      this.host.changed();
+      this.changed();
       return;
     }
     const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
@@ -194,7 +352,7 @@ export class MapPanel {
     this.points.push(q);
     this.selected = q.id;
     this.render();
-    this.host.changed();
+    this.changed();
   }
 
   private measureTap(p: { x: number; y: number }): void {
@@ -328,7 +486,7 @@ export class MapPanel {
     else if (field === 'heading') p.heading = value.trim() === '' || !Number.isFinite(Number(value)) ? undefined : ((Number(value) % 360) + 360) % 360;
     else if (Number.isFinite(Number(value))) Object.assign(p, clampToField({ ...p, [field]: Number(value) }, this.host.field()));
     this.render();
-    this.host.changed();
+    this.changed();
   }
 
   private act(id: string, action: string): void {
@@ -345,6 +503,6 @@ export class MapPanel {
       return;
     }
     this.render();
-    this.host.changed();
+    this.changed();
   }
 }
