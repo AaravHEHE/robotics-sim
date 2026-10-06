@@ -79,7 +79,6 @@ const state = {
   playing: false,
   speed: 1,
   running: false,
-  dirtySinceRun: true,
 };
 const robot = () => state.robots.find((r) => r.id === state.robotId) ?? PRESETS[0];
 const field = () => FIELDS.find((f) => f.id === state.fieldId) ?? FIELDS[0];
@@ -141,11 +140,16 @@ function renderRobotSelect() {
   }
 }
 
+/** Each robot change; one still loading its model when another starts gives up. */
+let robotApply = 0;
+
 async function applyRobot() {
   const r = robot();
+  const seq = ++robotApply;
   mapPanel?.robotChanged(); // its route timing uses this robot
   try {
     const glb = r.model ? await loadModel(r.model.assetId) : undefined;
+    if (seq !== robotApply) return; // a newer robot is being shown
     await viewer.setRobot(r, glb);
   } catch (e) {
     // a broken model or profile must not take the app down: show the plain box robot
@@ -260,7 +264,9 @@ function applyField() {
   viewer.setField(f);
   clearRecording();
   renderPresets();
-  void showFieldModel();
+  // the field model already on screen stays (re-reading it can take seconds, and one that
+  // couldn't be saved would be lost)
+  if (fieldModel.shown?.fieldId !== f.id) void showFieldModel();
   mapPanel?.fieldChanged();
 }
 
@@ -459,14 +465,8 @@ $<HTMLSelectElement>('auton-length').onchange = (e) => {
   persistSettings();
 };
 
-/** The code changed: the shown run no longer matches it. */
-function invalidateRun() {
-  state.dirtySinceRun = true;
-}
-
 /** A setting a run depends on changed: a run in progress is stale, so stop it. */
 function settingsChanged() {
-  state.dirtySinceRun = true;
   if (state.running) cancelRun();
 }
 
@@ -682,7 +682,6 @@ async function run() {
         'ok',
       );
     }
-    state.dirtySinceRun = false;
     setPlaying(true);
   } catch (e) {
     if (e instanceof Cancelled) setStatus('Run cancelled: the robot, field or start changed. Press Run again.');
@@ -949,7 +948,6 @@ window.addEventListener('keydown', (e) => {
 
 let saveTimer = 0;
 editor.onChange = () => {
-  invalidateRun();
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(persistProject, 600);
 };
@@ -1015,11 +1013,11 @@ $('btn-import').onclick = async () => {
   try {
     const { files, binary } = projectFromZip(new Uint8Array(await f.arrayBuffer()));
     const strip = commonRoot(Object.keys(files));
-    const rel = (p: string) => p.slice(strip.length);
     const tf: Record<string, string> = {};
     const bf: Record<string, Uint8Array> = {};
-    for (const [p, t] of Object.entries(files)) tf[rel(p)] = t;
-    for (const [p, b] of Object.entries(binary)) if (rel(p).startsWith('static/')) bf[rel(p)] = b;
+    // files outside the project folder (other folders zipped alongside it) are left out
+    for (const [p, t] of Object.entries(files)) if (p.startsWith(strip)) tf[p.slice(strip.length)] = t;
+    for (const [p, b] of Object.entries(binary)) if (p.startsWith(strip + 'static/')) bf[p.slice(strip.length)] = b;
     if (!Object.keys(tf).some((p) => p.startsWith('src/'))) throw new Error('No src/ folder found in the zip. Zip your whole PROS project folder.');
     loadFiles(f.name.replace(/\.zip$/i, ''), tf, bf);
     setStatus(`Imported ${f.name}. Library headers bundled in include/ are replaced by the simulator's.`, 'ok');
@@ -1028,10 +1026,16 @@ $('btn-import').onclick = async () => {
   }
 };
 
+/** The project folder in a zip: the shallowest folder with a src/ folder in it ('' = the top). */
 function commonRoot(paths: string[]): string {
-  const withSrc = paths.find((p) => /(^|\/)src\//.test(p));
-  if (!withSrc) return '';
-  return withSrc.slice(0, withSrc.search(/(^|\/)src\//) + (withSrc.match(/^src\//) ? 0 : 1));
+  let best: string | null = null;
+  for (const p of paths) {
+    const m = /^(.*?\/)?src\//.exec(p);
+    if (!m) continue;
+    const root = m[1] ?? '';
+    if (best === null || root.split('/').length < best.split('/').length) best = root;
+  }
+  return best ?? '';
 }
 
 $('btn-export').onclick = () => download(`${state.projectName || 'project'}.zip`, projectToZip(editor.files(), state.binary), 'application/zip');
@@ -1123,6 +1127,13 @@ function robotSummary(r: RobotProfile): string {
     <div>${r.model ? '3D model attached' : 'Box model (no GLB)'}</div>`;
 }
 
+/**
+ * Set while the layout editor writes its change into the robot JSON, so that edit doesn't
+ * redraw the layout it came from. Module-level: the layout editor (and its callback) is made
+ * once, but the dialog is opened many times.
+ */
+let fromLayout = false;
+
 function openRobotDialog() {
   const r = robot();
   const isPreset = PRESETS.includes(r);
@@ -1131,7 +1142,6 @@ function openRobotDialog() {
   robotEditor?.dispose();
   robotEditor = jsonEditor(host, JSON.stringify(r, null, 2));
   // the layout editor writes into the JSON (where it is validated); a JSON edit redraws the layout
-  let fromLayout = false;
   layoutEditor ??= new LayoutEditor(
     {
       top: $('rl-top'),

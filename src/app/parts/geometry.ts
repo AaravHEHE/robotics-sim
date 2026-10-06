@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { partSize, placement, rotation, sprocketPitchDiameter, type PartDef, type Placed } from './assembly.ts';
+import { shared } from '../override-meshes.ts';
 
 const cache = new Map<string, THREE.Object3D>();
 
@@ -26,7 +27,9 @@ function holes(): THREE.Texture {
 }
 
 const mats = new Map<string, THREE.Material>();
-const mat = (key: string, make: () => THREE.Material) => mats.get(key) ?? (mats.set(key, make()), mats.get(key)!);
+/** Cached materials are shared by every part that uses them: clearing a scene must not dispose them. */
+const mat = (key: string, make: () => THREE.Material) => mats.get(key) ?? (mats.set(key, keep(make())), mats.get(key)!);
+const keep = <T extends object>(o: T): T => (shared.add(o), o);
 const plain = (color: string, metal = 0, rough = 0.6) => mat(`${color}:${metal}:${rough}`, () => new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough }));
 /** The tint over the aluminum hole texture: steel is darker, slide rails black. */
 const TINT = { alu: '#ffffff', steel: '#a9aeb6', black: '#4a4d52' } as const;
@@ -258,7 +261,15 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
 export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> = {}): THREE.Object3D {
   const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}`;
   let proto = cache.get(key);
-  if (!proto) cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p })));
+  if (!proto) {
+    cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p })));
+    // its clones share these: they belong to the cache, not to the scene a clone is in
+    proto.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) keep(m.geometry);
+      for (const x of m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : []) keep(x);
+    });
+  }
   return proto.clone(); // shares geometry and materials
 }
 

@@ -142,10 +142,14 @@ export class ProjectEditor {
         // markers are cosmetic; the Problems panel still lists everything
       }
     }
-    this.renderTabs(diags);
+    this.diags = diags;
+    this.renderTabs();
   }
 
-  private renderTabs(diags: Diagnostic[] = []) {
+  /** The last build's diagnostics: tab badges stay when tabs are redrawn (switching files). */
+  private diags: Diagnostic[] = [];
+
+  private renderTabs(diags: Diagnostic[] = this.diags) {
     this.tabs.replaceChildren(
       ...this.paths().map((p) => {
         const b = document.createElement('button');

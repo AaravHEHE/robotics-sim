@@ -193,11 +193,15 @@ export class FieldViewer {
   // ---------------- field ----------------
 
   setField(field: FieldDef) {
+    const same = this.field?.id === field.id;
     this.field = field;
     clearGroup(this.fieldGroup);
-    // the last field's model isn't this field's (the app loads this one's, if any)
-    clearGroup(this.fieldModel);
-    this.hideBuiltIn = { base: false, statics: false };
+    // the last field's model isn't this field's (the app loads this one's, if any); the same
+    // field redrawn (a new auto-stop, a sample opened) keeps its model as it is
+    if (!same) {
+      clearGroup(this.fieldModel);
+      this.hideBuiltIn = { base: false, statics: false };
+    }
     clearGroup(this.gameGroup);
     this.toggleRolls.clear();
     const inside = field.perimeter.inside;
