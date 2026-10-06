@@ -117,6 +117,8 @@ Notes:
 
 ## 3D models (optional)
 
+Without a model of its own, a robot is drawn from its profile with the VEX parts kit's parts, as a team would CAD it: drilled C-channel rails, crossbars and towers at its real size, omni wheels on axles at its track width (a traction wheel in the middle of a 6-wheel drive), its drive motors with their cartridge colors, the brain, battery and (with pistons) an air tank, C-channel lift bars on gear pivots, flex-wheel intakes and rollers, angle claw fingers, drilled-plate trays and Toggle bumpers.
+
 **Build the model from VEX parts…** (in the robot dialog) builds the look from VEX parts on
 the ½″ hole grid ([data/parts/vex-parts.json](../data/parts/vex-parts.json); approximate
 dimensions). It is saved at real scale (`model.scale` 1), the build is kept to edit later,

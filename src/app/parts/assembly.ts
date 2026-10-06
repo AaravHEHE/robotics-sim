@@ -17,7 +17,7 @@ export interface PartDef {
   length?: number;
   diameter?: number;
   width?: number;
-  style?: 'omni' | 'traction';
+  style?: 'omni' | 'traction' | 'flex';
   size?: [number, number, number];
   cartridges?: string[];
   cartridge?: string;

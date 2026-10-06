@@ -14,6 +14,8 @@
     { "id": "omni-4", "name": "Omni wheel 4″", "kind": "wheel", "diameter": 4.125, "width": 1.13, "style": "omni" },
     { "id": "traction-3.25", "name": "Traction wheel 3.25″", "kind": "wheel", "diameter": 3.25, "width": 1.06, "style": "traction" },
     { "id": "traction-4", "name": "Traction wheel 4″", "kind": "wheel", "diameter": 4.0, "width": 1.13, "style": "traction" },
+    { "id": "flex-2", "name": "Flex wheel 2″", "kind": "wheel", "diameter": 2.0, "width": 0.6, "style": "flex" },
+    { "id": "flex-3", "name": "Flex wheel 3″", "kind": "wheel", "diameter": 3.0, "width": 0.6, "style": "flex" },
     { "id": "v5-motor", "name": "V5 Smart Motor (11 W)", "kind": "motor", "size": [2.5, 2.25, 1.25], "cartridges": ["red", "green", "blue"], "cartridge": "green" },
     { "id": "exp-motor", "name": "V5 Smart Motor (5.5 W)", "kind": "motor", "size": [1.9, 1.75, 1.0], "cartridges": ["red", "green", "blue"], "cartridge": "green" },
     { "id": "gear-12", "name": "Gear 12T", "kind": "gear", "teeth": 12 },

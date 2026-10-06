@@ -29,7 +29,8 @@ const mats = new Map<string, THREE.Material>();
 const mat = (key: string, make: () => THREE.Material) => mats.get(key) ?? (mats.set(key, make()), mats.get(key)!);
 const plain = (color: string, metal = 0, rough = 0.6) => mat(`${color}:${metal}:${rough}`, () => new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough }));
 const drilled = (along: number, across: number) =>
-  mat(`holes:${along}:${across}`, () => {
+  // (no canvas outside a browser, e.g. in tests: plain aluminum)
+  typeof document === 'undefined' ? plain('#c9cdd2', 0.6, 0.4) : mat(`holes:${along}:${across}`, () => {
     const t = holes().clone();
     t.needsUpdate = true;
     t.repeat.set(along, across);
@@ -71,6 +72,23 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
       break;
     case 'wheel': {
       const r = sy / 2;
+      if (def.style === 'flex') {
+        // a flex wheel: a green rubber ring on thin spokes around a square-shaft hub
+        const green = plain('#2fa84f', 0, 0.75);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r - 0.14, 0.14, 8, 32).rotateY(Math.PI / 2), green);
+        ring.scale.set(sx / 0.28, 1, 1);
+        ring.position.set(sx / 2, r, r);
+        g.add(ring);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const spoke = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.7, 0.08, r - 0.35), green);
+          spoke.rotation.x = a;
+          spoke.position.set(sx / 2, r + Math.sin(a) * (r - 0.2) * 0.5, r - Math.cos(a) * (r - 0.2) * 0.5);
+          g.add(spoke);
+        }
+        g.add(rod(0.22, sx, plain('#1f2125', 0.1, 0.6), 12, r));
+        break;
+      }
       g.add(rod(r, sx, plain(def.style === 'traction' ? '#2a2d31' : '#3c4046', 0, 0.9), 40));
       g.add(rod(r * 0.55, sx + 0.04, plain('#d8343a', 0.1, 0.5), 24, r)).position.x = -0.02;
       if (def.style === 'omni') {
@@ -134,12 +152,34 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
   return g;
 }
 
-/** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
-export function partObject(def: PartDef, p: Placed): THREE.Object3D {
+/** A part's own shape: x along its length, y across, z up, with its corner at the origin. */
+export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> = {}): THREE.Object3D {
   const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}`;
   let proto = cache.get(key);
-  if (!proto) cache.set(key, (proto = build(def, p)));
-  const o = proto.clone(); // shares geometry and materials
+  if (!proto) cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p })));
+  return proto.clone(); // shares geometry and materials
+}
+
+/**
+ * A part placed by the center of its box: its length (x) along `xDir` and its width (y)
+ * along `yDir`, in whatever frame the caller works in.
+ */
+export function centeredPart(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'>, center: THREE.Vector3, xDir: THREE.Vector3, yDir: THREE.Vector3): THREE.Object3D {
+  const size = partSize(def, p);
+  const inner = partShape(def, p);
+  inner.position.set(-size[0] / 2, -size[1] / 2, -size[2] / 2);
+  const outer = new THREE.Group();
+  outer.add(inner);
+  const x = xDir.clone().normalize();
+  const y = yDir.clone().sub(x.clone().multiplyScalar(yDir.dot(x))).normalize();
+  outer.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, x.clone().cross(y)));
+  outer.position.copy(center);
+  return outer;
+}
+
+/** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
+export function partObject(def: PartDef, p: Placed): THREE.Object3D {
+  const o = partShape(def, p);
   const R = rotation(p.rot);
   const { offset } = placement(def, p);
   o.matrixAutoUpdate = false;

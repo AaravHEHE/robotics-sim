@@ -14,6 +14,9 @@ import type { OverrideState, Transit } from '../games/override/state.ts';
 import { baseOffset, clawEffector, liftEffector, liftPosition, toRobot, type Point3 } from '../sim/lift.ts';
 import type { ClawSpec, IntakeSpec, LiftSpec, MechanismSpec, RobotProfile, StagingSpec } from '../sim/profile.ts';
 import { cupMesh, pinMesh } from './override-meshes.ts';
+import { partSize } from './parts/assembly.ts';
+import { partDef } from './parts/catalog.ts';
+import { centeredPart, partShape } from './parts/geometry.ts';
 
 const local = (p: Point3) => new THREE.Vector3(p.x, p.z, -p.y);
 const DEG = Math.PI / 180;
@@ -31,15 +34,46 @@ const CUP_HEIGHT = 6.5;
 type ValueOf = (m: MechanismSpec) => number;
 type Pose = { x: number; y: number; theta: number };
 
-/** A bar from a to b (robot-local three coordinates), as a unit box scaled each update. */
-function bar(color: number, thickness = 0.8): { mesh: THREE.Mesh; set(a: THREE.Vector3, b: THREE.Vector3): void } {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, thickness, 1), new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.5 }));
+/**
+ * A structural bar from a to b (robot-local three coordinates): a drilled VEX C-channel (or
+ * `part`) cut to the nearest hole, rebuilt only when its length changes by a hole.
+ */
+function bar(part = 'c-channel-1x2x1'): { mesh: THREE.Group; set(a: THREE.Vector3, b: THREE.Vector3): void } {
+  const mesh = new THREE.Group();
+  const def = partDef(part);
+  let built = -1;
   return {
     mesh,
     set(a, b) {
-      const len = Math.max(0.01, a.distanceTo(b));
+      const len = Math.max(0.5, a.distanceTo(b));
+      const holes = Math.max(2, Math.round(len / 0.5));
+      if (holes !== built) {
+        mesh.clear();
+        const shape = partShape(def, { length: holes });
+        const [, w, h] = partSize(def, { length: holes });
+        // along the bar from a, centered across it
+        shape.position.set((len - holes * 0.5) / 2, -w / 2, -h / 2);
+        mesh.add(shape);
+        built = holes;
+      }
+      const dir = b.clone().sub(a).normalize();
+      // keep the channel's web facing sideways (across the robot) where it can
+      const side = Math.abs(dir.x) > 0.95 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+      const across = side.sub(dir.clone().multiplyScalar(side.dot(dir))).normalize();
+      mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, across, dir.clone().cross(across)));
+      mesh.position.copy(a);
+    },
+  };
+}
+
+/** A piston rod from a to b: a cylinder stretched to fit (it really does slide). */
+function rodBar(): { mesh: THREE.Mesh; set(a: THREE.Vector3, b: THREE.Vector3): void } {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc9cdd2, metalness: 0.7, roughness: 0.3 }));
+  return {
+    mesh,
+    set(a, b) {
       mesh.position.copy(a).add(b).multiplyScalar(0.5);
-      mesh.scale.set(1, 1, len);
+      mesh.scale.set(1, 1, Math.max(0.01, a.distanceTo(b)));
       mesh.quaternion.setFromUnitVectors(Z, b.clone().sub(a).normalize());
     },
   };
@@ -55,25 +89,20 @@ function stackMeshes(pieces: Piece[]): THREE.Group {
   return g;
 }
 
-/** A roller with flex-wheel flaps, spinning about the robot's x axis (or y with `upright`). */
-function roller(length: number, radius: number, color: number, upright = false): THREE.Group {
+/**
+ * A roller as teams build them: flex wheels on a square shaft, spinning about the robot's x
+ * axis (or y with `upright`). `radius` picks the flex wheel (2 or 3 in).
+ */
+function roller(length: number, radius: number, _color?: number, upright = false): THREE.Group {
   const spin = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
-  const flapMat = new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.8 });
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 14), mat);
-  if (!upright) drum.rotation.z = Math.PI / 2;
-  spin.add(drum);
-  for (let k = 0; k < 6; k++) {
-    const flap = new THREE.Mesh(upright ? new THREE.BoxGeometry(0.12, length * 0.9, radius * 0.9) : new THREE.BoxGeometry(length * 0.9, 0.12, radius * 0.9), flapMat);
-    const a = (k / 6) * Math.PI * 2;
-    if (upright) {
-      flap.position.set(Math.cos(a) * radius * 1.3, 0, Math.sin(a) * radius * 1.3);
-      flap.rotation.y = -a;
-    } else {
-      flap.position.set(0, Math.cos(a) * radius * 1.3, Math.sin(a) * radius * 1.3);
-      flap.rotation.x = a;
-    }
-    spin.add(flap);
+  const axis = upright ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  const across = upright ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  spin.add(centeredPart(partDef('shaft'), { length: Math.max(2, Math.round((length + 1) / 0.5)) }, new THREE.Vector3(), axis, across));
+  const flex = partDef(radius >= 1.2 ? 'flex-3' : 'flex-2');
+  const n = Math.max(1, Math.floor(length / 1.1));
+  for (let k = 0; k < n; k++) {
+    const t = n === 1 ? 0 : -length / 2 + 0.5 + (k * (length - 1)) / (n - 1);
+    spin.add(centeredPart(flex, {}, axis.clone().multiplyScalar(t), axis, across));
   }
   return spin;
 }
@@ -121,8 +150,6 @@ export class ManipulatorVisuals {
   /** `boxes`: draw mechanisms (box robot); otherwise only held pieces (GLB models). */
   constructor(profile: RobotProfile, root: THREE.Group, boxes: boolean) {
     this.profile = profile;
-    const dark = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.7 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0xffb020, roughness: 0.5 });
     for (const m of profile.mechanisms) {
       if (m.kind === 'lift' && boxes) this.lift(m, root);
       if (m.kind === 'claw') {
@@ -141,11 +168,15 @@ export class ManipulatorVisuals {
           });
           this.updates.push((v) => rollers.forEach(({ r, side }) => (r.rotation.y = side * v(m) * DEG * VISUAL_SPIN)));
         } else if (boxes) {
+          // two 1×1 angle fingers, 2.5 in long, either side of the mouth
           const fingers = [-1, 1].map((side) => {
-            const f = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.5, 2), accent);
+            const f = centeredPart(partDef('angle-1x1'), { length: 5 }, new THREE.Vector3(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, side));
             pivot.add(f);
             return { f, side };
           });
+          // the piston (or motor) that closes them, across the back
+          const closer = m.grip === 'piston' ? centeredPart(partDef('piston'), {}, new THREE.Vector3(0, 1.4, 1.2), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)) : centeredPart(partDef('exp-motor'), { cartridge: 'green' }, new THREE.Vector3(0, 1.6, 1.4), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
+          pivot.add(closer);
           this.updates.push((v) => {
             const gap = clawClosed(m, v(m)) ? 1.9 : 2.8;
             fingers.forEach(({ f, side }) => f.position.set(side * gap, 0, 0));
@@ -179,18 +210,35 @@ export class ManipulatorVisuals {
         root.add(holder);
         this.trays.set(m.name, holder);
         if (boxes) {
-          const tray = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 4), dark);
-          tray.position.copy(holder.position).add(new THREE.Vector3(0, -0.2, 0));
+          // a 2.5 in wide drilled plate on standoffs
+          const tray = centeredPart(partDef('plate-5'), { length: 8 }, holder.position.clone().add(new THREE.Vector3(0, -0.1, 0)), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
           root.add(tray);
+          for (const dx of [-1.6, 1.6]) {
+            const post = centeredPart(partDef('standoff'), { length: Math.max(1, Math.round(m.at.z / 0.5)) }, holder.position.clone().add(new THREE.Vector3(dx, -m.at.z / 2, 0)), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));
+            root.add(post);
+          }
         }
       }
       if (m.kind === 'toggleTool' && boxes) {
         const h = m.top - m.bottom;
-        const box = new THREE.Mesh(
-          new THREE.BoxGeometry(m.box.width, h, m.box.length),
-          new THREE.MeshStandardMaterial({ color: m.tool === 'roller' ? 0x2d6cdf : m.tool === 'jammer' ? 0xe0662a : 0x8a5cf6, roughness: 0.5, transparent: true, opacity: 0.9 }),
-        );
         const at = local({ x: m.box.x, y: m.box.y, z: m.bottom + h / 2 });
+        const box = new THREE.Group();
+        if (m.tool === 'roller') {
+          box.add(roller(m.box.width, Math.min(1.5, h / 2)));
+        } else if (m.tool === 'jammer') {
+          // a C-channel wedge on a piston
+          box.add(centeredPart(partDef('c-channel-1x2x1'), { length: Math.max(2, Math.round(m.box.length / 0.5)) }, new THREE.Vector3(), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)));
+        } else {
+          // a drilled plate at Toggle height, with a black rubber strip where it hits
+          box.add(centeredPart(partDef('plate-5'), { length: Math.max(2, Math.round(m.box.width / 0.5)) }, new THREE.Vector3(), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)));
+          const pad = new THREE.Mesh(new THREE.BoxGeometry(m.box.width, Math.min(h, 1), 0.25), new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.95 }));
+          pad.position.z = -0.15;
+          box.add(pad);
+          // standoffs back to the robot
+          for (const dx of [-m.box.width / 2 + 0.5, m.box.width / 2 - 0.5]) {
+            box.add(centeredPart(partDef('standoff'), { length: 2 }, new THREE.Vector3(dx, -h / 2 + 0.3, 0.6), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)));
+          }
+        }
         box.position.copy(at);
         root.add(box);
         if (m.tool === 'plate' || m.tool === 'jammer') {
@@ -199,7 +247,6 @@ export class ManipulatorVisuals {
           this.updates.push((v) => {
             const out = v(m) >= 0.5;
             box.position.copy(at).add(new THREE.Vector3(0, 0, out ? 0 : inward * (m.box.length + 1)));
-            (box.material as THREE.MeshStandardMaterial).opacity = out ? 0.9 : 0.35;
           });
         }
         if (m.tool === 'roller') this.updates.push((v) => (box.rotation.x = -v(m) * DEG * VISUAL_SPIN));
@@ -239,23 +286,24 @@ export class ManipulatorVisuals {
       // pivots on its base lift's carriage and rides up with it; the others on a fixed tower.
       const pivot0 = local({ x: x0, y: m.home.y - out * L * Math.cos(a0), z: m.home.z - (m.lift === 'sixbar' ? 2 : 1) * L * Math.sin(a0) });
       if (!m.base) {
-        const tower = bar(0x8a9099, 1);
+        const tower = bar();
         root.add(tower.mesh);
         tower.set(new THREE.Vector3(pivot0.x, 0.5, pivot0.z), pivot0);
       }
       const chain = m.lift === 'chainbar';
-      const bars = (chain ? [-2.2, 2.2] : [-1.5, 1.5]).map(() => bar(chain ? 0xd8343a : 0xb9bec5, chain ? 0.7 : 0.8));
+      const bars = (chain ? [-2.2, 2.2] : [-1.5, 1.5]).map(() => bar());
       for (const b of bars) root.add(b.mesh);
       // a chain bar's sprocket at the pivot
-      const hub = chain ? new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5.4, 16), new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.5, roughness: 0.4 })) : null;
-      if (hub) {
-        hub.rotation.z = Math.PI / 2;
-        root.add(hub);
-      }
+      // the pivot: a 60-tooth gear driving the bars (a 36-tooth sprocket-style gear on a chain bar)
+      const hub = new THREE.Group();
+      hub.add(centeredPart(partDef(chain ? 'gear-36' : 'gear-60'), {}, new THREE.Vector3(-(chain ? 2.6 : 1.9), 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)));
+      hub.add(centeredPart(partDef('shaft'), { length: chain ? 12 : 9 }, new THREE.Vector3(), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)));
+      hub.position.copy(pivot0);
+      root.add(hub);
       this.updates.push((v) => {
         const pivot = pivot0.clone().add(local(baseOffset(this.profile, m, v)));
         const e = local(liftPosition(this.profile, m, v));
-        hub?.position.copy(pivot);
+        hub.position.copy(pivot);
         bars.forEach((b, i) => {
           const off = chain ? 2.2 : 1.5; // either side of the claw
           const dx = new THREE.Vector3(i ? off : -off, 0, 0);
@@ -270,10 +318,10 @@ export class ManipulatorVisuals {
       const baseZ = m.home.z - 2 * L * Math.sin(a0);
       const inward = m.home.y >= 0 ? -1 : 1;
       const yb = m.home.y + inward * 1.5;
-      const tower = bar(0x8a9099, 1);
+      const tower = bar();
       root.add(tower.mesh);
       tower.set(local({ x: x0, y: yb, z: 0.5 }), local({ x: x0, y: yb, z: baseZ }));
-      const stages = [-1.5, 1.5].map((dx) => ({ dx, lower: bar(0xb9bec5), upper: bar(0xd0d4d9) }));
+      const stages = [-1.5, 1.5].map((dx) => ({ dx, lower: bar(), upper: bar() }));
       for (const st of stages) root.add(st.lower.mesh, st.upper.mesh);
       this.updates.push((v) => {
         const a = a0 + v(m) * DEG;
@@ -289,7 +337,8 @@ export class ManipulatorVisuals {
     if (m.lift === 'cascade') {
       // nested slide stages, each rising its share of the carriage travel
       const n = (m.stages ?? 1) + 1;
-      const rails = Array.from({ length: n }, (_, k) => bar(k % 2 ? 0xd0d4d9 : 0xb9bec5, 0.7));
+      // each stage a C-channel slide (1×3×1 for the outer stage)
+      const rails = Array.from({ length: n }, (_, k) => bar(k ? 'c-channel-1x2x1' : 'c-channel-1x3x1'));
       for (const b of rails) root.add(b.mesh);
       const h0 = m.home.z;
       this.updates.push((v) => {
@@ -304,7 +353,7 @@ export class ManipulatorVisuals {
       return;
     }
     // piston lift: a cylinder from the deck to the effector
-    const rod = bar(0xb9bec5, 0.6);
+    const rod = rodBar();
     root.add(rod.mesh);
     this.updates.push((v) => rod.set(local({ x: x0, y: m.home.y, z: 0.5 }), local(liftEffector(m, v(m)))));
   }

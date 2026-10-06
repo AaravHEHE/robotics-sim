@@ -5,11 +5,11 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import catalogJson from '../../../data/parts/vex-parts.json';
-import { bounds, MAX_PARTS, partSize, PITCH, suggestProfile, type Assembly, type Catalog, type PartDef, type Placed } from './assembly.ts';
+import { bounds, MAX_PARTS, partSize, PITCH, suggestProfile, type Assembly, type PartDef, type Placed } from './assembly.ts';
 import { partObject } from './geometry.ts';
+import { CATALOG } from './catalog.ts';
 
-export const CATALOG = catalogJson as unknown as Catalog;
+export { CATALOG };
 
 const GROUPS: Array<[string, PartDef['kind'][]]> = [
   ['Structure', ['channel', 'angle', 'plate', 'standoff']],
