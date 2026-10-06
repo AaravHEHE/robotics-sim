@@ -46,7 +46,8 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     throw new Error('This browser does not support WebAssembly JSPI. Please use Chrome 137+, Firefox 153+ or Safari 27+.');
   }
   const wallStart = performance.now();
-  const frameEvery = opts.frameEveryMs ?? 10;
+  // a whole number of 1 ms steps (frames are taken when the time is a multiple of it)
+  const frameEvery = Math.max(1, Math.round(Number.isFinite(opts.frameEveryMs) ? opts.frameEveryMs! : 10));
   const initLimit = opts.initializeLimitMs ?? 30000;
   const wallLimit = opts.wallLimitMs ?? 30000;
   const place = opts.placeAtSetPose ?? 'auto';
@@ -204,14 +205,14 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
         }
         case 11: { // turn: error maxSpeed
           const th = world.pose.theta + p[0];
-          startMotion(new Turn('pid_turn', () => th, 0, { direction: Math.sign(p[0]), maxSpeed: p[1], minSpeed: 0, earlyExitRange: 0 }), null);
+          startMotion(new Turn('pid_turn', () => th, 0, { direction: Math.sign(p[0]), maxSpeed: p[1], minSpeed: 0, earlyExitRange: 0, exact: true }), null);
           break;
         }
         case 12: { // swing: error side maxSpeed opposite
           const th = world.pose.theta + p[0];
           const ratio = p[2] > 0 ? p[3] / p[2] : 0;
           // LEFT_SWING moves the left side, so the right side is the (mostly) locked one
-          startMotion(new Turn('pid_swing', () => th, 0, { direction: Math.sign(p[0]), maxSpeed: p[2], minSpeed: 0, earlyExitRange: 0 }, p[1] === 0 ? 'right' : 'left', ratio), null);
+          startMotion(new Turn('pid_swing', () => th, 0, { direction: Math.sign(p[0]), maxSpeed: p[2], minSpeed: 0, earlyExitRange: 0, exact: true }, p[1] === 0 ? 'right' : 'left', ratio), null);
           break;
         }
         case 13: { // point: localX localY forwards maxSpeed

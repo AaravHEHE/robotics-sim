@@ -101,8 +101,22 @@ export class MotorState {
     return this.physTicks / this.codeTicks;
   }
 
+  /**
+   * Share of its torque the motor may use under its current limit (2500 mA = all of it).
+   * The limit caps current, so torque: how hard the motor accelerates, not its top speed.
+   */
+  get torqueShare(): number {
+    return Math.max(0, Math.min(1, this.currentLimit / 2500));
+  }
+
+  /** A current limit of 0 lets no current through: the motor is unpowered whatever it is told. */
+  get noPower(): boolean {
+    return this.currentLimit <= 0;
+  }
+
   /** Target physical rpm from the current command. */
   targetRpm(): number {
+    if (this.noPower) return 0;
     const free = this.freeRpm;
     switch (this.mode) {
       case 'voltage': {
@@ -120,6 +134,11 @@ export class MotorState {
         return (Math.sign(err) * v) / 6;
       }
     }
+  }
+
+  /** Raw encoder count (ticks of the physical cartridge) for a signed port. */
+  rawTicks(sign: number): number {
+    return ((sign * (this.angle - this.zero)) / 360) * this.physTicks;
   }
 
   /** Reported encoder position in the code's units for a signed port. */
@@ -338,7 +357,7 @@ export class World {
   private sideUnpowered(ports: number[]): boolean {
     return ports.every((p) => {
       const m = this.motors.get(Math.abs(p))!;
-      return m.mode !== 'position' && m.targetRpm() === 0;
+      return m.noPower || (m.mode !== 'position' && m.targetRpm() === 0);
     });
   }
 
@@ -355,14 +374,16 @@ export class World {
     const vmax = this.maxV;
     if (!this.controller && this.sideUnpowered(ports)) {
       if (v === 0) return 0;
-      const brake = Math.min(...ports.map((p) => this.motors.get(Math.abs(p))!.brakeMode));
+      // with no current at all, nothing brakes or holds either: it coasts
+      const brake = Math.min(...ports.map((p) => (this.motors.get(Math.abs(p))!.noPower ? 0 : this.motors.get(Math.abs(p))!.brakeMode)));
       const decel = brake === 2 ? traction : brake === 1 ? Math.min(traction, STALL_ACCEL_FACTOR * traction * (Math.abs(v) / vmax) + FRICTION_DECEL) : COAST_DECEL;
       return -Math.sign(v) * Math.min(Math.abs(v), decel * dt);
     }
     const err = target - v;
     // torque available in the direction of the error: + toward free speed, back-EMF helps braking
     const dir = Math.sign(err);
-    const motorMax = STALL_ACCEL_FACTOR * traction * Math.max(0, 1 - (dir * v) / vmax);
+    const share = ports.reduce((n, p) => n + this.motors.get(Math.abs(p))!.torqueShare, 0) / ports.length;
+    const motorMax = STALL_ACCEL_FACTOR * traction * share * Math.max(0, 1 - (dir * v) / vmax);
     // the motor's velocity loop reaches the target as fast as torque and traction allow
     return dir * Math.min(Math.abs(err), Math.min(traction, motorMax) * dt);
   }
@@ -439,12 +460,14 @@ export class World {
         // sags (coast) or creeps down (brake); hold keeps it where it is. A bar swung past
         // vertical falls the other way (onto its far stop).
         const up = m.barLift ? m.liftUp * Math.sign(Math.round(dcosDeg(m.barLift.startAngle + m.angle * m.barLift.ratio) * 1e9)) : m.liftUp;
+        const unpowered = m.noPower || (m.mode !== 'position' && target === 0);
         if (up) {
-          const unpowered = m.mode !== 'position' && target === 0;
-          if (unpowered) target = m.brakeMode === 0 ? -up * LIFT_SAG * m.freeRpm : m.brakeMode === 1 ? -up * LIFT_CREEP * m.freeRpm : 0;
+          const brake = m.noPower ? 0 : m.brakeMode;
+          if (unpowered) target = brake === 0 ? -up * LIFT_SAG * m.freeRpm : brake === 1 ? -up * LIFT_CREEP * m.freeRpm : 0;
           else if (target * up > 0) target *= 1 - LIFT_LOAD;
         }
-        const a = (m.freeRpm / MOTOR_SPINUP_S) * dt;
+        // powered, it spins up as fast as its current limit allows; sagging needs no current
+        const a = (m.freeRpm / MOTOR_SPINUP_S) * dt * (unpowered ? 1 : m.torqueShare);
         m.rpm += Math.max(-a, Math.min(a, target - m.rpm));
       } else {
         m.rpm = 0;
@@ -680,8 +703,8 @@ export class World {
   }
 
   imuHeading(imu: ImuState): number {
-    const h = (this.pose.theta - imu.headingOffset) % 360;
-    return h < 0 ? h + 360 : h;
+    // twice: a tiny negative h + 360 rounds to exactly 360, outside [0, 360)
+    return (((this.pose.theta - imu.headingOffset) % 360) + 360) % 360;
   }
 
   /** Angular velocity, deg/s, clockwise positive. */
@@ -901,6 +924,9 @@ export function satMtv(a: Vec2[], b: Vec2[]): Vec2 | null {
       }
     }
   }
+  // NaN coordinates (bad field or robot data) make every comparison false: no overlap rather
+  // than a NaN push that would poison the robot's pose
+  if (!Number.isFinite(best)) return null;
   return [axis[0] * best, axis[1] * best];
 }
 
