@@ -22,6 +22,7 @@ import {
   deleteCustomRobot, download, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
   projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
+import { MapPanel } from './map-panel.ts';
 import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
 
@@ -107,6 +108,8 @@ document.querySelectorAll<HTMLButtonElement>('.btab').forEach((b) => {
 function showTab(name: string) {
   document.querySelectorAll('.btab').forEach((x) => x.classList.toggle('active', (x as HTMLElement).dataset.tab === name));
   document.querySelectorAll('.bpanel').forEach((x) => x.classList.toggle('active', x.id === 'panel-' + name));
+  // the map needs room for its table
+  document.querySelector('.bottom')?.classList.toggle('tall', name === 'map');
 }
 
 // camera buttons
@@ -254,6 +257,15 @@ function applyField() {
   clearRecording();
   renderPresets();
   void showFieldModel();
+  mapPanel?.fieldChanged();
+}
+
+// ---------------- auton mapping (the Map tab) ----------------
+
+let mapPanel: MapPanel | null = null;
+function initMap() {
+  mapPanel = new MapPanel({ viewer, field, layoutId, setStart, changed: () => {} });
+  mapPanel.setMode('off');
 }
 
 // ---------------- field model (official CAD, local only) ----------------
@@ -1220,6 +1232,7 @@ async function boot() {
   $<HTMLSelectElement>('sp-place').value = state.place;
   [state.start.x, state.start.y, state.start.theta].forEach((v, i) => (spInputs[i].value = String(v)));
   renderRobotSelect();
+  initMap();
   renderFieldSelect();
   applyField();
   await applyRobot();

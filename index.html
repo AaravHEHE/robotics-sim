@@ -54,12 +54,39 @@
           <button class="btab" data-tab="lcd" role="tab">Brain screen</button>
           <button class="btab" data-tab="events" role="tab">Notes <span id="badge-events" class="badge"></span></button>
           <button class="btab" data-tab="score" role="tab">Score</button>
+          <button class="btab" data-tab="map" role="tab" title="Plot points and measure on the field to plan an auton">Map</button>
         </div>
         <div class="bpanel active" id="panel-problems"><p class="empty">Press Run to compile.</p></div>
         <div class="bpanel" id="panel-console"><p class="empty">printf / std::cout output appears here.</p></div>
         <div class="bpanel" id="panel-lcd"><pre id="lcd" class="lcd"></pre></div>
         <div class="bpanel" id="panel-events"><p class="empty">Warnings about unsupported calls and robot mismatches appear here.</p></div>
         <div class="bpanel" id="panel-score"><p class="empty">Scores appear here after a run on a game field.</p></div>
+        <div class="bpanel" id="panel-map">
+          <div class="map-bar">
+            <div class="seg" role="group" aria-label="Map tool">
+              <button data-map-mode="off" class="active">Off</button><button data-map-mode="plot">Plot points</button><button data-map-mode="measure">Measure</button>
+            </div>
+            <label>Snap <select id="map-snap">
+              <option value="0">off</option><option value="0.5" selected>0.5″</option><option value="1">1″</option><option value="6">6″</option><option value="12">1 ft</option><option value="24">tile (2 ft)</option>
+            </select></label>
+            <label title="Clicks within 2.5″ of a Goal, Toggle, Loader, stack or start snap onto it"><input type="checkbox" id="map-snap-poi" checked /> to field elements</label>
+            <span id="map-cursor" class="map-cursor" aria-live="off">x —, y —</span>
+            <button id="map-clear" class="ghost">Clear points</button>
+          </div>
+          <p id="map-help" class="muted map-help"></p>
+          <div class="map-body">
+            <table class="map-table">
+              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th></th></tr></thead>
+              <tbody id="map-points-body"></tbody>
+            </table>
+            <div class="map-side">
+              <div class="sp-title">Measure</div>
+              <label>from <select id="map-from"></select></label>
+              <label>to <select id="map-to"></select></label>
+              <p id="map-result" class="map-result"></p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

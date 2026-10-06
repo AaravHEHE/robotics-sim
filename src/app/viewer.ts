@@ -364,6 +364,43 @@ export class FieldViewer {
     this.applyHidden();
   }
 
+  // ---------------- for tools drawn over the field (auton mapping) ----------------
+
+  /** The canvas the field is drawn on (for pointer events). */
+  get canvas(): HTMLCanvasElement {
+    return this.renderer.domElement;
+  }
+
+  /** Add a group of its own to the scene: clearing a run or a field doesn't touch it. */
+  addLayer(o: THREE.Object3D) {
+    this.scene.add(o);
+    this.needsRender = true;
+  }
+
+  /** The field point (inches) on the floor under a screen position, or null (looking past the floor). */
+  fieldPointAt(clientX: number, clientY: number): { x: number; y: number } | null {
+    const r = this.canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    // the floor as a plane (the floor mesh can be hidden under a field model)
+    const hit = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+    return hit ? { x: hit.x, y: -hit.z } : null;
+  }
+
+  /** Where a field point (inches, on the floor) is on screen (client pixels). */
+  screenOf(x: number, y: number): { x: number; y: number } {
+    const r = this.canvas.getBoundingClientRect();
+    const v = toThree(x, y).project(this.camera);
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  }
+
+  /** Let the mouse orbit the camera, or not (while a tool drags something on the field). */
+  setOrbitEnabled(on: boolean) {
+    this.controls.enabled = on;
+  }
+
   /** Draw the next frame (after changing something in the scene from outside). */
   requestRender() {
     this.needsRender = true;

@@ -274,3 +274,31 @@ select, input[type='number'] {
 .score-table { border-collapse: collapse; width: 100%; max-width: 420px; font-variant-numeric: tabular-nums; }
 .score-table th, .score-table td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); }
 .score-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+/* ---------------- Map tab (auton mapping) ---------------- */
+.bottom.tall { height: 340px; }
+.map-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.map-bar label { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; background: transparent; padding: 3px 10px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--accent); color: #fff; }
+.map-cursor { font-family: var(--mono); font-size: 12px; min-width: 15ch; }
+.map-help { margin: 6px 0; font-size: 12px; }
+.map-body { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.map-table { border-collapse: collapse; font-size: 12px; }
+.map-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 2px 4px; }
+.map-table td { padding: 1px 4px; white-space: nowrap; }
+.map-table tr.sel td { background: color-mix(in srgb, #ffb020 18%, transparent); }
+.map-table input { width: 6ch; font: inherit; padding: 1px 3px; }
+.map-table input[data-f='label'] { width: 12ch; }
+.map-table .acts button { padding: 0 5px; font-size: 11px; }
+.map-table td.empty { color: var(--muted); padding: 6px 4px; }
+.map-side { display: grid; gap: 4px; min-width: 220px; max-width: 320px; }
+.map-side label { display: grid; grid-template-columns: 3em 1fr; align-items: center; color: var(--muted); }
+.map-side select { max-width: 100%; }
+.map-result { margin: 4px 0 0; font-size: 12px; }
+@media (max-width: 900px) {
+  .bottom.tall { height: 60vh; }
+  .map-table input { width: 5ch; }
+}
