@@ -5,13 +5,14 @@
 // over a Goal or stack, at the right height, nests what it holds; anywhere else it drops
 // to the floor.
 
-import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
+import { dcos, dcosDeg, dhypot, dsin, dsinDeg } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
 import { clawEffector, clawTilt, toField, toRobot, type Point3 } from '../../sim/lift.ts';
 import { box, octagon, satMtv } from '../../sim/world.ts';
 import { isMotorized, isPneumatic, type Capacity, type ClawSpec, type IntakeSpec, type LiftSpec, type MechanismSpec, type PreloadOrientation, type RobotProfile, type StagingSpec, type ToggleToolSpec, type WristSpec } from '../../sim/profile.ts';
 import type { Attachment, World } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
+import { placedPrefix } from './scoring.ts';
 import { initialState, type FloorStack, type LyingPin, type OverrideState, type Transit } from './state.ts';
 import { sideOf } from './rules.ts';
 import type { ContactShape } from './toggle.ts';
@@ -66,6 +67,11 @@ export interface GameOps {
   addLying(colors: [PinColor, PinColor], x: number, y: number, heading: number): string;
   /** A floor stack's pieces changed. */
   rebuildFloor(stack: FloorStack): void;
+  /**
+   * What a claw takes next comes out of this floor stack: the two overlap where they part,
+   * so they pass through each other (instead of being shoved apart) until they are clear.
+   */
+  liftedOutOf(clawName: string, stackId: string): void;
   /** Something changed structurally (record a snapshot). */
   changed(): void;
   violation(rule: string, message: string): void;
@@ -98,12 +104,27 @@ const fits = (cap: Capacity | undefined, have: Piece[], add: Piece[]) => {
 };
 
 /**
- * Add pieces to what a holder has. A stack taken whole keeps its order; pieces collected
- * separately are assembled Pin first with the Cup over it, ready to nest onto a Goal or
- * onto the Cup on top of a stack.
+ * Add pieces to what an intake or staging area holds (loose pieces, not a stack): collected
+ * separately, they are assembled Pin first with the Cup over it, ready to hand to a claw.
+ * Claws stack with stackOnto.
  */
 const merge = (have: Piece[], add: Piece[]): Piece[] =>
   have.length ? [...have, ...add].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'pin' ? -1 : 1)) : [...add];
+
+/**
+ * What a claw holds after adding `add` to `held`, as a real stack (bottom first), or null if
+ * the pieces can't form one. A lone Pin and Cup are assembled Pin first with the Cup over it
+ * (ready for a Goal); anything else joins only where the kinds alternate (Pin, Cup, Pin...),
+ * keeping each stack's own order.
+ */
+export function stackOnto(held: Piece[], add: Piece[]): Piece[] | null {
+  if (!held.length) return [...add];
+  if (!add.length) return [...held];
+  if (held.length === 1 && add.length === 1 && held[0].kind !== add[0].kind) return held[0].kind === 'pin' ? [held[0], add[0]] : [add[0], held[0]];
+  if (held[held.length - 1].kind !== add[0].kind) return [...held, ...add];
+  if (add[add.length - 1].kind !== held[0].kind) return [...add, ...held];
+  return null;
+}
 
 /**
  * Where the bottom of `next` comes to rest when nested onto `existing` (on a Goal of
@@ -250,22 +271,30 @@ export class Manipulators {
     this.tools = of('toggleTool');
     for (const m of [...of('claw'), ...this.intakes, ...this.stagings]) ops.state.held[m.name] = [];
     this.loadPreload();
-    // a piston claw that holds the Preload was closed on it by hand before the match: the
-    // cylinder starts there (if the code then leaves the solenoid off, it opens and drops it)
+    this.startClaws();
+    this.checkPossession();
+  }
+
+  /** Claws as the match starts: one holding the Preload was closed on it by hand. */
+  private startClaws(): void {
+    const { state } = this.ops;
     for (const c of this.claws) {
-      if (c.spec.grip === 'piston' && c.spec.adi && ops.state.held[c.spec.name]?.length) {
-        world.pistons.set(c.spec.adi.toUpperCase(), (c.spec.closedWhen ?? 'extended') === 'extended' ? 1 : 0);
+      const holds = state.held[c.spec.name]?.length > 0;
+      // a piston claw holding the Preload starts with its cylinder there (if the code then leaves
+      // the solenoid off, it opens and drops it)
+      if (c.spec.grip === 'piston' && c.spec.adi && holds) {
+        this.world.pistons.set(c.spec.adi.toUpperCase(), (c.spec.closedWhen ?? 'extended') === 'extended' ? 1 : 0);
       }
       // likewise a motor claw starts physically closed on it (its encoder still reads from there)
-      if (c.spec.grip === 'motor' && c.spec.motors?.length && ops.state.held[c.spec.name]?.length) {
-        for (const port of c.spec.motors) world.motor(Math.abs(port)).angle = (c.spec.closedAt ?? 0) / (c.spec.ratio ?? 1);
+      if (c.spec.grip === 'motor' && c.spec.motors?.length && holds) {
+        for (const port of c.spec.motors) this.world.motor(Math.abs(port)).angle = (c.spec.closedAt ?? 0) / (c.spec.ratio ?? 1);
       }
-      c.closed = this.isClosed(c) || (c.spec.grip === 'motor' && ops.state.held[c.spec.name]?.length > 0);
+      c.closed = this.isClosed(c) || (c.spec.grip === 'motor' && holds);
+      c.cradled = false;
       // the Preload stands on the tiles in the claw: held where the claw meets it
-      const held = ops.state.held[c.spec.name];
-      if (held?.length) c.grip = gripOn(held[0], this.effector(c.spec).z);
+      const held = state.held[c.spec.name];
+      c.grip = held?.length ? gripOn(held[0], this.effector(c.spec).z) : 0;
     }
-    this.checkPossession();
   }
 
   private preload: { holder: string; pin: Piece } | null = null;
@@ -281,17 +310,20 @@ export class Manipulators {
 
   /** Nothing has been picked up, dropped or placed yet: the robot still holds just its Preload. */
   untouched(): boolean {
-    const held = Object.entries(this.ops.state.held).filter(([, v]) => v.length);
-    if (!this.preload) return held.length === 0;
-    return held.length === 1 && held[0][0] === this.preload.holder && held[0][1].length === 1 && held[0][1][0] === this.preload.pin;
+    // wherever the Preload is (an intake may already have passed it on to its claw)
+    const all = Object.values(this.ops.state.held).flat();
+    if (!this.preload) return all.length === 0;
+    return all.length === 1 && all[0].id === this.preload.pin.id;
   }
 
   /** The robot changed alliance before moving: it holds that alliance's Preload instead. */
   reloadPreload(): void {
-    if (this.preload) this.ops.state.held[this.preload.holder] = [];
+    const { held, transit } = this.ops.state;
+    if (this.preload) for (const k of Object.keys(held)) held[k] = held[k].filter((p) => p.id !== this.preload!.pin.id);
+    delete transit[this.preload?.pin.id ?? ''];
     this.preload = null;
     this.loadPreload();
-    for (const c of this.claws) if (this.ops.state.held[c.spec.name]?.length) c.closed = this.isClosed(c);
+    this.startClaws();
   }
 
   // ---------------- per-step ----------------
@@ -307,9 +339,15 @@ export class Manipulators {
 
   /** Robot parts that can touch a Toggle: the chassis box plus Toggle tools. */
   contactShapes(): ContactShape[] {
-    // how fast the robot is moving: a passive toggler hit fast turns a Toggle two faces
-    const speed = Math.abs(this.world.speed);
-    const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height, speed }];
+    // how fast (and which way) the robot is moving: a passive toggler hit fast turns a Toggle two faces
+    const v = this.world.speed;
+    const velocity: Vec2 = [v * dsinDeg(this.world.pose.theta), v * dcosDeg(this.world.pose.theta)];
+    const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height, velocity }];
+    // claws and what they hold push Toggles too (a Flex pushing one with its claw)
+    for (const a of this.attachments()) {
+      const poly = octagon(...toField(this.world.pose, a), 2 * a.r);
+      shapes.push({ poly, bottom: a.bottom, top: a.bottom + (a.fixedOnly ? 2 * GRIP_MARGIN : CUP.height), velocity });
+    }
     for (const tool of this.tools) {
       // a plate or jammer only reaches out while its piston is extended
       if ((tool.tool === 'plate' || tool.tool === 'jammer') && this.world.mechanismState(tool) < 0.5) continue;
@@ -319,7 +357,7 @@ export class Manipulators {
       );
       // roller: + output with inward = 1 rolls the Toggle's top into the field (negative angle)
       const spin = tool.tool === 'roller' ? -(tool.inward ?? 1) * this.world.mechanismRpm(tool) * 4.4 : undefined;
-      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined, speed });
+      shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined, velocity });
     }
     return shapes;
   }
@@ -431,7 +469,7 @@ export class Manipulators {
     const upright = this.tilt(c.spec) <= MAX_TILT;
     type Cand = { d: number; take: () => void; pieces: Piece[]; from?: Transit['from']; lying?: number };
     const cands: Cand[] = [];
-    const ok = (pieces: Piece[]) => pieces.length > 0 && fits(c.spec.capacity, held, pieces);
+    const ok = (pieces: Piece[]) => pieces.length > 0 && fits(c.spec.capacity, held, pieces) && stackOnto(held, pieces) !== null;
 
     for (const s of upright ? this.stagings : []) {
       const items = state.held[s.name];
@@ -476,7 +514,15 @@ export class Manipulators {
       if (d > reach || !this.between(e, s.x, s.y, reach)) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
       if (slot && ok(s.pieces.slice(slot.index))) {
-        cands.push({ d, pieces: s.pieces.slice(slot.index), from: { x: s.x, y: s.y, z: slot.bottom }, take: () => this.takeFromFloor(s, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
+        cands.push({
+          d,
+          pieces: s.pieces.slice(slot.index),
+          from: { x: s.x, y: s.y, z: slot.bottom },
+          take: () => {
+            if (slot.index > 0) this.ops.liftedOutOf(c.spec.name, s.id); // a Pin out of its Cup: the Cup stays put
+            this.takeFromFloor(s, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom));
+          },
+        });
       }
     }
     if (!cands.length) return;
@@ -492,7 +538,22 @@ export class Manipulators {
   private receive(c: ClawRuntime, pieces: Piece[], grip: number): void {
     const held = this.ops.state.held[c.spec.name];
     if (!held.length) c.grip = gripOn(pieces[0], grip);
-    this.ops.state.held[c.spec.name] = merge(held, pieces);
+    this.addToClaw(c, pieces);
+  }
+
+  /**
+   * Stack pieces onto what a claw holds. The claw still holds the same piece at the same place:
+   * if the new pieces go underneath, the grip point is that much higher above the stack's bottom.
+   */
+  private addToClaw(c: ClawRuntime, pieces: Piece[]): void {
+    const held = this.ops.state.held[c.spec.name];
+    const stack = stackOnto(held, pieces);
+    if (!stack) return;
+    if (held.length && stack[0] !== held[0]) {
+      const slots = layoutStack(stack, 0, false);
+      c.grip += slots[stack.indexOf(held[0])].bottom - slots[0].bottom;
+    }
+    this.ops.state.held[c.spec.name] = stack;
   }
 
   /** Let go of the held stack, or only its bottom `count` pieces (a roller claw spitting out). */
@@ -513,7 +574,8 @@ export class Manipulators {
     };
     const pieces = held.splice(0, count);
     // what stays in the claw is held by its new bottom piece
-    c.grip = held.length ? c.grip - (slots[pieces.length].bottom - slots[0].bottom) : 0;
+    // (never below the bottom of the remaining stack: a roller holds what is left at its base)
+    c.grip = held.length ? Math.max(GRIP_MARGIN, c.grip - (slots[pieces.length].bottom - slots[0].bottom)) : 0;
     for (const g of field.goals ?? []) {
       if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE) continue;
       if (!nests(state.goals[g.id], g.height, true)) break; // over a Goal but it won't sit: falls off
@@ -541,7 +603,11 @@ export class Manipulators {
     const c = this.claws.find((x) => x.spec.name === w.claw);
     if (!c) return;
     const v = this.world.mechanismState(w);
-    const a = ((v % 360) + 360) % 360;
+    // the claw's real orientation: a single-pivot arm turns it too (a wrist set to minus the
+    // arm's angle keeps it upright), the same sum clawTilt uses
+    const lift = this.profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === c.spec.lift);
+    const arm = lift?.lift === 'arm' ? this.world.mechanismState(lift) : 0;
+    const a = (((v + arm) % 360) + 360) % 360;
     const band = c.flipped ? -WRIST_HYSTERESIS : WRIST_HYSTERESIS;
     const flipped = w.adi ? v >= 0.5 : a > 90 + band && a < 270 - band;
     if (flipped === c.flipped) return;
@@ -570,13 +636,15 @@ export class Manipulators {
       for (const batch of batches) {
         if (!batch.length || !fits(destSpec.capacity, state.held[spec.into], batch)) continue;
         const claw = this.claws.find((c) => c.spec.name === spec.into);
+        if (claw && !stackOnto(state.held[spec.into], batch)) continue; // can't stack: it waits in the intake
         if (claw && !state.held[spec.into].length) claw.grip = gripOn(batch[0], this.effector(claw.spec).z);
         if (claw && claw.spec.grip !== 'roller') claw.cradled = true;
         for (const p of batch) {
           mine.splice(mine.indexOf(p), 1);
           delete state.transit[p.id];
         }
-        state.held[spec.into] = merge(state.held[spec.into], batch);
+        if (claw) this.addToClaw(claw, batch);
+        else state.held[spec.into] = merge(state.held[spec.into], batch);
         this.ops.changed();
       }
     }
@@ -589,7 +657,9 @@ export class Manipulators {
       const p = mine.pop();
       if (!p) return;
       delete state.transit[p.id];
-      const [x, y] = toField(this.world.pose, { x: spec.zone.x, y: spec.zone.y + spec.zone.length / 2 + 3 });
+      // out of the intake's mouth: ahead of a front intake, behind a rear one
+      const out = spec.zone.y >= 0 ? spec.zone.y + spec.zone.length / 2 + 3 : spec.zone.y - spec.zone.length / 2 - 3;
+      const [x, y] = toField(this.world.pose, { x: spec.zone.x, y: out });
       this.dropAt([p], x, y, 0.5);
       this.lastIntake.set(spec.name, t);
       this.ops.changed();
@@ -716,7 +786,8 @@ export class Manipulators {
     const { state, mode, alliance } = this.ops;
     if (mode === 'h2h') {
       if (g.color !== 'neutral' && g.color !== alliance) this.ops.violation('SG9', `The robot removed Scoring Objects from opponent Goal ${g.id}.`);
-      else if (g.color === 'neutral') this.ops.violation('SG10', `The robot removed Placed Scoring Objects from neutral Goal ${g.id}.`);
+      // only Placed pieces count: ones resting above a break in the stack aren't Placed (SC2)
+      else if (g.color === 'neutral' && index < placedPrefix(state.goals[g.id]).length) this.ops.violation('SG10', `The robot removed Placed Scoring Objects from neutral Goal ${g.id}.`);
     }
     into(state.goals[g.id].splice(index));
   }
@@ -784,7 +855,7 @@ export class Manipulators {
       for (let k = 0; k < n; k++) {
         const a = (2 * Math.PI * k) / n;
         for (const h of headings) {
-          const r = settle(h, x + 1.5 * ring * Math.cos(a), y + 1.5 * ring * Math.sin(a));
+          const r = settle(h, x + 1.5 * ring * dcos(a), y + 1.5 * ring * dsin(a));
           if (r.into < best.into) best = r;
           if (best.into === 0) break search;
         }
@@ -823,7 +894,8 @@ export class Manipulators {
     if (mode !== 'skills' || t < this.nextRefill) return;
     const pool = state.matchLoads.red;
     if (!pool?.length) return;
-    const loaders = (field.loaders ?? []).filter((l) => l.alliance === 'red' && state.loaders[l.id].length < LOADER_CAPACITY);
+    // room for a whole loaded stack (a Pin and a Cup), so a Loader never holds more than it can
+    const loaders = (field.loaders ?? []).filter((l) => l.alliance === 'red' && state.loaders[l.id].length + 2 <= LOADER_CAPACITY);
     if (!loaders.length) return;
     loaders.sort((a, b) => state.loaders[a.id].length - state.loaders[b.id].length);
     const id = loaders[0].id;

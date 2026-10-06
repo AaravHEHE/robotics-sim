@@ -762,7 +762,12 @@ export class World {
     if (dx < -1e-9) best = Math.min(best, (-half - ox) / dx);
     if (dy > 1e-9) best = Math.min(best, (half - oy) / dy);
     if (dy < -1e-9) best = Math.min(best, (-half - oy) / dy);
-    for (const ob of this.obstacles) best = Math.min(best, rayPolygon(ox, oy, dx, dy, ob.poly));
+    // what is at the beam's height: a beam over a Goal's top misses it; one at a Goal's stack
+    // meets the stack (a game keeps its Goals' shapes up to date)
+    for (const ob of this.obstacles) {
+      const cross = crossSection(ob, z, false, 0); // a beam has no chamfer to ride over
+      if (cross) best = Math.min(best, rayPolygon(ox, oy, dx, dy, cross));
+    }
     if (this.sensors.objectRay) best = Math.min(best, this.sensors.objectRay({ ox, oy, dx, dy, z }));
     return best;
   }
@@ -826,10 +831,10 @@ export const CARRY_CLEARANCE = 0.25;
  * The part of an obstacle a carried object at height `bottom` runs into, or null when it
  * passes over the top.
  */
-export function crossSection(ob: Obstacle, bottom: number, fixedOnly = false): Vec2[] | null {
+export function crossSection(ob: Obstacle, bottom: number, fixedOnly = false, clearance = CARRY_CLEARANCE): Vec2[] | null {
   if (bottom <= 0) return ob.poly;
   const { top, at } = fixedOnly && ob.body ? ob.body : ob;
-  if (top !== undefined && bottom >= top - CARRY_CLEARANCE) return null;
+  if (top !== undefined && bottom >= top - clearance) return null;
   return at ? at(bottom) : ob.poly;
 }
 

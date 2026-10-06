@@ -64,17 +64,14 @@ export interface OverrideState {
   flipped: Record<string, boolean>;
 }
 
-let counter = 0;
-const nextId = (prefix: string) => `${prefix}${++counter}`;
-
-export function pieceFrom(p: LayoutPiece): Piece {
-  if (p.kind === 'pin') return { kind: 'pin', id: nextId('pin'), colors: p.colors as [PinColor, PinColor] } satisfies PinPiece;
-  return { kind: 'cup', id: nextId('cup'), up: p.up } satisfies CupPiece;
-}
-
-/** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call. */
+/** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call, and each call has its own. */
 export function initialState(field: FieldDef, layoutId: string): OverrideState {
-  counter = 0;
+  let counter = 0;
+  const nextId = (prefix: string) => `${prefix}${++counter}`;
+  const pieceFrom = (p: LayoutPiece): Piece =>
+    p.kind === 'pin'
+      ? ({ kind: 'pin', id: nextId('pin'), colors: p.colors as [PinColor, PinColor] } satisfies PinPiece)
+      : ({ kind: 'cup', id: nextId('cup'), up: p.up } satisfies CupPiece);
   const layout = field.layouts?.[layoutId];
   const state: OverrideState = {
     floor: [],

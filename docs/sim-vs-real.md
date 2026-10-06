@@ -88,6 +88,17 @@ The sample autons used to carry pieces too low and relied on this. They now lift
 Goal and stack first; Flex no longer stacks, because its tilting arm claw can't lift a Cup
 over a Placed Pin and still set it down level ([robots.md](robots.md)).
 
+## Fixed in the deep search
+
+| Used to happen in the simulator | Now |
+|---|---|
+| The filter that lets a held stack pass over pieces it is above (or was lifted out of) never ran, because the physics engine only calls it when stepped with an event queue. Held stacks shoved such pieces aside. | It runs: a Pin lifted out of a Cup against the wall leaves the Cup where it is. |
+| A wrist set to cancel an arm's tilt (Banshee) turned the held stack upside down past 90° of wrist. | The stack's orientation follows the arm and wrist together. |
+| A claw could hold two Pins stacked directly, and a Pin added under a held Cup left the grip point on the wrong piece. | Claws only hold stacks that alternate Pin, Cup, Pin…; adding underneath keeps the grip where it was. |
+| A Toggle slid past along the wall at speed turned two faces, and claws couldn't touch Toggles. | Only speed into the wall counts as a hard hit; claws and held stacks press Toggles too. |
+| Distance and optical sensors missed a lying Pin at its collar, saw a Goal's base at any height, and didn't see pieces on Goals. | They see the collar, the Goal's shape at the beam's height, and Goal stacks. |
+| A rear intake run in reverse spat pieces into the robot, and Loaders could be stocked past their capacity. | Pieces come out of the intake's own mouth; a Loader is only restocked when a whole loaded stack fits. |
+
 ## Still different
 
 ### Driving and turning
@@ -123,9 +134,13 @@ over a Placed Pin and still set it down level ([robots.md](robots.md)).
 ### Rules
 
 - **Checked:** SG1 (18″ starting size) and SG2 (24″ / 50″ expansion limits), both from
-  the profile's size only; SG6 (possession); SG7 (crossing the Autonomous Line, or touching
-  objects on the other side); SG9 (touching opponent Goals); SG10 (removing Placed objects
-  from neutral Goals).
+  the profile's size only, and shown as notes: they don't cost the Autonomous Bonus or the
+  AWP. SG6 (possession); SG7 (crossing the Autonomous Line, which is interrupted by the
+  Midfield, or touching, taking from or adding to objects on the other side, with the robot or
+  what it holds); SG9 (touching opponent Goals, claws and held stacks included); SG10
+  (removing Placed objects from neutral Goals: pieces above a break aren't Placed).
+- The perimeter (AWP) and Midfield checks count claws and held stacks as part of the robot.
+  The live score while scrubbing a replay uses the chassis only; the final score is exact.
 - **Not checked:** how far lifts and other mechanisms reach out (expansion during the run),
   entanglement and the other rules. Read the manual ([override-research.md](override-research.md)).
 - **Scoring** follows the manual exactly. Placement itself is the idealized part (see above).

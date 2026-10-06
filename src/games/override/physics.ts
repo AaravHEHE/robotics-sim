@@ -6,7 +6,7 @@
 // "snap" operations in game.ts (hybrid model).
 
 import RAPIER from '@dimforge/rapier2d-deterministic-compat';
-import { dhypot } from '../../sim/dmath.ts';
+import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { FieldDef, Vec2 } from '../../sim/field.ts';
 import { box, fieldObstacles, octagon, satMtv, type Obstacle } from '../../sim/world.ts';
 import { CUP, PIN, stackTop, type Piece } from './elements.ts';
@@ -83,6 +83,7 @@ export class FloorPhysics {
   /** Carried id + piece id pairs that overlap without pushing (see Carried / RobotShape.passes). */
   private readonly passing = new Set<string>();
   private readonly hooks: RAPIER.PhysicsHooks;
+  private readonly events = new RAPIER.EventQueue(true);
   /** Pieces stuck between the robot and something fixed: the robot can't drive through them. */
   private readonly pinned = new Set<string>();
   /** How far the robot was into each piece at the previous physics step (in). */
@@ -126,8 +127,8 @@ export class FloorPhysics {
         const held = this.carriedOf.get(b1) ?? this.carriedOf.get(b2);
         if (!held) return RAPIER.SolverFlags.COMPUTE_IMPULSE;
         const piece = this.pieceOf.get(b1) ?? this.pieceOf.get(b2);
-        if (!piece) return null;
-        return this.blocks(held, piece) ? RAPIER.SolverFlags.COMPUTE_IMPULSE : null;
+        if (!piece) return RAPIER.SolverFlags.EMPTY;
+        return this.blocks(held, piece) ? RAPIER.SolverFlags.COMPUTE_IMPULSE : RAPIER.SolverFlags.EMPTY;
       },
       filterIntersectionPair: () => true,
     };
@@ -160,6 +161,21 @@ export class FloorPhysics {
     this.world.createCollider(RAPIER.ColliderDesc.ball(r).setMass(mass).setFriction(0.4).setRestitution(0.1), body);
     this.bodies.set(s.id, body);
     this.pieceOf.set(body.handle, s.id);
+    this.outline.set(s.id, { r: r / M, top: stackTop(s.pieces, 0, false) });
+  }
+
+  /**
+   * A stack's pieces changed (taken from or added to): the same body, with the new collider,
+   * left as it was (asleep or not). A new body would wake up against the pieces it was laid
+   * out touching (the wall groups) and drift.
+   */
+  restack(s: FloorStack): void {
+    const body = this.bodies.get(s.id);
+    if (!body) return this.addStack(s, false);
+    while (body.numColliders()) this.world.removeCollider(body.collider(0), false);
+    const r = stackRadius(s.pieces) * M;
+    const mass = s.pieces.reduce((m, p) => m + PIECE_MASS[p.kind], 0);
+    this.world.createCollider(RAPIER.ColliderDesc.ball(r).setMass(mass).setFriction(0.4).setRestitution(0.1), body);
     this.outline.set(s.id, { r: r / M, top: stackTop(s.pieces, 0, false) });
   }
 
@@ -196,8 +212,8 @@ export class FloorPhysics {
     if (!o.length) return dhypot(px - x, py - y) < o.r + r;
     // capsule: distance from the disc centre to the Pin's axis
     const h = o.length / 2 - o.r;
-    const ux = -Math.sin(b.rotation());
-    const uy = Math.cos(b.rotation());
+    const ux = -dsin(b.rotation());
+    const uy = dcos(b.rotation());
     const k = Math.max(-h, Math.min(h, (x - px) * ux + (y - py) * uy));
     return dhypot(x - px - k * ux, y - py - k * uy) < o.r + r;
   }
@@ -220,6 +236,12 @@ export class FloorPhysics {
     for (const c of list) {
       let h = this.carried.get(c.id);
       if (!h) {
+        // taken out of a floor stack: it starts out passing through what is left of that stack
+        for (let k = this.expected.length - 1; k >= 0; k--) {
+          if (!c.id.startsWith(this.expected[k].prefix)) continue;
+          this.passing.add(c.id + '\n' + this.expected[k].piece);
+          this.expected.splice(k, 1);
+        }
         const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(c.x * M, c.y * M));
         this.world.createCollider(RAPIER.ColliderDesc.ball(c.r * M).setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS), body);
         h = { body, c };
@@ -236,6 +258,13 @@ export class FloorPhysics {
       }
       h.body.setNextKinematicTranslation({ x: c.x * M, y: c.y * M });
     }
+    this.expected.length = 0; // only for the stack picked up just before this step
+  }
+
+  /** A carried stack about to appear (id starting with `prefix`) comes out of this piece. */
+  private readonly expected: Array<{ prefix: string; piece: string }> = [];
+  expectOverlap(prefix: string, piece: string): void {
+    this.expected.push({ prefix, piece });
   }
 
   /** Does a carried stack pass through a piece right now (see setCarried)? */
@@ -266,7 +295,9 @@ export class FloorPhysics {
   }
 
   step(): void {
-    this.world.step(undefined, this.hooks);
+    // this Rapier build only runs the hooks (the carried-stack contact filter) when stepping with
+    // an event queue; it drains itself, nothing reads the events
+    this.world.step(this.events, this.hooks);
   }
 
   pose(id: string): BodyPose | null {
@@ -335,23 +366,26 @@ export class FloorPhysics {
     return false;
   }
 
-  /** Is an object's body touching the robot right now? */
+  /** Is an object's body touching the robot (its chassis, or a stack it carries) right now? */
   touchingRobot(id: string): boolean {
     const b = this.bodies.get(id);
     if (!b) return false;
     // a narrow-phase pair also exists for overlapping bounding boxes: require a contact point
     let touching = false;
-    for (let i = 0; i < b.numColliders() && !touching; i++) {
-      for (let j = 0; j < this.robot.numColliders() && !touching; j++) {
-        this.world.contactPair(b.collider(i), this.robot.collider(j), (m) => {
-          for (let k = 0; k < m.numContacts(); k++) if (m.contactDist(k) <= 0.002) touching = true;
-        });
+    for (const r of [this.robot, ...[...this.carried.values()].map((h) => h.body)]) {
+      for (let i = 0; i < b.numColliders() && !touching; i++) {
+        for (let j = 0; j < r.numColliders() && !touching; j++) {
+          this.world.contactPair(b.collider(i), r.collider(j), (m) => {
+            for (let k = 0; k < m.numContacts(); k++) if (m.contactDist(k) <= 0.002) touching = true;
+          });
+        }
       }
     }
     return touching;
   }
 
   free(): void {
+    this.events.free();
     this.world.free();
   }
 }

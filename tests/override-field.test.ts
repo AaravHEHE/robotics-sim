@@ -5,7 +5,7 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { CUP, layoutStack, PIN, type Piece } from '../src/games/override/elements.ts';
 import { initialState, inventory } from '../src/games/override/state.ts';
 import { validateField, zoneAt, type FieldDef } from '../src/sim/field.ts';
-import { World } from '../src/sim/world.ts';
+import { goalWidthAt, World } from '../src/sim/world.ts';
 import { robot } from './helpers.ts';
 
 const field = async () => JSON.parse(await readFile(path.join(repoRoot, 'data/fields/override.json'), 'utf8')) as FieldDef;
@@ -131,6 +131,9 @@ describe('robot vs field elements', () => {
     const r = await robot('tank-6m-450');
     const w = new World(r, f, { x: -61, y: mm(-598.1), theta: 90 });
     const goal = f.goals!.find((g) => g.id === 'R1')!;
-    expect(w.raycast({ x: 0, y: 0, heading: 0 })).toBeCloseTo(goal.x - goal.baseWidth / 2 - -61, 6);
+    // low, the base plate; higher, the narrower tapered column; above the top, nothing
+    expect(w.raycast({ x: 0, y: 0, heading: 0, z: 0.2 })).toBeCloseTo(goal.x - goal.baseWidth / 2 - -61, 6);
+    expect(w.raycast({ x: 0, y: 0, heading: 0, z: 3 })).toBeCloseTo(goal.x - goalWidthAt(goal, 3) / 2 - -61, 6);
+    expect(w.raycast({ x: 0, y: 0, heading: 0, z: 4 })).toBeGreaterThan(goal.x + goal.baseWidth / 2 - -61);
   });
 });

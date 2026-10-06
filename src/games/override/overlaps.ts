@@ -2,7 +2,7 @@
 // robot, a Goal, a Loader or a wall, and does every stack nest the way real pieces can?
 // Used by the tests and scripts/check-phasing.ts; goalShape is also the simulator's Goal collision shape.
 
-import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
+import { datan2, dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { FieldDef, GoalDef, Vec2 } from '../../sim/field.ts';
 import { crossSection, fieldObstacles, goalWidthAt, octagon, satMtv, type Obstacle } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, stackTop, type Piece } from './elements.ts';
@@ -30,7 +30,7 @@ interface Body {
 function arc(c: Vec2, r: number, from: number, n: number, out: Vec2[]): void {
   for (let k = 0; k <= n; k++) {
     const t = (from + (180 * k) / n) * RAD;
-    out.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]);
+    out.push([c[0] + r * dcos(t), c[1] + r * dsin(t)]);
   }
 }
 
@@ -38,7 +38,7 @@ function arc(c: Vec2, r: number, from: number, n: number, out: Vec2[]): void {
 function outline(b: Body): Vec2[] {
   const dx = b.b[0] - b.a[0];
   const dy = b.b[1] - b.a[1];
-  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const ang = (datan2(dy, dx) * 180) / Math.PI;
   const pts: Vec2[] = [];
   arc(b.b, b.r, ang - 90, 8, pts);
   arc(b.a, b.r, ang + 90, 8, pts);

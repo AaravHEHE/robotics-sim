@@ -10,7 +10,7 @@ import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS, type Carried } from './physics.ts';
 import { toField } from '../../sim/lift.ts';
 import { installSensors } from './sensors.ts';
-import { inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type Violation } from './rules.ts';
+import { autonomousViolation, inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type RobotPart, type Violation } from './rules.ts';
 import { autonomousBonus, awp, score, type AwpCheck, type Mode, type ScoreBreakdown } from './scoring.ts';
 import { initialState, type FloorStack, type OverrideState } from './state.ts';
 import { ToggleSim } from './toggle.ts';
@@ -193,7 +193,7 @@ export class OverrideGame implements GameOps {
     // where the claws are now (the lifts move every step): what the robot carries collides there
     this.world.attachments = this.manipulators.attachments();
     this.toggles.step(dtMs, this.state.toggles, this.manipulators.contactShapes());
-    this.rules.check(this.clock, this.world.footprint());
+    this.rules.check(this.clock, this.world.footprint(), this.robotParts());
     this.physicsClock += dtMs;
     while (this.physicsClock >= PHYSICS_DT_MS) {
       this.physicsClock -= PHYSICS_DT_MS;
@@ -269,12 +269,20 @@ export class OverrideGame implements GameOps {
   }
 
   rebuildFloor(stack: FloorStack): void {
-    this.physics.remove(stack.id);
-    this.physics.addStack(stack, false);
+    this.physics.restack(stack);
+    // taking part of a stack, or setting pieces on one, touches it (SG7e)
+    if (this.opponentSide.has(stack.id)) {
+      this.rules.add(this.clock, 'SG7', 'The robot took from or added to a Scoring Object on the opposing side of the Autonomous Line.');
+      this.opponentSide.clear(); // reported once
+    }
   }
 
   changed(): void {
     this.dirty = true;
+  }
+
+  liftedOutOf(clawName: string, stackId: string): void {
+    this.physics.expectOverlap(`claw:${clawName}:`, stackId);
   }
 
   violation(rule: string, message: string): void {
@@ -305,7 +313,12 @@ export class OverrideGame implements GameOps {
 
   /** Score the current state as if the run ended now. */
   score(): OverrideResult {
-    return scoreState(this.field, this.mode, this.alliance, this.state, this.world.footprint(), this.rules.violations.length > 0, this.clock);
+    return scoreState(this.field, this.mode, this.alliance, this.state, this.world.footprint(), this.rules.violations.some(autonomousViolation), this.clock, this.robotParts());
+  }
+
+  /** The claws and what they hold, as outlines for the rules (field frame). */
+  private robotParts(): RobotPart[] {
+    return this.world.attachments.map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom }));
   }
 
   /** Record motion samples for objects that moved since their last sample. */
@@ -346,8 +359,9 @@ export function scoreState(
   footprint: Vec2[],
   violation: boolean,
   t: number,
+  parts: RobotPart[] = [],
 ): OverrideResult {
-  const mid = inMidfield(field, footprint);
+  const mid = inMidfield(field, footprint, parts);
   const s = score({
     field,
     state,
@@ -355,7 +369,7 @@ export function scoreState(
     autonomous: mode === 'h2h',
     robotsInMidfield: { red: mid && alliance === 'red' ? 1 : 0, blue: mid && alliance === 'blue' ? 1 : 0 },
   });
-  const perimeter = touchingPerimeter(field, footprint);
+  const perimeter = touchingPerimeter(field, footprint, parts);
   return {
     t,
     score: s,
