@@ -3,12 +3,37 @@
 // so placing and moving them is exact. Robot frame: x right, y forward, z up (inches).
 // Pure: no three.js, no DOM.
 
-export type PartKind = 'channel' | 'angle' | 'plate' | 'wheel' | 'motor' | 'gear' | 'standoff' | 'shaft' | 'box' | 'cylinder';
+export type PartKind =
+  | 'channel'
+  | 'angle'
+  | 'plate'
+  | 'wheel'
+  | 'motor'
+  | 'gear'
+  | 'sprocket'
+  | 'chain'
+  | 'pulley'
+  | 'rope'
+  | 'rack'
+  | 'band'
+  | 'standoff'
+  | 'shaft'
+  | 'box'
+  | 'cylinder';
 
 export interface PartDef {
   id: string;
   name: string;
   kind: PartKind;
+  /** The palette group it is listed under. */
+  group?: string;
+  /** Steel parts are darker (structure); `finish` black for slide rails. */
+  material?: 'steel';
+  finish?: 'black';
+  /** Thickness of a shaft, rope or tubing (in). */
+  thickness?: number;
+  /** Chain pitch (in): #25 = 0.25, #35 = 0.375. */
+  pitch?: number;
   /** Holes across the web (channels, angles, plates) and up the flanges. */
   web?: number;
   flange?: number;
@@ -17,7 +42,7 @@ export interface PartDef {
   length?: number;
   diameter?: number;
   width?: number;
-  style?: 'omni' | 'traction' | 'flex';
+  style?: 'omni' | 'traction' | 'flex' | 'mecanum' | 'spool';
   size?: [number, number, number];
   cartridges?: string[];
   cartridge?: string;
@@ -61,22 +86,43 @@ export function partSize(def: PartDef, p: Pick<Placed, 'length'>): [number, numb
     case 'angle':
       return [len, (def.web ?? 1) * PITCH, (def.flange ?? 1) * PITCH];
     case 'plate':
-      return [len, (def.web ?? 5) * PITCH, 0.063];
+      return [len, (def.web ?? 5) * PITCH, def.web && def.web >= 10 ? 0.093 : 0.063];
     case 'wheel':
       return [def.width ?? 1, def.diameter ?? 4, def.diameter ?? 4];
     case 'gear': {
       const od = (def.teeth ?? 36) / 24 + 2 / 24;
-      return [0.2, od, od];
+      return [def.width ?? 0.2, od, od];
     }
+    case 'sprocket': {
+      const od = sprocketPitchDiameter(def) + (def.pitch ?? 0.25) * 0.6;
+      return [def.width ?? 0.13, od, od];
+    }
+    case 'chain': {
+      const pitch = def.pitch ?? 0.25;
+      return [(p.length ?? def.length ?? 24) * pitch, pitch * 0.55, pitch * 0.9];
+    }
+    case 'pulley':
+      return [def.width ?? 0.4, def.diameter ?? 1, def.diameter ?? 1];
+    case 'rope':
+      return [len, def.thickness ?? 0.06, def.thickness ?? 0.06];
+    case 'rack':
+      return [len, 0.5, 0.375];
+    case 'band':
+      return [0.1, def.diameter ?? 1, (def.diameter ?? 1) * 0.55];
     case 'standoff':
       return [0.25, 0.25, len];
     case 'shaft':
-      return [len, 0.125, 0.125];
+      return [len, def.thickness ?? 0.125, def.thickness ?? 0.125];
     case 'cylinder':
       return [def.length ?? 3, def.diameter ?? 1, def.diameter ?? 1];
     default:
       return def.size ?? [1, 1, 1];
   }
+}
+
+/** A sprocket's pitch diameter: where the chain's pins ride (in). */
+export function sprocketPitchDiameter(def: PartDef): number {
+  return (def.pitch ?? 0.25) / Math.sin(Math.PI / (def.teeth ?? 12));
 }
 
 type Mat3 = [number, number, number, number, number, number, number, number, number];

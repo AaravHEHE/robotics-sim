@@ -1238,6 +1238,7 @@ function openRobotDialog() {
     partsBuilder ??= new PartsBuilder({
       view: $('pk-view'),
       palette: $('pk-palette'),
+      search: $<HTMLInputElement>('pk-search'),
       length: $<HTMLSelectElement>('pk-length'),
       cartridge: $<HTMLSelectElement>('pk-cartridge'),
       level: $<HTMLInputElement>('pk-level'),

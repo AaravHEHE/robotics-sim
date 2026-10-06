@@ -74,3 +74,25 @@ describe('placing parts on the hole grid', () => {
     expect(validateAssembly({ v: 2 }, cat)).toEqual(['Not a parts build.']);
   });
 });
+
+describe('every part in the catalog can be drawn', () => {
+  it('builds a shape with meshes that fits its box', async () => {
+    const THREE = await import('three');
+    const { partShape } = await import('../src/app/parts/geometry.ts');
+    const cat = await catalog();
+    expect(cat.parts.length).toBeGreaterThan(120);
+    for (const kind of ['pulley', 'sprocket', 'chain', 'rope', 'rack', 'band']) expect(cat.parts.some((d) => d.kind === kind), kind).toBe(true);
+    for (const d of cat.parts) {
+      const o = partShape(d, { length: d.length });
+      let meshes = 0;
+      o.traverse((m) => (meshes += (m as InstanceType<typeof THREE.Mesh>).isMesh ? 1 : 0));
+      expect(meshes, d.id).toBeGreaterThan(0);
+      o.updateMatrixWorld(true);
+      const size = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+      const want = partSize(d, { length: d.length });
+      // within its box (rollers and teeth may poke out a little)
+      expect(size.x, d.id).toBeLessThanOrEqual(want[0] + 0.5);
+      expect(Math.max(size.y, size.z), d.id).toBeLessThanOrEqual(Math.max(want[1], want[2]) + 0.6);
+    }
+  });
+});

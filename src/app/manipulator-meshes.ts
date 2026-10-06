@@ -66,9 +66,10 @@ function bar(part = 'c-channel-1x2x1'): { mesh: THREE.Group; set(a: THREE.Vector
   };
 }
 
-/** A piston rod from a to b: a cylinder stretched to fit (it really does slide). */
-function rodBar(): { mesh: THREE.Mesh; set(a: THREE.Vector3, b: THREE.Vector3): void } {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc9cdd2, metalness: 0.7, roughness: 0.3 }));
+/** A piston rod (or, thin, a string) from a to b: a cylinder stretched to fit. */
+function rodBar(radius = 0.35, color = 0xc9cdd2): { mesh: THREE.Mesh; set(a: THREE.Vector3, b: THREE.Vector3): void } {
+  const metal = color === 0xc9cdd2;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 1, metal ? 16 : 6).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color, metalness: metal ? 0.7 : 0, roughness: metal ? 0.3 : 0.9 }));
   return {
     mesh,
     set(a, b) {
@@ -337,18 +338,41 @@ export class ManipulatorVisuals {
     if (m.lift === 'cascade') {
       // nested slide stages, each rising its share of the carriage travel
       const n = (m.stages ?? 1) + 1;
-      // each stage a C-channel slide (1×3×1 for the outer stage)
+      // each stage a C-channel slide (1×3×1 for the outer stage), strung as real cascades
+      // are: string from a winch spool at the base, over a pulley at the top of each stage,
+      // down to the bottom of the next one, and the last to the carriage
       const rails = Array.from({ length: n }, (_, k) => bar(k ? 'c-channel-1x2x1' : 'c-channel-1x3x1'));
       for (const b of rails) root.add(b.mesh);
+      const along = new THREE.Vector3(1, 0, 0);
+      const up = new THREE.Vector3(0, 1, 0);
+      const pulleys = rails.map(() => {
+        const g = centeredPart(partDef('pulley-1'), {}, new THREE.Vector3(), along, up);
+        root.add(g);
+        return g;
+      });
+      const strings = rails.map(() => rodBar(0.05, 0xe8e4d8));
+      for (const st of strings) root.add(st.mesh);
+      const spoolAt = local({ x: x0 - ((n - 1) / 2) * 0.8 - 1.2, y: m.home.y + 1.5, z: 1.4 });
+      root.add(centeredPart(partDef('spool'), {}, spoolAt, along, up));
       const h0 = m.home.z;
       this.updates.push((v) => {
         const e = liftEffector(m, v(m));
         const rise = e.z - h0;
+        const tops: THREE.Vector3[] = [];
+        const bottoms: THREE.Vector3[] = [];
         rails.forEach((b, k) => {
           const bottom = 0.5 + (rise * k) / n;
           const dx = (k - (n - 1) / 2) * 0.8;
-          b.set(local({ x: x0 + dx, y: m.home.y + 1.5, z: bottom }), local({ x: x0 + dx, y: m.home.y + 1.5, z: bottom + h0 + 8 }));
+          const a = local({ x: x0 + dx, y: m.home.y + 1.5, z: bottom });
+          const top = local({ x: x0 + dx, y: m.home.y + 1.5, z: bottom + h0 + 8 });
+          b.set(a, top);
+          pulleys[k].position.copy(top).add(new THREE.Vector3(0, -0.6, 0.9));
+          tops.push(pulleys[k].position.clone());
+          bottoms.push(a.clone().add(new THREE.Vector3(0, 0.4, 0.9)));
         });
+        // spool to the first pulley, then each pulley down to the next stage's bottom
+        strings[0].set(spoolAt.clone().add(new THREE.Vector3(0, 0.5, 0)), tops[0]);
+        for (let k = 1; k < n; k++) strings[k].set(tops[k - 1], bottoms[k]);
       });
       return;
     }

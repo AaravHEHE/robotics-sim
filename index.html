@@ -205,7 +205,10 @@
       <h2 id="dlg-parts-title">Build from VEX parts</h2>
       <p class="muted">Snap C-channel, wheels, motors, gears and more together on VEX's ½″ hole grid. The build becomes the robot's 3D model: it is only how the robot looks. How it drives and what it can do still come from its profile (the blue box is its size).</p>
       <div class="pk-grid">
-        <div id="pk-palette" class="pk-palette" aria-label="Parts"></div>
+        <div class="pk-side">
+          <input id="pk-search" type="search" placeholder="Search parts (pulley, sprocket, sensor…)" aria-label="Search parts" />
+          <div id="pk-palette" class="pk-palette" aria-label="Parts"></div>
+        </div>
         <div class="pk-main">
           <div class="pk-bar">
             <label>Length <select id="pk-length"></select></label>

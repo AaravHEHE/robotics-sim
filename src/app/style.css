@@ -362,3 +362,5 @@ select, input[type='number'] {
 }
 .map-total { padding-top: 4px; font-size: 12px; }
 .map-total.over { color: var(--err, #d8343a); }
+.pk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pk-side input { width: 100%; }

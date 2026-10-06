@@ -11,11 +11,6 @@ import { CATALOG } from './catalog.ts';
 
 export { CATALOG };
 
-const GROUPS: Array<[string, PartDef['kind'][]]> = [
-  ['Structure', ['channel', 'angle', 'plate', 'standoff']],
-  ['Motion', ['wheel', 'gear', 'shaft']],
-  ['Electronics & air', ['motor', 'box', 'cylinder']],
-];
 
 /** A tap moves less than this (px): anything else turns the camera. */
 const TAP_PX = 5;
@@ -23,6 +18,7 @@ const TAP_PX = 5;
 export interface BuilderElements {
   view: HTMLElement;
   palette: HTMLElement;
+  search: HTMLInputElement;
   length: HTMLSelectElement;
   cartridge: HTMLSelectElement;
   level: HTMLInputElement;
@@ -84,6 +80,7 @@ export class PartsBuilder {
     c.addEventListener('keydown', (e) => this.key(e));
     els.level.onchange = () => this.setLevel(Number(els.level.value) || 0);
     els.length.onchange = () => this.updateGhost();
+    els.search.oninput = () => this.renderPalette();
     els.cartridge.onchange = () => this.updateGhost();
     this.renderPalette();
     this.pick(this.part);
@@ -107,30 +104,41 @@ export class PartsBuilder {
 
   // ---------------- palette ----------------
 
+  /** The parts list, in the catalog's groups, narrowed by the search box. */
   private renderPalette(): void {
     const p = this.els.palette;
     p.replaceChildren();
-    for (const [title, kinds] of GROUPS) {
+    const q = this.els.search.value.trim().toLowerCase();
+    const match = (d: PartDef) => !q || `${d.name} ${d.group ?? ''} ${d.kind}`.toLowerCase().includes(q);
+    const groups = [...new Set(CATALOG.parts.map((d) => d.group ?? 'Parts'))];
+    for (const title of groups) {
+      const items = CATALOG.parts.filter((d) => (d.group ?? 'Parts') === title && match(d));
+      if (!items.length) continue;
       const h = document.createElement('div');
       h.className = 'sp-title';
       h.textContent = title;
       p.appendChild(h);
-      for (const d of CATALOG.parts.filter((x) => kinds.includes(x.kind))) {
+      for (const d of items) {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'pk-part';
         b.textContent = d.name;
         b.dataset.part = d.id;
         b.onclick = () => this.pick(d);
+        b.classList.toggle('active', d.id === this.part?.id);
         p.appendChild(b);
       }
     }
+    if (!p.children.length) p.textContent = 'No part matches.';
   }
 
   private pick(d: PartDef): void {
     this.part = d;
     this.els.palette.querySelectorAll<HTMLButtonElement>('.pk-part').forEach((b) => b.classList.toggle('active', b.dataset.part === d.id));
-    this.els.length.innerHTML = (d.lengths ?? []).map((l) => `<option value="${l}">${l} holes (${(l * PITCH).toFixed(1)}″)</option>`).join('');
+    // chain comes in links; everything else in holes
+    this.els.length.innerHTML = (d.lengths ?? [])
+      .map((l) => (d.kind === 'chain' ? `<option value="${l}">${l} links (${(l * (d.pitch ?? 0.25)).toFixed(1)}″)</option>` : `<option value="${l}">${l} holes (${(l * PITCH).toFixed(1)}″)</option>`))
+      .join('');
     this.els.length.disabled = !d.lengths;
     if (d.length) this.els.length.value = String(d.length);
     this.els.cartridge.disabled = d.kind !== 'motor';

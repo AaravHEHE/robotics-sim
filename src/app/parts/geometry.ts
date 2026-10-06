@@ -3,7 +3,7 @@
 // `placement()`; geometry and materials are shared between identical parts.
 
 import * as THREE from 'three';
-import { partSize, placement, rotation, type PartDef, type Placed } from './assembly.ts';
+import { partSize, placement, rotation, sprocketPitchDiameter, type PartDef, type Placed } from './assembly.ts';
 
 const cache = new Map<string, THREE.Object3D>();
 
@@ -28,14 +28,45 @@ function holes(): THREE.Texture {
 const mats = new Map<string, THREE.Material>();
 const mat = (key: string, make: () => THREE.Material) => mats.get(key) ?? (mats.set(key, make()), mats.get(key)!);
 const plain = (color: string, metal = 0, rough = 0.6) => mat(`${color}:${metal}:${rough}`, () => new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough }));
-const drilled = (along: number, across: number) =>
-  // (no canvas outside a browser, e.g. in tests: plain aluminum)
-  typeof document === 'undefined' ? plain('#c9cdd2', 0.6, 0.4) : mat(`holes:${along}:${across}`, () => {
-    const t = holes().clone();
-    t.needsUpdate = true;
-    t.repeat.set(along, across);
-    return new THREE.MeshStandardMaterial({ map: t, metalness: 0.6, roughness: 0.4 });
-  });
+/** The tint over the aluminum hole texture: steel is darker, slide rails black. */
+const TINT = { alu: '#ffffff', steel: '#a9aeb6', black: '#4a4d52' } as const;
+type Tone = keyof typeof TINT;
+const toneOf = (def: PartDef): Tone => (def.finish === 'black' ? 'black' : def.material === 'steel' ? 'steel' : 'alu');
+const drilled = (along: number, across: number, tone: Tone = 'alu') =>
+  // (no canvas outside a browser, e.g. in tests: plain metal)
+  typeof document === 'undefined'
+    ? plain(tone === 'alu' ? '#c9cdd2' : tone === 'steel' ? '#8d939b' : '#3a3d42', 0.6, 0.4)
+    : mat(`holes:${along}:${across}:${tone}`, () => {
+        const t = holes().clone();
+        t.needsUpdate = true;
+        t.repeat.set(along, across);
+        return new THREE.MeshStandardMaterial({ map: t, color: TINT[tone], metalness: tone === 'steel' ? 0.75 : 0.6, roughness: tone === 'black' ? 0.6 : 0.4 });
+      });
+const clear = (color: string) => mat(`clear:${color}`, () => new THREE.MeshPhysicalMaterial({ color, transparent: true, opacity: 0.35, roughness: 0.1, depthWrite: false }));
+
+/** A flat toothed disc (gear or sprocket) in the y-z plane, `width` thick along x. */
+function toothed(teeth: number, rootR: number, tipR: number, width: number, center: number, m: THREE.Material, sharp: boolean): THREE.Mesh {
+  const shape = new THREE.Shape();
+  const n = teeth * (sharp ? 2 : 2);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rr = i % 2 ? rootR : tipR;
+    if (i) shape.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    else shape.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  // the square shaft hole
+  const hole = new THREE.Path();
+  const h = 0.09;
+  hole.moveTo(-h, -h);
+  hole.lineTo(-h, h);
+  hole.lineTo(h, h);
+  hole.lineTo(h, -h);
+  shape.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false, curveSegments: 1 });
+  geo.rotateY(Math.PI / 2); // extrude along x
+  geo.translate(0, center, center);
+  return new THREE.Mesh(geo, m);
+}
 
 /** A box from its corner (in), with the given material. */
 function slab(w: number, d: number, h: number, m: THREE.Material, at: [number, number, number] = [0, 0, 0]): THREE.Mesh {
@@ -58,20 +89,91 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
   const t = 0.063; // aluminum wall
   const holesAlong = Math.round(sx / 0.5);
   switch (def.kind) {
-    case 'channel':
-      g.add(slab(sx, sy, t, drilled(holesAlong, def.web ?? 2)));
-      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1)));
-      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1), [0, sy - t, 0]));
+    case 'channel': {
+      const tone = toneOf(def);
+      g.add(slab(sx, sy, t, drilled(holesAlong, def.web ?? 2, tone)));
+      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1, tone)));
+      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1, tone), [0, sy - t, 0]));
       break;
-    case 'angle':
-      g.add(slab(sx, sy, t, drilled(holesAlong, def.web ?? 1)));
-      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1)));
+    }
+    case 'angle': {
+      const tone = toneOf(def);
+      g.add(slab(sx, sy, t, drilled(holesAlong, def.web ?? 1, tone)));
+      g.add(slab(sx, t, sz, drilled(holesAlong, def.flange ?? 1, tone)));
       break;
+    }
     case 'plate':
-      g.add(slab(sx, sy, sz, drilled(holesAlong, def.web ?? 5)));
+      // polycarbonate is clear; a bearing flat is black plastic; the rest drilled metal
+      g.add(slab(sx, sy, sz, def.color === '#dfe8f0' ? clear(def.color) : def.color ? plain(def.color, 0.1, 0.6) : drilled(holesAlong, def.web ?? 5, toneOf(def))));
       break;
+    case 'sprocket': {
+      const pd = sprocketPitchDiameter(def) / 2;
+      const pitch = def.pitch ?? 0.25;
+      g.add(toothed(def.teeth ?? 12, pd - pitch * 0.32, pd + pitch * 0.3, sx, sy / 2, plain('#8d939b', 0.8, 0.35), true));
+      break;
+    }
+    case 'chain': {
+      // alternating inner and outer link plates on pins
+      const pitch = def.pitch ?? 0.25;
+      const links = Math.round(sx / pitch);
+      const steel = plain('#7d838b', 0.85, 0.35);
+      for (let i = 0; i < links; i++) {
+        const outer = i % 2 === 0;
+        const w = outer ? sy : sy * 0.7;
+        g.add(slab(pitch * 1.05, w, sz * (outer ? 1 : 0.85), steel, [i * pitch, (sy - w) / 2, outer ? 0 : sz * 0.075]));
+      }
+      break;
+    }
+    case 'pulley': {
+      const r = sy / 2;
+      const nylon = plain(def.color ?? '#2a2d31', 0.05, 0.6);
+      if (def.style === 'spool') {
+        // a winch spool: flanges with string wound on the drum
+        g.add(rod(r, 0.08, nylon, 32, r));
+        g.add(rod(r, 0.08, nylon, 32, r)).position.x = sx - 0.08;
+        g.add(rod(r * 0.62, sx - 0.16, plain('#e8e4d8', 0, 0.9), 24, r)).position.x = 0.08;
+      } else {
+        // two flanges and a grooved hub the string runs in
+        g.add(rod(r, sx * 0.25, nylon, 32, r));
+        g.add(rod(r * 0.72, sx * 0.5, nylon, 32, r)).position.x = sx * 0.25;
+        g.add(rod(r, sx * 0.25, nylon, 32, r)).position.x = sx * 0.75;
+      }
+      g.add(rod(0.09, sx + 0.02, plain('#9aa0a6', 0.8, 0.3), 4, r)).position.x = -0.01;
+      break;
+    }
+    case 'rope':
+      g.add(rod(sy / 2, sx, plain(def.color ?? '#e8e4d8', 0, 0.9), 8));
+      break;
+    case 'rack': {
+      const m = plain('#4b4f56', 0.2, 0.5);
+      g.add(slab(sx, sy, sz * 0.6, m));
+      for (let x = 0.065; x < sx; x += 1 / 8) g.add(slab(0.06, sy, sz * 0.4, m, [x, 0, sz * 0.6]));
+      break;
+    }
+    case 'band': {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(sy / 2 - 0.04, 0.04, 6, 32).rotateY(Math.PI / 2), plain('#c99a62', 0, 0.85));
+      loop.scale.set(1, 1, sz / sy);
+      loop.position.set(sx / 2, sy / 2, sz / 2);
+      g.add(loop);
+      break;
+    }
     case 'wheel': {
       const r = sy / 2;
+      if (def.style === 'mecanum') {
+        // two hub plates and rollers at 45° around the rim
+        const hub = plain('#8d939b', 0.7, 0.4);
+        g.add(rod(r * 0.8, 0.12, hub, 32, r));
+        g.add(rod(r * 0.8, 0.12, hub, 32, r)).position.x = sx - 0.12;
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, sx * 0.95, 12), plain('#2a2d31', 0, 0.85));
+          // each roller along the rim's tangent, tilted 45° to the axle
+          roll.rotation.set(a + Math.PI / 2, 0, Math.PI / 4, 'XYZ');
+          roll.position.set(sx / 2, r + Math.cos(a) * (r - 0.35), r + Math.sin(a) * (r - 0.35));
+          g.add(roll);
+        }
+        break;
+      }
       if (def.style === 'flex') {
         // a flex wheel: a green rubber ring on thin spokes around a square-shaft hub
         const green = plain('#2fa84f', 0, 0.75);
@@ -89,7 +191,7 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
         g.add(rod(0.22, sx, plain('#1f2125', 0.1, 0.6), 12, r));
         break;
       }
-      g.add(rod(r, sx, plain(def.style === 'traction' ? '#2a2d31' : '#3c4046', 0, 0.9), 40));
+      g.add(rod(r, sx, plain(def.color ?? (def.style === 'traction' ? '#2a2d31' : '#3c4046'), 0, 0.9), 40));
       g.add(rod(r * 0.55, sx + 0.04, plain('#d8343a', 0.1, 0.5), 24, r)).position.x = -0.02;
       if (def.style === 'omni') {
         // the rollers around the rim
@@ -122,18 +224,18 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
       const geo = new THREE.ExtrudeGeometry(shape, { depth: sx, bevelEnabled: false, curveSegments: 1 });
       geo.rotateY(Math.PI / 2); // extrude along x
       geo.translate(0, sy / 2, sz / 2);
-      g.add(new THREE.Mesh(geo, plain('#4b4f56', 0.2, 0.5)));
+      g.add(new THREE.Mesh(geo, plain(def.color ?? '#4b4f56', 0.2, 0.5)));
       break;
     }
     case 'standoff': {
       const geo = new THREE.CylinderGeometry(0.144, 0.144, sz, 6);
       geo.rotateX(Math.PI / 2);
       geo.translate(sx / 2, sy / 2, sz / 2);
-      g.add(new THREE.Mesh(geo, plain('#c9cdd2', 0.7, 0.35)));
+      g.add(new THREE.Mesh(geo, def.color ? plain(def.color, 0, 0.7) : plain('#c9cdd2', 0.7, 0.35)));
       break;
     }
     case 'shaft':
-      g.add(slab(sx, sy, sz, plain('#9aa0a6', 0.8, 0.3)));
+      g.add(slab(sx, sy, sz, plain(def.color ?? '#9aa0a6', 0.8, 0.3)));
       break;
     case 'cylinder':
       g.add(rod(sy / 2, sx, plain(def.color ?? '#c9cdd2', 0.4, 0.4)));
