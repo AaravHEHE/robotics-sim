@@ -20,7 +20,7 @@ import { jsonEditor, ProjectEditor } from './editor.ts';
 import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
   deleteCustomRobot, download, loadAssembly, saveAssembly, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
-  projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
+  projectToZip, pruneModels, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
 import { MapPanel } from './map-panel.ts';
 import { LayoutEditor } from './robot-editor/index.ts';
@@ -975,14 +975,19 @@ function loadFiles(name: string, files: Record<string, string>, binary: Record<s
   persistProject();
 }
 
+/** A file path typed by the user, if it is one the project keeps (in src/, include/ or static/). */
+function projectPath(name: string): string | null {
+  const p = name.trim().replace(/^\/+/, '');
+  if (/^(src|include|static)\/[\w./-]+$/.test(p) && !p.split('/').includes('..')) return p;
+  alert('Files must live in src/, include/ or static/, with names made of letters, digits, _ - . and /.');
+  return null;
+}
+
 $('btn-new-file').onclick = () => {
   const name = prompt('New file path (e.g. src/autons.cpp or include/robot.hpp):', 'src/autons.cpp');
   if (!name) return;
-  const p = name.trim().replace(/^\/+/, '');
-  if (!/^(src|include|static)\/[\w./-]+$/.test(p)) {
-    alert('Files must live in src/, include/ or static/.');
-    return;
-  }
+  const p = projectPath(name);
+  if (!p) return;
   editor.addFile(p, p.endsWith('.cpp') ? '#include "main.h"\n\n' : p.match(/\.(h|hpp)$/) ? '#pragma once\n#include "main.h"\n\n' : '');
 };
 $('btn-file-menu').onclick = () => {
@@ -992,7 +997,10 @@ $('btn-file-menu').onclick = () => {
   if (!action || action === p) return;
   if (action.trim().toLowerCase() === 'delete') {
     if (confirm(`Delete ${p}?`)) editor.deleteFile(p);
-  } else editor.renameFile(p, action.trim());
+  } else {
+    const to = projectPath(action);
+    if (to && to !== p) editor.renameFile(p, to);
+  }
 };
 
 $('btn-import').onclick = async () => {
@@ -1221,8 +1229,14 @@ function openRobotDialog() {
     }
     if (editingGlb) p.model = { ...(p.model ?? {}), assetId: editingGlb.assetId };
     else delete p.model;
-    await saveCustomRobot(p);
-    state.robots = [...PRESETS, ...(await listCustomRobots())];
+    try {
+      await saveCustomRobot(p);
+    } catch (e) {
+      return setStatus(`Couldn't save the robot in this browser: ${(e as Error).message}`, 'err');
+    }
+    await loadRobots();
+    if (!state.robots.some((x) => x.id === p.id)) return setStatus("Couldn't save the robot in this browser (its storage may be full or turned off).", 'err');
+    void pruneModels();
     state.robotId = p.id;
     renderRobotSelect();
     settingsChanged();
@@ -1255,7 +1269,11 @@ function openRobotDialog() {
     if (!f) return;
     const buf = await f.arrayBuffer();
     const assetId = 'glb-' + Date.now().toString(36);
-    await saveModel(assetId, buf);
+    try {
+      await saveModel(assetId, buf);
+    } catch (e) {
+      return setStatus(`Couldn't keep the model in this browser: ${(e as Error).message}`, 'err');
+    }
     editingGlb = { assetId };
     setStatus(`Attached ${f.name}. Save the robot to see and keep it.`);
   };
@@ -1275,6 +1293,8 @@ function openRobotDialog() {
     try {
       const bytes = new Uint8Array(await f.arrayBuffer());
       let profile: unknown;
+      // the imported robot brings its own model, or none: not the one being edited before
+      editingGlb = null;
       if (/\.zip$/i.test(f.name)) {
         const z = robotFromZip(bytes);
         profile = z.profile;
@@ -1294,7 +1314,8 @@ function openRobotDialog() {
   $('rb-delete').onclick = async () => {
     if (!confirm(`Delete “${r.name}” from this browser?`)) return;
     await deleteCustomRobot(r.id);
-    state.robots = [...PRESETS, ...(await listCustomRobots())];
+    await loadRobots();
+    void pruneModels();
     state.robotId = PRESETS[0].id;
     renderRobotSelect();
     settingsChanged();

@@ -9,6 +9,7 @@ import { renderForm } from './forms.ts';
 import { RobotPreview } from './preview.ts';
 import { SvgView } from './svg-view.ts';
 import { addMechanism, addSensor, MECHANISM_TEMPLATES, removeMechanism, SENSOR_TEMPLATES, type MechanismTemplate, type SensorTemplate } from './templates.ts';
+import { esc } from '../html.ts';
 
 export interface LayoutElements {
   top: HTMLElement;
@@ -21,7 +22,6 @@ export interface LayoutElements {
   form: HTMLElement;
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 export class LayoutEditor {
   private draft: RobotProfile | null = null;
@@ -173,10 +173,10 @@ export class LayoutEditor {
     this.preview.show(p);
     if (!full) return;
     const pick = this.els.pick;
-    const dev = (d: DeviceSpec, i: number) => `<option value="dev:${i}">${esc(d.name ?? d.type)} · ${d.type} port ${d.port}</option>`;
+    const dev = (d: DeviceSpec, i: number) => `<option value="dev:${i}">${esc(d.name ?? d.type)} · ${esc(d.type)} port ${esc(d.port)}</option>`;
     pick.innerHTML =
       `<option value="robot">Robot and drivetrain</option>` +
-      (p.mechanisms.length ? `<optgroup label="Mechanisms">${p.mechanisms.map((m) => `<option value="mech:${esc(m.name)}">${esc(m.name)} · ${m.kind === 'lift' ? m.lift : m.kind}</option>`).join('')}</optgroup>` : '') +
+      (p.mechanisms.length ? `<optgroup label="Mechanisms">${p.mechanisms.map((m) => `<option value="mech:${esc(m.name)}">${esc(m.name)} · ${esc(m.kind === 'lift' ? m.lift : m.kind)}</option>`).join('')}</optgroup>` : '') +
       `<optgroup label="Devices">${p.devices.map(dev).join('')}</optgroup>`;
     pick.value = this.selected;
     this.els.remove.disabled = this.selected === 'robot';

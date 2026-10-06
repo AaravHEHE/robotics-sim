@@ -97,10 +97,10 @@ export class ProjectEditor {
   renameFile(from: string, to: string) {
     const m = this.models.get(from);
     if (!m || this.models.has(to)) return;
-    const text = m.getValue();
+    // the new file first: if it can't be made, the old one is still there
+    this.addModel(to, m.getValue());
     m.dispose();
     this.models.delete(from);
-    this.addModel(to, text);
     this.open(to);
     this.onChange();
   }
