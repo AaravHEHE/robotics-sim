@@ -76,6 +76,8 @@ describe('transit records (simulator)', () => {
   it('intake pickups record their ride; drops record their fall', async () => {
     const f = await field();
     const r = await robot('override-claw-gate');
+    // no Preload: one standing in the claw is out in front of the intake and pushes the stack away
+    for (const m of r.mechanisms) if (m.kind === 'claw') delete m.preload;
     const world = new World(r, f, { x: -23.548, y: -40, theta: 0 });
     const game = await OverrideGame.create(f, 'h2h', world);
     for (const p of [...r.drivetrain.left, ...r.drivetrain.right]) world.motor(p).cmd = 40 * Math.sign(p);

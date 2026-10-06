@@ -36,15 +36,19 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors
 
 constexpr double R1_X = -47.09, R1_Y = -23.55;  // red Goal R1
 
-// DR4B heights (bar degrees; the chamber is 11" behind the robot center): 5 sets a Pin
-// into an empty Goal, 15 a stack onto 1 Pin, 37 onto 2 Pins.
-constexpr double ONE_PIN = 5, ON_ONE = 15, ON_TWO = 37;
+// DR4B heights (bar degrees; the chamber is 11" behind the robot center), each carrying the
+// bottom just over what is already there: 13 a Pin over an empty Goal (3.5" up, Goal top
+// 3.25"), 25 a stack over 1 Pin (7.3" up, Pin top 6.8"), 45.5 over 2 Pins (14.3" up, stack
+// top 13.9"). Any lower and the stack would hit the Goal or the Pins on it.
+constexpr double ONE_PIN = 13, ON_ONE = 25, ON_TWO = 45.5;
 void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 7, 100); }
 
-// Turn the back of the robot to (x, y) and back up until the chamber is over it.
+// Turn the back of the robot to (x, y) and back up until the chamber is over it. The DR4B
+// must be up first: a stack still rising would hit the Goal or the Pins on it from the side.
 void backInto(double x, double y) {
   chassis.turnToPoint(x, y, 800, {.forwards = false});
   chassis.waitUntilDone();
+  for (int t = 0; t < 1000 && std::fabs(lift.get_position(0) - lift.get_target_position(0)) > 7; t += 10) pros::delay(10);
   const lemlib::Pose p = chassis.getPose();
   const double dx = x - p.x, dy = y - p.y, d = std::hypot(dx, dy);
   chassis.moveToPoint(x - dx / d * 11, y - dy / d * 11, 1500, {.forwards = false});
@@ -97,8 +101,9 @@ void autonomous() {
   const double heading = std::fmod(g.yaw + 180 + 360, 360);
   chassis.setPose(g.x / 0.0254, g.y / 0.0254, heading);
   printf("GPS start: (%.1f, %.1f) facing %.0f\n", g.x / 0.0254, g.y / 0.0254, heading);
-  // 3" out from the wall first: turning in place right against it swings a corner into it
-  pullAway(3);
+  // The start is 3" out from the wall (the Preload standing in the rear chamber has to be
+  // inside the field), so it can turn in place right away: any further out and turning
+  // would swing a corner into the stack at (-47, -47).
 
   // 1. Preload into R1, out of the back.
   liftTo(ONE_PIN);

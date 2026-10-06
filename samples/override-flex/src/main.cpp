@@ -3,12 +3,15 @@
 // V5RC Override: Flex, the official Hero Bot (plain PROS).
 // Robot: "Override: Flex (Hero Bot) arm + claw". Start: Red 1 (left wall, south).
 //
-//  1. Drop the Preload (red half down) into red Goal R1: 5 points for the red half.
-//  2. Close the claw around the Cup of the Cup + yellow Pin standing at (-47, -47), lift it
-//     and set it on the Preload: the Cup nests over the Pin's top.
-//  3. Press the Red 1 Toggle twice with the front of the chassis (the Flex is 12" tall,
+//  1. Lift the Preload clear of the 3.25" Goal and drop it (red half down) into red Goal
+//     R1: 5 points for the red half.
+//  2. Press the Red 1 Toggle twice with the front of the chassis (the Flex is 12" tall,
 //     tall enough to reach a Toggle on top of the wall): yellow -> blue -> red. Now the
 //     Preload's yellow half and the yellow Pin on neutral Goal N_R1 are Owned by red.
+//
+// The Flex's claw is on a single-pivot arm, so it tilts as the arm rises: past 20° it can't
+// set a stack down level. That limits it to about 3" of lift: enough for the Preload over
+// an empty alliance Goal, not enough to bring a Cup over the Pin standing in it.
 //
 // Field headings: 0° faces the top wall, clockwise positive (the GPS / LemLib convention).
 // The robot starts facing 90° (into the field from the left wall); the IMU starts at 0.
@@ -111,31 +114,27 @@ void competition_initialize() {}
 
 void autonomous() {
   // 1. Preload into R1 (-47.1, -23.5). First 2" out from the wall: turning in place right
-  //    against it would swing a corner into it. Then straight at R1 (40.8° from there),
-  //    stopping 10.5" from the Goal's center so the claw (10" ahead) is over it.
+  //    against it would swing a corner into it. Raise the arm to 19.8° (just under the most it can tilt
+  //    and still set the Pin down level): the Pin's bottom is then 3.1" up, just over the
+  //    Goal top. Then straight at R1, stopping 10.27" from the Goal's center so the claw
+  //    (10.27" ahead with the arm up) is over it.
   drive(2);
-  goTo(-47.09, -23.55, 10.5);
+  arm.move_absolute(19.8 * 5, 100);
+  goTo(-47.09, -23.55, 10.27);
   claw.move_absolute(0, 100);  // open: the Pin drops into the Goal
   pros::delay(300);
-
-  // 2. Back off, claw open at the floor around the stack at (-47, -47); close, lift it 3"
-  //    (the Cup's bottom just over the Preload's top) and set it on.
-  drive(-5.5);
-  goTo(-47.09, -47.09, 10);
-  claw.move_absolute(90, 100);
-  pros::delay(250);
-  arm.move_absolute(18 * 5, 100);  // under 20°: past that the claw tilts the stack off
-  goTo(-47.09, -23.55, 10.3);
-  claw.move_absolute(0, 100);
-  pros::delay(250);
   arm.move_absolute(0, 100);
 
-  // 3. Back off, then up the lane x = -58 to the Red 1 Toggle (left wall, y = 0).
+  // 2. Back off, then up the lane x = -58 to the Red 1 Toggle (left wall, y = 0).
   drive(-6);
   goTo(-58, -36, 0);
   turnTo(0);
   drive(-5 - robotY);
   turnTo(270);
+  // fold the arm up: the claw, low out in front, would hit the wall before the chassis
+  // reaches the Toggle (straight up it is over the robot)
+  arm.move_absolute(95 * 5, 100);
+  pros::delay(300);
   press();  // yellow -> blue
   press();  // blue -> red
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));

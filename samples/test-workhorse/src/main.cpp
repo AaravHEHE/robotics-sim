@@ -43,7 +43,9 @@ double settle(M& m, double target, double tol, int ms = 2500) {
 // 3.25" wheels geared 36:48 (450 rpm from 600 rpm motors)
 constexpr double IN_PER_DEG = 3.25 * M_PI / 360.0 * (450.0 / 600.0);
 // From the start up the lane to an open spot where the robot can turn a full circle
-constexpr double LANE = 24.5;
+// (the robot starts 3" off the wall: the Preload standing in the rear claw is inside the
+// field; 20" up, the Preload's 12.6" turning circle stays clear of Goal R1)
+constexpr double LANE = 20;
 
 // Drive straight `inches` (P loop on the encoders, heading held with the IMU). Returns the
 // distance the encoders measured.

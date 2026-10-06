@@ -67,6 +67,27 @@ Runs now freeze their settings, and stale results are dropped. Errors are report
 | A dropped piece inside the robot's outline could be pushed out sideways, out of a claw's reach. | It is pushed out the shortest way. |
 | The field was drawn from the manual's drawings only. | The official field CAD can be loaded for the look (Field › Model…). The simulation still uses the manual's measurements; the CAD's Goals and Loaders line up with them. Its colors come from part numbers (the CAD has none), and screws and other hardware under 1″ are left out. |
 
+## Fixed: pieces passing through each other
+
+Found with `scripts/check-phasing.ts` (every shipped sample, checked after every step) and
+`scripts/fuzz-phasing.ts` (every robot preset driven, turned, lifted and clawed at random).
+
+| Used to happen in the simulator | Now |
+|---|---|
+| What a claw held had no body: the claw sits outside the frame, so a held Pin passed straight through standing stacks and Goal bases, and opening the claw inside a Goal's base Placed it. | A held stack is solid wherever it is below what it meets. It shoves floor pieces it is level with, and a Goal, Loader, wall or trapped piece stops the robot. It goes over anything it is carried above, and can be lowered onto a Goal or stack it is over. |
+| Pieces already on a Goal had no body either, so a Cup carried below a Placed Pin's top swept through the Pin and was "stacked" on it. | A Goal is as tall as its stack. To stack, carry the piece over the top of what is there first. |
+| Rear claws (the 4-bar and the DR4B) held the Preload through the perimeter wall at the start positions. | The robot is placed far enough in that the Preload is inside the field (with a note). Their samples start at x = −57.6 instead. |
+| A robot corner grazing a piece at speed left it up to 2″ inside the robot for a tenth of a second. | The floor physics works at the pieces' scale (Rapier's length unit), so pieces are pushed out at once. |
+| A robot pressing a piece against a wall slowly could drive it into the wall: the piece only counted as stuck once the robot was 0.1″ into it, and the wall gave way first. | A piece is stuck as soon as the robot touches it while it is against something fixed. |
+| An empty claw had no body: low and out in front, it reached into a Goal's base (and could pick up a piece there) or through the wall. | A claw's jaws run into Goal bodies, Loaders and walls below their tops. They still close around floor pieces and Placed pieces. Autons fold their claw up before pressing a wall Toggle with the bumper. |
+| Lowering a lift over a Goal sank the claw, or what it held, into the Goal. | A lift lowering something onto a Goal, Loader or stuck piece from above stops on it, as a real lift stalls. |
+| A lone Pin dropped next to a Goal lay down through the Goal, and one dropped between the robot and a Goal, or where another dropped piece already lay, could land inside them. | Drops are placed by their real outline (a lying Pin is 6.5″ long) in the nearest free spot: clear of the robot (and where it is about to drive), what its claws hold, Goals, Loaders, the walls and other pieces. A lone Pin falls across a gap it doesn't fit along. |
+| A robot started (or placed with `setPose()`) on top of floor pieces squeezed them out, sometimes through the wall, without a word. | A note says how many pieces the start position covers. |
+
+The sample autons used to carry pieces too low and relied on this. They now lift over each
+Goal and stack first; Flex no longer stacks, because its tilting arm claw can't lift a Cup
+over a Placed Pin and still set it down level ([robots.md](robots.md)).
+
 ## Still different
 
 ### Driving and turning
@@ -87,6 +108,7 @@ Runs now freeze their settings, and stale results are dropped. Errors are report
 | **High** | **Snap pickup and placement.** A claw that closes on a piece takes it. Opening within 1.5″ of a Goal or stack, with the bottom between 2″ below and 4″ above its resting height, Places what it holds. | A real Pin has to go into a socket or Cup: it can catch on the rim, and you need to line up to about ½″. Leave margin, and slow down near Goals. |
 | **Medium** | Intakes never jam. Everything that touches the zone while it spins is pulled in, and a lying Pin comes up with the end nearer the robot at the bottom. | Pieces jam, come in sideways or bounce out, and the orientation of a lying Pin depends on the intake's design. |
 | **Medium** | Floor physics is 2D. Pieces slide and spin on the floor, but stacks never tip over and pieces never bounce or roll. | A stack knocked hard falls over; a Pin can roll away. |
+| **Medium** | A held stack collides as an upright cylinder as wide as its widest piece, from its bottom up, and a claw's jaws as a 2.5″ cylinder. Lift bars and arms are not solid, and lifts stall only on Goals, Loaders and stuck pieces (a held stack lowered onto a loose floor stack sinks into it until the claw opens and it nests or falls). A piece picked up next to another is held at the grip point and nudges the other aside over a few hundredths of a second. | A narrow Pin tip can slip into a gap the cylinder can't, and arms and lift bars hit pieces and field elements too. |
 | **Low** | Grip strength isn't modelled. A closed claw holds whatever it closed on, and a motor claw is "closed" past an angle, whatever the force. | A weak claw drops pieces when the robot jolts. |
 | **Low** | The drive team restocks the Skills Loaders about once a second, each time with a loaded stack (a Pin with a Cup nested over it), up to two per Loader; a robot takes one loaded stack at a time from the bottom. | A person loads them, as fast as they can, separately or nested. |
 | **Medium** | Toggles move one face per press, or two when hit faster than 40 in/s (as 8059's passive toggler does in autonomous); a roller can turn them either way, and a jammer locks them completely. | The real mechanism's feel, and the speed at which a hit carries a Toggle two faces, may differ. |

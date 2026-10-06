@@ -26,7 +26,7 @@ Modelled on Joseph973's Banshee: 15 × 15 × 14, 6-motor 450 rpm blue drive.
 | Toggle bumper | — | Passive, at Toggle height. |
 
 **Piece path.** Floor stack → intake (350 ms) → roller claw at arm 0 → arm up → rollers out onto the Goal.
-**Heights.** Arm 25°: a Pin into an empty Goal. 38°: a Cup + Pin onto 1 Pin. 65°: onto 2 Pins. It
+**Heights.** Arm 25°: a Pin over an empty Goal. 45°: a Cup + Pin over 1 Pin. 83°: over 2 Pins. It
 has to go up and over a stack, so about three Pins is its limit.
 **Auton** (`override-banshee`, LemLib, Red 1 south): rolls the Preload into R1, intakes the stacks at
 (−47, −47) and (−23.5, −23.5) and swings each onto R1 (a 3-Pin stack), then rams the Red 1 Toggle
@@ -46,7 +46,8 @@ at full speed to red. 55 points, Autonomous Win Point.
 | Chamber eye | 9, optical | Looks down into the chamber: its proximity rises when a piece arrives. |
 
 **Piece path.** Floor stack or Loader → intake → chamber → clamp → DR4B up → back into the Goal.
-**Heights.** DR4B 5°: a Pin into an empty Goal. 15°: onto 1 Pin. 37°: onto 2 Pins.
+**Heights.** DR4B 13°: a Pin over an empty Goal. 25°: over 1 Pin. 45.5°: over 2 Pins. The samples
+start it 3" off the wall (−57.6, −37): at the preset spot the Preload in the chamber would be in the wall.
 **Auton** (`override-dr4b-intake`, LemLib + GPS, Red 1 south): backs the Preload into R1, intakes two
 stacks and backs each onto it (a 3-Pin stack), then hits the Red 1 Toggle at speed. 55, AWP.
 **Skills** (`override-skills`, 60 s): the same 3-Pin stack and Toggle, then a loaded stack from the
@@ -65,6 +66,8 @@ No reveal of the real Claw Gate / Clawscade was found; this combines 99182E and 
 | Intake | 10, blue | Funnel intake into the claw when the chain bar is down (hand-off at y 9.97, z 1.35). |
 | Toggle bumper | — | Passive. |
 
+**Heights** (chain bar at 0°, cascade spool degrees): 90 carries the Preload over an empty Goal, 70 a
+Cup + Pin over 1 Pin, 270 over 2 Pins, 140 over the yellow Pin on a short neutral Goal.
 **Auton** (`override-claw-gate`, LemLib, Red 1 south): drops the Preload into R1 and stacks an intaken
 Cup + Pin on it, carries a second stack with the chain bar up while it rams the Red 1 Toggle, then
 raises the cascade and sets the stack on neutral Goal N_R1. 55, AWP.
@@ -83,14 +86,16 @@ Red 2 Toggle. 55, AWP. The chain bar is held up from `initialize()`: unpowered l
 14 × 14 × 12, one green motor per side on 4" wheels (about 42 in/s). Arm (port 7, 1:5) with a motor
 claw (port 8, closed past 60°). The arm tilts the claw with it, so it can set a stack down only below
 about 20° of arm.
-**Auton** (`override-flex`, plain PROS with dead reckoning): Preload into R1, picks the stack at
-(−47, −47) off the floor and sets it on, then presses the Red 1 Toggle twice (too slow for a
-two-face hit). 45.
+**Auton** (`override-flex`, plain PROS with dead reckoning): arm at 19.8° (the Preload's bottom just
+over the Goal top, the claw just under the tilt limit), Preload into R1, then presses the Red 1
+Toggle twice (too slow for a two-face hit). 35. It can't stack: a Cup has to clear the Placed Pin's
+6.8" top, and at that arm angle the claw is tilted too far to set it down.
 
 ## 6-bar + wrist claw: `override-sixbar-wrist`
 
 15 × 15 × 13. 6-bar (port 7, 1:5), piston claw (ADI A) on a motor wrist (port 8, 1:2) that can turn the
 Preload over. The Preload starts yellow end down.
+**Heights.** 6-bar 16°: the flipped Preload over an empty Goal. 27°: a Cup + Pin over 1 Pin.
 **Auton** (`override-sixbar-wrist`, EZ-Template): turns the Preload red end down and drops it into R1,
 turns the wrist back upright, clamps the stack at (−47, −47) and sets it on, then hits the Red 1
 Toggle at speed after a run-up. 45.
@@ -99,6 +104,8 @@ Toggle at speed after a run-up. 45.
 
 15 × 15 × 11. A 4-bar (port 7, 1:5) reaching out the back with a piston claw (ADI A), and a front
 Toggle bumper.
+**Heights.** 4-bar 18°: a Pin over an empty Goal (claw 12.35" behind). 36°: a Cup + Pin over 1 Pin.
+Like the DR4B it starts 3" off the wall, so the Preload behind it is inside the field.
 **Auton** (`override-workhorse-toggle`, EZ-Template): backs the Preload into R1, backs onto a
 Cup + Pin and stacks it on, then presses the Red 1 Toggle. 45.
 
@@ -116,7 +123,12 @@ optical sensor, so the yellow Pins already on N_R1 and N_R2 score for red. 40.
 
 ## What every auton has in common
 
-- Starts by moving 2–3" away from the wall: turning in place right against it swings a corner into it.
+- Starts by moving 2–3" away from the wall: turning in place right against it swings a corner into it
+  (the rear-claw robots already start 3" out).
+- Carries what it holds over a Goal, or over the Pins already on it, before moving onto it: held
+  pieces are solid, so a stack carried too low hits the Goal or the stack instead of passing through.
+- Folds its claw up (or out of the way) before pressing a wall Toggle with the bumper: a claw out
+  in front, below the top of the wall, hits the wall first.
 - Backs off before each turn near a Goal, and routes around Goals rather than past them
   (the golden tests fail on any Goal contact).
 - Lets go of a Toggle after pressing it: a Toggle a robot still touches counts as neutral.

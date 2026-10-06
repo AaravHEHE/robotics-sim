@@ -60,6 +60,7 @@ void backOff(double inches) {
 
 // Intake the stack at (x, y) into the lowered claw and clamp it.
 void intakeStack(double x, double y) {
+  cascadeTo(0);  // the claw must be down at the intake to take the stack
   chainBarTo(-25);
   claw.retract();
   intake.move(127);
@@ -85,15 +86,19 @@ void autonomous() {
   // 3" out from the wall first: turning in place right against it swings a corner into it
   chassis.moveToPoint(-57.7, -37, 600);
 
-  // 1. Preload into R1: the claw holds it 11" ahead, its bottom just above the Goal.
+  // 1. Preload into R1: the claw holds it 11" ahead. The cascade lifts it 3.2" so its
+  //    bottom (3.7" up) clears the 3.25" Goal: carried any lower it would hit the Goal.
+  cascadeTo(90);
   approach(R1_X, R1_Y, 11);
   claw.retract();
   pros::delay(150);
 
-  // 2. The stack at (-47, -47), onto the Preload.
+  // 2. The stack at (-47, -47), onto the Preload: the cascade lifts the Cup's bottom to
+  //    7.2", over the Preload's 6.8" top.
   backOff(6);
   intakeStack(-47.09, -47.09);
   chainBarTo(0);
+  cascadeTo(70);
   backOff(4);
   approach(R1_X, R1_Y, 11);
   claw.retract();
@@ -116,10 +121,11 @@ void autonomous() {
   leftMotors.brake();
   rightMotors.brake();
 
-  // 5. Back out, raise the stack and set it on N_R1's yellow Pin.
+  // 5. Back out, raise the stack and set it on N_R1's yellow Pin: the Cup's bottom 9.7" up,
+  //    over the Pin's 9.3" top.
   chassis.moveToPoint(-53, -2, 800, {.forwards = false});
   chainBarTo(0);
-  cascadeTo(60);
+  cascadeTo(140);
   approach(NR1_X, NR1_Y, 11);
   claw.retract();
   pros::delay(150);

@@ -46,7 +46,9 @@ double settle(M& m, double target, double tol, int ms = 2500) {
 // 3.25" traction wheels geared to 360 rpm
 constexpr double IN_PER_DEG = 3.25 * M_PI / 360.0 * (360.0 / 600.0);
 // From the start up the lane to an open spot where the robot can turn a full circle
-constexpr double LANE = 24.5;
+// (the robot starts 3" off the wall: the Preload standing in the rear claw is inside the
+// field; 20" up, the Preload's 12.6" turning circle stays clear of Goal R1)
+constexpr double LANE = 20;
 
 // Drive straight `inches` (P loop on the encoders, heading held with the IMU). Returns the
 // distance the encoders measured.
@@ -109,9 +111,9 @@ void driveBack() {
 void mechanismTest() {
   printf("-- sensors --\n");
   const pros::gps_status_s_t g = gps.get_position_and_orientation();
-  // the start is (-37, -60.7); LANE inches up the lane is (-37, -36.2)
+  // the start is (-37, -57.6); LANE inches up the lane is (-37, -37.6)
   checkNear("GPS x %g in", -37, g.x / 0.0254, 1.5);
-  checkNear("GPS y %g in", -60.705 + LANE, g.y / 0.0254, 1.5);
+  checkNear("GPS y %g in", -57.6 + LANE, g.y / 0.0254, 1.5);
   check("chamber eye sees the Preload", chamberEye.get_proximity() > 50, chamberEye.get_proximity());
   printf("-- DR4B (12:84) --\n");
   for (double deg : {30.0, 60.0, 90.0, 0.0}) {

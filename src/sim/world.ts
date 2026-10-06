@@ -3,7 +3,7 @@
 // (dmath.ts) so a given program produces bit-identical results on every machine.
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
-import type { FieldDef, Vec2 } from './field.ts';
+import type { FieldDef, GoalDef, Vec2 } from './field.ts';
 import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile, type SensorMount } from './profile.ts';
 
 export interface Pose {
@@ -228,6 +228,22 @@ export class World {
   readonly obstacles: Obstacle[];
   /** Movable objects that currently can't move out of the robot's way (set by a game). */
   pinnedObstacles: Obstacle[] = [];
+  /** Claws and what they hold, outside the robot's frame (set by a game): they can't pass through things either. */
+  attachments: Attachment[] = [];
+  /**
+   * Attachment / obstacle pairs that overlap without blocking: the carried object came down
+   * onto its top from above (being set on a Goal or stack) or was picked up already touching it.
+   * Each pair blocks again once the two are apart.
+   */
+  private readonly overlapping = new Set<string>();
+  /** The pairs in `overlapping` that met from above: lowering further would sink into it. */
+  private readonly resting = new Set<string>();
+  private readonly knownAttachments = new Set<string>();
+  /**
+   * What the robot carries for the mechanisms' current positions (set by a game): a lift that
+   * would lower something into what it rests on stalls there, as a real lift stops on a Goal.
+   */
+  attachmentsAt: (() => Attachment[]) | null = null;
   time = 0;
   /** Total distance driven by each side, in (for tracking/drive encoders). */
   private readonly maxV: number;
@@ -410,6 +426,7 @@ export class World {
     const stepRight = dx * dcos(thStep) - dy * dsin(thStep);
 
     // motors: drive motors follow their side; others ramp toward their target
+    const anglesBefore = new Map([...this.motors].map(([port, m]) => [port, m.angle]));
     const wheelToMotor = CARTRIDGE_RPM[d.cartridge] / d.wheelRpm;
     const inPerSecToWheelRpm = 60 / (Math.PI * d.wheelDiameter);
     for (const m of this.motors.values()) {
@@ -436,10 +453,12 @@ export class World {
     }
     this.applyMechanismLimits();
     // pistons take a moment to stroke
+    const pistonsBefore = new Map(this.pistons);
     for (const [port, pos] of this.pistons) {
       const goal = this.adiOut.get(port) ? 1 : 0;
       this.pistons.set(port, pos + Math.max(-dt / PISTON_STROKE_S, Math.min(dt / PISTON_STROKE_S, goal - pos)));
     }
+    this.stallLifts(anglesBefore, pistonsBefore);
 
     // tracking wheels
     for (const r of this.rotations.values()) {
@@ -488,18 +507,98 @@ export class World {
     );
   }
 
+  /** The robot was placed somewhere instantly: what it carries starts out where it is, like a pickup. */
+  placed(): void {
+    this.knownAttachments.clear();
+  }
+
+  /**
+   * A lift that has lowered a claw, or what it holds, onto a Goal (or Loader, or stuck piece)
+   * from above can't push it down into it: the lift stops where it was.
+   */
+  private stallLifts(anglesBefore: Map<number, number>, pistonsBefore: Map<string, number>): void {
+    if (!this.attachmentsAt || !this.resting.size) return;
+    const before = new Map(this.attachments.map((a) => [a.id, a.bottom]));
+    const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
+    for (const a of this.attachmentsAt()) {
+      if (!a.drivenBy || !(a.bottom < (before.get(a.id) ?? -Infinity))) continue;
+      const poly = this.attachmentPoly(a);
+      const sinks = obstacles.some((ob) => {
+        if (!this.resting.has(a.id + '\n' + ob.id)) return false;
+        const cross = crossSection(ob, a.bottom, a.fixedOnly);
+        return !!cross && !!satMtv(poly, cross);
+      });
+      if (!sinks) continue;
+      for (const port of a.drivenBy.motors) {
+        const m = this.motors.get(port);
+        if (!m) continue;
+        m.angle = anglesBefore.get(port) ?? m.angle;
+        m.rpm = 0;
+      }
+      for (const port of a.drivenBy.pistons) this.pistons.set(port, pistonsBefore.get(port) ?? this.pistons.get(port)!);
+    }
+  }
+
+  /** Field-frame outline of an attachment at the current pose. */
+  attachmentPoly(a: Attachment): Vec2[] {
+    const s = dsinDeg(this.pose.theta);
+    const c = dcosDeg(this.pose.theta);
+    return octagon(this.pose.x + a.x * c + a.y * s, this.pose.y - a.x * s + a.y * c, 2 * a.r);
+  }
+
+  /** Track which attachment / obstacle pairs may overlap (see `overlapping`). */
+  private updateOverlapping(obstacles: Obstacle[]): void {
+    const now = new Set(this.attachments.map((a) => a.id));
+    for (const key of [...this.overlapping]) {
+      if (now.has(key.slice(0, key.indexOf('\n')))) continue;
+      this.overlapping.delete(key);
+      this.resting.delete(key);
+    }
+    for (const a of this.attachments) {
+      const fresh = !this.knownAttachments.has(a.id);
+      const poly = this.attachmentPoly(a);
+      for (const ob of obstacles) {
+        const key = a.id + '\n' + ob.id;
+        if (!satMtv(poly, ob.poly)) {
+          this.overlapping.delete(key);
+          this.resting.delete(key);
+        } else if (!crossSection(ob, a.bottom, a.fixedOnly) && satMtv(poly, topOutline(ob, a.fixedOnly))) {
+          this.overlapping.add(key);
+          this.resting.add(key);
+        } else if (fresh) this.overlapping.add(key);
+      }
+    }
+    this.knownAttachments.clear();
+    for (const id of now) this.knownAttachments.add(id);
+  }
+
   /** Push the robot out of static field elements (goals, loaders, field objects). */
   private resolveObstacles(): void {
     let hit = '';
+    const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
+    if (this.attachments.length || this.overlapping.size) this.updateOverlapping(obstacles);
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
-      for (const ob of this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles) {
+      for (const ob of obstacles) {
         const mtv = satMtv(this.footprint(), ob.poly);
         if (!mtv) continue;
         this.pose.x += mtv[0];
         this.pose.y += mtv[1];
         hit = ob.id;
         moved = true;
+      }
+      // what the robot carries outside its frame runs into anything it is not above
+      for (const a of this.attachments) {
+        for (const ob of obstacles) {
+          if (this.overlapping.has(a.id + '\n' + ob.id) || (a.fixedOnly && this.pinnedObstacles.includes(ob))) continue;
+          const cross = crossSection(ob, a.bottom, a.fixedOnly);
+          const mtv = cross && satMtv(this.attachmentPoly(a), cross);
+          if (!mtv) continue;
+          this.pose.x += mtv[0];
+          this.pose.y += mtv[1];
+          hit = ob.id;
+          moved = true;
+        }
       }
       if (!moved) break;
     }
@@ -524,6 +623,16 @@ export class World {
       maxX = Math.max(maxX, fx);
       minY = Math.min(minY, fy);
       maxY = Math.max(maxY, fy);
+    }
+    // a carried object below the top of the perimeter can't go through it either
+    for (const a of this.attachments) {
+      if (a.bottom >= this.field.perimeter.wallHeight) continue;
+      const cx = this.pose.x + a.x * c + a.y * s;
+      const cy = this.pose.y - a.x * s + a.y * c;
+      minX = Math.min(minX, cx - a.r);
+      maxX = Math.max(maxX, cx + a.r);
+      minY = Math.min(minY, cy - a.r);
+      maxY = Math.max(maxY, cy + a.r);
     }
     let wall = '';
     if (minX < -half) { this.pose.x += -half - minX; wall = 'left'; }
@@ -659,6 +768,60 @@ export interface Obstacle {
   id: string;
   /** Convex polygon, field frame, inches. */
   poly: Vec2[];
+  /** Height of its top (in); omitted: taller than anything a robot carries. */
+  top?: number;
+  /** Its cross-section at a height, where narrower than `poly` (a tapered Goal). */
+  at?: (z: number) => Vec2[];
+  /** The fixed part alone, when `top` / `at` also cover movable things on it (a Goal's pieces). */
+  body?: { top?: number; at?: (z: number) => Vec2[] };
+}
+
+/** A part of the robot outside its frame that runs into things: a claw, or the stack it holds. */
+export interface Attachment {
+  /** Changes whenever what is carried changes (a new pickup counts as appearing). */
+  id: string;
+  /** Centre in the robot frame (+x right, +y forward), inches. */
+  x: number;
+  y: number;
+  /** Footprint radius (in). */
+  r: number;
+  /** Height of its lowest point above the tiles (in). */
+  bottom: number;
+  /**
+   * Runs into fixed things only (Goal bodies, Loaders, walls): an open claw's jaws, which go
+   * around pieces to grab them.
+   */
+  fixedOnly?: boolean;
+  /** The motors (ports) and solenoids (ADI ports) that raise and lower it. */
+  drivenBy?: { motors: number[]; pistons: string[] };
+}
+
+/** A carried piece whose bottom is this close to an obstacle's top rides over it (chamfers, in). */
+export const CARRY_CLEARANCE = 0.25;
+
+/**
+ * The part of an obstacle a carried object at height `bottom` runs into, or null when it
+ * passes over the top.
+ */
+export function crossSection(ob: Obstacle, bottom: number, fixedOnly = false): Vec2[] | null {
+  if (bottom <= 0) return ob.poly;
+  const { top, at } = fixedOnly && ob.body ? ob.body : ob;
+  if (top !== undefined && bottom >= top - CARRY_CLEARANCE) return null;
+  return at ? at(bottom) : ob.poly;
+}
+
+/** The outline of an obstacle's top surface (a tapered Goal is narrower there than at its base). */
+export function topOutline(ob: Obstacle, fixedOnly = false): Vec2[] {
+  const { top } = fixedOnly && ob.body ? ob.body : ob;
+  return (top !== undefined && crossSection(ob, top - CARRY_CLEARANCE - 0.01, fixedOnly)) || ob.poly;
+}
+
+/** Width across flats of a Goal at height z: the box-shaped body, then the taper to the top. */
+export function goalWidthAt(g: GoalDef, z: number): number {
+  if (z <= g.bodyHeight || g.height <= g.bodyHeight) return g.baseWidth;
+  // drawn as a frustum from 0.9 × the base width at the body's top to the top width
+  const k = Math.min(1, (z - g.bodyHeight) / (g.height - g.bodyHeight));
+  return g.baseWidth * 0.9 + (g.topWidth - g.baseWidth * 0.9) * k;
 }
 
 const COS_22_5 = dcosDeg(22.5);
@@ -680,11 +843,14 @@ export function box(cx: number, cy: number, w: number, l: number, heading = 0): 
 /** Collision shapes of everything fixed on the field. */
 export function fieldObstacles(field: FieldDef): Obstacle[] {
   const out: Obstacle[] = [];
-  for (const g of field.goals ?? []) out.push({ id: `goal ${g.id}`, poly: octagon(g.x, g.y, g.baseWidth) });
+  for (const g of field.goals ?? []) {
+    const at = (z: number) => octagon(g.x, g.y, goalWidthAt(g, z));
+    out.push({ id: `goal ${g.id}`, poly: octagon(g.x, g.y, g.baseWidth), top: g.height, at, body: { top: g.height, at } });
+  }
   const half = field.perimeter.inside / 2;
   for (const l of field.loaders ?? []) {
     const inward = l.wall === 'left' ? 1 : -1;
-    out.push({ id: `loader ${l.id}`, poly: box(-inward * half + (inward * l.depth) / 2, l.y, l.depth, l.width) });
+    out.push({ id: `loader ${l.id}`, poly: box(-inward * half + (inward * l.depth) / 2, l.y, l.depth, l.width), top: l.height });
   }
   for (const o of field.objects) {
     if (o.movable) continue;

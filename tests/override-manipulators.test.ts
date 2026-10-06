@@ -521,18 +521,20 @@ describe('Override manipulators from compiled code', () => {
       prosProject(`#include "main.h"
 pros::MotorGroup left({-1, -2, -3}, pros::MotorGears::blue);
 pros::MotorGroup right({4, 5, 6}, pros::MotorGears::blue);
+pros::Motor lift(7, pros::MotorGears::green, pros::MotorUnits::degrees); // 4-bar, 1:5, out the back
 pros::adi::Pneumatics claw('A', true); // closed on the Preload
 void initialize() {}
 void autonomous() {
-  left.move(-50); right.move(-50); pros::delay(1000); // back into Goal R1 (the claw is at the rear)
-  left.brake(); right.brake(); pros::delay(200);
-  claw.retract(); pros::delay(200);                 // let go
-  left.move(50); right.move(50); pros::delay(400);
+  lift.move_absolute(18 * 5, 200); pros::delay(300); // lift the Preload clear of the 3.25" Goal
+  left.move_relative(-195, 200); right.move_relative(-195, 200); pros::delay(800); // back ~4" over Goal R1
+  claw.retract(); pros::delay(300);                  // let go
+  lift.move_absolute(40 * 5, 200);
+  left.move(50); right.move(50); pros::delay(300);
   left.brake(); right.brake();
 }
 `),
       'override-fourbar-claw',
-      { field: await field(), start: { x: -62.5, y: R1.y, theta: 270 } }, // facing the wall
+      { field: await field(), start: { x: R1.x, y: R1.y + 16.5, theta: 0 } }, // north of R1, claw toward it
     );
     expect(rec.error).toBeNull();
     const g = rec.game!;

@@ -35,9 +35,11 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors
 constexpr double R1_X = -47.09, R1_Y = -23.55;
 
 // Arm angles (degrees from folded back over the intake): the claw takes stacks from the
-// intake at 0; at 25 it sets a Pin into an empty Goal, at 38 a Cup onto a 1-Pin stack,
-// at 65 a Cup onto a 2-Pin stack. Each places the claw about 10" ahead of the robot center.
-constexpr double FOLDED = 0, ONE_PIN = 25, ON_ONE = 38, ON_TWO = 65;
+// intake at 0; at 25 it carries a Pin just over an empty Goal (its bottom 3.5" up), at 45 a
+// Cup just over a 1-Pin stack (7.1" up, over the Pin's 6.8" top), at 83 a Cup just over a
+// 2-Pin stack (14.2" up, over its 13.9" top). The claw is then 10.5", 10.8" and 9.7" ahead of
+// the robot center: carried any lower, the stack would hit what is already on the Goal.
+constexpr double FOLDED = 0, ONE_PIN = 25, ON_ONE = 45, ON_TWO = 83;
 
 // The claw turns with the arm, so the wrist turns back by the same angle to keep it upright.
 void armTo(double deg) {
@@ -97,7 +99,7 @@ void autonomous() {
   approach(-47.09, -47.09, 9.5, 90);
   pros::delay(450);  // up the intake and into the claw
   armTo(ON_ONE);
-  approach(R1_X, R1_Y, 10.6);
+  approach(R1_X, R1_Y, 10.82);
   rollOut(500);      // the Cup, then its Pin
 
   // 3. Same with the stack at (-23.5, -23.5), east of R1, then onto the top of the stack.
@@ -107,7 +109,9 @@ void autonomous() {
   pros::delay(450);
   intake.brake();
   armTo(ON_TWO);
-  approach(R1_X, R1_Y, 10.8);
+  // the chassis can't get much closer than 10.6" (the corners of the Goal's base): the claw
+  // stops 1" short of the Goal's center, close enough for the Cup to drop over the Pin
+  approach(R1_X, R1_Y, 10.7);
   rollOut(500);
 
   // 4. Up the field to the Red 1 Toggle and hit it at full speed: two faces, to red.

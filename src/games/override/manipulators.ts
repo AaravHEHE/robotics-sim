@@ -9,8 +9,8 @@ import { dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
 import { clawEffector, clawTilt, toField, toRobot, type Point3 } from '../../sim/lift.ts';
 import { box, octagon, satMtv } from '../../sim/world.ts';
-import type { Capacity, ClawSpec, IntakeSpec, MechanismSpec, PreloadOrientation, RobotProfile, StagingSpec, ToggleToolSpec, WristSpec } from '../../sim/profile.ts';
-import type { World } from '../../sim/world.ts';
+import { isMotorized, isPneumatic, type Capacity, type ClawSpec, type IntakeSpec, type LiftSpec, type MechanismSpec, type PreloadOrientation, type RobotProfile, type StagingSpec, type ToggleToolSpec, type WristSpec } from '../../sim/profile.ts';
+import type { Attachment, World } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
 import { initialState, type FloorStack, type LyingPin, type OverrideState, type Transit } from './state.ts';
 import { sideOf } from './rules.ts';
@@ -322,6 +322,40 @@ export class Manipulators {
       shapes.push({ poly, bottom: tool.bottom, top: tool.top, spin, lock: tool.tool === 'jammer' || undefined, speed });
     }
     return shapes;
+  }
+
+  /**
+   * The claws and what they hold, as solid parts of the robot (robot frame): a held stack runs
+   * into pieces, Goals and walls like the chassis does, unless it is carried above them; the
+   * jaws only into Goals, Loaders and walls (they close around pieces).
+   */
+  attachments(): Attachment[] {
+    const out: Attachment[] = [];
+    for (const c of this.claws) {
+      const e = clawEffector(this.profile, c.spec, (m) => this.world.mechanismState(m));
+      const drivenBy = this.liftDrive(c.spec);
+      // the jaws themselves can't reach into a Goal's body, a Loader or the wall either
+      out.push({ id: `jaws:${c.spec.name}`, x: e.x, y: e.y, r: JAW_HALF_WIDTH, bottom: e.z - GRIP_MARGIN, fixedOnly: true, drivenBy });
+      const held = this.ops.state.held[c.spec.name];
+      if (!held?.length) continue;
+      out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, x: e.x, y: e.y, r: stackRadius(held), bottom: e.z - c.grip, drivenBy });
+    }
+    return out;
+  }
+
+  /** The motors and solenoids that move a claw: its lift, and the lifts that lift carries on. */
+  private liftDrive(claw: ClawSpec): { motors: number[]; pistons: string[] } {
+    const motors: number[] = [];
+    const pistons: string[] = [];
+    let name = claw.lift;
+    for (let depth = 0; name && depth < 8; depth++) {
+      const lift = this.profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === name);
+      if (!lift) break;
+      if (isMotorized(lift)) motors.push(...lift.motors!.map((p) => Math.abs(p)));
+      if (isPneumatic(lift)) pistons.push(lift.adi!.toUpperCase());
+      name = lift.base;
+    }
+    return { motors, pistons };
   }
 
   /** Pieces the robot possesses right now (for SG6 and the viewer). */
@@ -692,45 +726,71 @@ export class Manipulators {
    * falls over; anything else stands.
    */
   private dropAt(pieces: Piece[], x: number, y: number, z = 0): void {
-    const half = this.ops.field.perimeter.inside / 2 - CUP.rimDiameter / 2 - 0.1;
-    let px = Math.max(-half, Math.min(half, x));
-    let py = Math.max(-half, Math.min(half, y));
-    // something dropped onto a Goal's body slides off it
-    for (const g of this.ops.field.goals ?? []) {
-      const clear = g.baseWidth / 2 / dcos(22.5 * RAD) + CUP.rimDiameter / 2 + 0.2;
-      const d = dhypot(px - g.x, py - g.y);
-      if (d >= clear) continue;
-      const k = d > 1e-6 ? clear / d : 1;
-      px = g.x + (d > 1e-6 ? (px - g.x) * k : clear);
-      py = g.y + (d > 1e-6 ? (py - g.y) * k : 0);
-    }
     const lone = pieces.length === 1 && pieces[0].kind === 'pin';
-    const heading = this.world.pose.theta;
-    // it lands beside the robot (or a Loader, or another stack), never inside it
-    const outline = (x: number, y: number) => (lone ? box(x, y, PIN.coneDiameter, PIN.length, heading) : octagon(x, y, stackRadius(pieces) * 2));
-    const solids = [this.world.footprint(), ...this.world.obstacles.filter((o) => o.id.startsWith('loader ')).map((o) => o.poly)];
-    for (let iter = 0; iter < 4; iter++) {
-      let moved = false;
+    const top = lone ? PIN.collarDiameter : layoutStack(pieces, 0, false).at(-1)!.top;
+    // it lands beside the robot (with room for the robot's next 10 ms of travel), what a claw
+    // still holds low enough to touch it, a Goal (sliding off its body), a Loader or another
+    // piece, never inside one: checked with its real outline (a lying Pin is 6.5" long)
+    const { pose, profile } = this.world;
+    const room = Math.abs(this.world.speed) * 0.01;
+    const solids = [
+      box(pose.x, pose.y, profile.size.width + 2 * room, profile.size.length + 2 * room, pose.theta),
+      ...this.attachments()
+        .filter((a) => !a.fixedOnly && a.bottom < top)
+        .map((a) => {
+          const [ax, ay] = toField(pose, a);
+          return octagon(ax, ay, 2 * a.r);
+        }),
+      ...this.world.obstacles.map((o) => o.poly),
+      ...this.ops.state.floor.map((st) => octagon(st.x, st.y, stackRadius(st.pieces) * 2)),
+      ...this.ops.state.lying.map((l) => box(l.x, l.y, PIN.coneDiameter, PIN.length, l.heading)),
+    ];
+    const half = this.ops.field.perimeter.inside / 2 - 0.1;
+    /** Where it comes to rest lying this way from (x, y), and how far it is still into something there. */
+    const settle = (heading: number, x: number, y: number) => {
+      const outline = (x: number, y: number) => (lone ? box(x, y, PIN.coneDiameter, PIN.length, heading) : octagon(x, y, stackRadius(pieces) * 2));
+      const shape = outline(0, 0);
+      const halfX = half - Math.max(...shape.map(([sx]) => Math.abs(sx)));
+      const halfY = half - Math.max(...shape.map(([, sy]) => Math.abs(sy)));
+      let px = Math.max(-halfX, Math.min(halfX, x));
+      let py = Math.max(-halfY, Math.min(halfY, y));
+      for (let iter = 0; iter < 8; iter++) {
+        let moved = false;
+        for (const solid of solids) {
+          const mtv = satMtv(outline(px, py), solid);
+          if (!mtv) continue;
+          px += mtv[0] * 1.02;
+          py += mtv[1] * 1.02;
+          moved = true;
+        }
+        px = Math.max(-halfX, Math.min(halfX, px));
+        py = Math.max(-halfY, Math.min(halfY, py));
+        if (!moved) break;
+      }
+      let into = 0;
       for (const solid of solids) {
         const mtv = satMtv(outline(px, py), solid);
-        if (!mtv) continue;
-        px += mtv[0] * 1.02;
-        py += mtv[1] * 1.02;
-        moved = true;
+        if (mtv) into += dhypot(mtv[0], mtv[1]);
       }
-      for (const st of this.ops.state.floor) {
-        const gap = stackRadius(st.pieces) + (lone ? PIN.coneDiameter / 2 : stackRadius(pieces));
-        const d = dhypot(px - st.x, py - st.y);
-        if (d >= gap) continue;
-        const k = d > 1e-6 ? gap / d : 1;
-        px = st.x + (d > 1e-6 ? (px - st.x) * k : gap);
-        py = st.y + (d > 1e-6 ? (py - st.y) * k : 0);
-        moved = true;
+      return { px, py, heading, into };
+    };
+    // A lone Pin falls over along the robot's heading, or across it where there is no room
+    // (between the robot and a Goal). Where something is already lying there, it ends up in
+    // the nearest free spot instead: rings of starting points 1.5" apart, out to 12".
+    const headings = lone ? [pose.theta, pose.theta + 90] : [pose.theta];
+    let best = settle(headings[0], x, y);
+    search: for (let ring = 0; ring <= 8 && best.into > 0; ring++) {
+      const n = ring === 0 ? 1 : 12;
+      for (let k = 0; k < n; k++) {
+        const a = (2 * Math.PI * k) / n;
+        for (const h of headings) {
+          const r = settle(h, x + 1.5 * ring * Math.cos(a), y + 1.5 * ring * Math.sin(a));
+          if (r.into < best.into) best = r;
+          if (best.into === 0) break search;
+        }
       }
-      if (!moved) break;
     }
-    px = Math.max(-half, Math.min(half, px));
-    py = Math.max(-half, Math.min(half, py));
+    const { px, py, heading } = best;
     const id =
       lone && pieces[0].kind === 'pin'
         ? // the bottom half lands behind, the top half ahead (robot heading)

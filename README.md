@@ -111,6 +111,12 @@ After changing anything in `shim/` or `src/compiler/flags.ts`, run
 `node scripts/build-shim.ts` again. `node scripts/gen-supported-api.ts` regenerates
 `docs/supported-api.md`.
 
+To check that nothing passes through anything (pieces, the robot, what it holds, Goals,
+Loaders, walls): `node --experimental-wasm-jspi scripts/check-phasing.ts` runs every Override
+sample and checks after every step; `node scripts/fuzz-phasing.ts` drives every robot preset
+at random. `scripts/diag-sample.ts` and `scripts/trace-sample.ts` show where a sample's claws
+let go and what happens around a spot.
+
 ## Status
 
 - **Milestone 1:** the generic empty field, tank drivetrains, PROS, LemLib 0.5 and
