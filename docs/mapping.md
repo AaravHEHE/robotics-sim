@@ -1,6 +1,7 @@
-# Auton mapping (the Map tab)
+# Auton mapping (the Map an auton workspace)
 
-The Map tab treats the field as a 12 × 12 ft coordinate plane, to plan autonomous routes.
+**Map an auton** (at the top of the page) shows the field from above beside the plan,
+with **Plot points** ready. It treats the field as a 12 × 12 ft coordinate plane, to plan autonomous routes.
 
 ## Coordinates
 
@@ -64,5 +65,5 @@ Plans are saved per browser: nothing is uploaded.
 - **Export file** downloads a `.vexplan.json`, and **Import file** opens one.
 - **Copy link** puts the whole plan in a link (`#plan=…`): coordinates are rounded to
   0.1″ and compressed, so dozens of points fit in 1–2 KB.
-  - Opening the link shows the plan in the Map tab, unsaved until you press Save.
+  - Opening the link shows the plan in the Map an auton workspace, unsaved until you press Save.
   - A plan made on another field says so.

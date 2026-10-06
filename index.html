@@ -11,12 +11,17 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>VEX Auton Sim</span></div>
-    <div class="group">
+    <nav class="workspaces" role="tablist" aria-label="Workspace">
+      <button role="tab" data-mode="run" class="active" title="Write or open autons and run them on the field">Run autons</button>
+      <button role="tab" data-mode="map" title="Plot and measure on the field to plan an auton">Map an auton</button>
+      <button role="tab" data-mode="cad" title="Design a robot: its layout, and its look from VEX parts">CAD a robot</button>
+    </nav>
+    <div class="group run-only">
       <button id="btn-samples" class="ghost">Samples</button>
       <button id="btn-import" class="ghost" title="Import a PROS project (.zip)">Import</button>
       <button id="btn-export" class="ghost" title="Download this project as a .zip">Export</button>
     </div>
-    <div class="group">
+    <div class="group no-cad">
       <label class="field-label" for="field-select">Field</label>
       <select id="field-select"></select>
       <button id="btn-field-look" class="ghost" title="Use the official VEX field model (CAD) for the look of this field">Model…</button>
@@ -24,18 +29,18 @@
     <div class="group">
       <label class="field-label" for="robot-select">Robot</label>
       <select id="robot-select"></select>
-      <button id="btn-robot" class="ghost" title="Edit robot profile">Edit</button>
-      <button id="btn-robot-auton" class="ghost" title="Open the autonomous routine written for this robot">Auton</button>
-      <button id="btn-robot-test" class="ghost" title="Open this robot's mechanism test (checks every mechanism, prints PASS / FAIL)">Test</button>
+      <button id="btn-robot" class="ghost no-cad" title="Edit this robot in the CAD workspace">Edit</button>
+      <button id="btn-robot-auton" class="ghost run-only" title="Open the autonomous routine written for this robot">Auton</button>
+      <button id="btn-robot-test" class="ghost run-only" title="Open this robot's mechanism test (checks every mechanism, prints PASS / FAIL)">Test</button>
     </div>
-    <div class="group">
+    <div class="group no-cad">
       <label class="field-label" for="auton-length">Auto-stop</label>
       <select id="auton-length">
         <option value="15000">15 s (match auton)</option>
         <option value="60000">60 s (auton skills)</option>
       </select>
     </div>
-    <button id="btn-run" class="primary" title="Compile and run (Ctrl+Enter)"><span class="run-icon" aria-hidden="true"></span>Run</button>
+    <button id="btn-run" class="primary run-only" title="Compile and run (Ctrl+Enter)"><span class="run-icon" aria-hidden="true"></span>Run</button>
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </header>
 
@@ -54,50 +59,13 @@
           <button class="btab" data-tab="lcd" role="tab">Brain screen</button>
           <button class="btab" data-tab="events" role="tab">Notes <span id="badge-events" class="badge"></span></button>
           <button class="btab" data-tab="score" role="tab">Score</button>
-          <button class="btab" data-tab="map" role="tab" title="Plot points and measure on the field to plan an auton">Map</button>
         </div>
         <div class="bpanel active" id="panel-problems"><p class="empty">Press Run to compile.</p></div>
         <div class="bpanel" id="panel-console"><p class="empty">printf / std::cout output appears here.</p></div>
         <div class="bpanel" id="panel-lcd"><pre id="lcd" class="lcd"></pre></div>
         <div class="bpanel" id="panel-events"><p class="empty">Warnings about unsupported calls and robot mismatches appear here.</p></div>
         <div class="bpanel" id="panel-score"><p class="empty">Scores appear here after a run on a game field.</p></div>
-        <div class="bpanel" id="panel-map">
-          <div class="map-bar">
-            <div class="seg" role="group" aria-label="Map tool">
-              <button data-map-mode="off" class="active">Off</button><button data-map-mode="plot">Plot points</button><button data-map-mode="measure">Measure</button>
-            </div>
-            <label>Snap <select id="map-snap">
-              <option value="0">off</option><option value="0.5" selected>0.5″</option><option value="1">1″</option><option value="6">6″</option><option value="12">1 ft</option><option value="24">tile (2 ft)</option>
-            </select></label>
-            <label title="Clicks within 2.5″ of a Goal, Toggle, Loader, stack or start snap onto it"><input type="checkbox" id="map-snap-poi" checked /> to field elements</label>
-            <label title="Motor velocity (% of full) for the timing estimates: the robot's top speed times this; its acceleration stays its own">Velocity <input id="map-speed" type="number" min="1" max="100" step="5" value="100" style="width: 4.5em" />% <span id="map-speed-info" class="muted"></span></label>
-            <span id="map-cursor" class="map-cursor" aria-live="off">x —, y —</span>
-            <button id="map-clear" class="ghost">Clear points</button>
-          </div>
-          <div class="map-bar plan-bar">
-            <label>Plan <input id="plan-name" placeholder="Untitled plan" maxlength="80" /></label>
-            <button id="plan-save" title="Keep this plan in this browser">Save</button>
-            <select id="plan-open" aria-label="Open a saved plan"><option value="">Open a saved plan…</option></select>
-            <button id="plan-delete" class="ghost danger" title="Delete this saved plan">Delete</button>
-            <button id="plan-export" class="ghost" title="Download this plan as a file">Export file</button>
-            <button id="plan-import" class="ghost" title="Open a plan file">Import file</button>
-            <button id="plan-link" class="ghost" title="Copy a link that opens this plan">Copy link</button>
-          </div>
-          <p id="map-help" class="muted map-help"></p>
-          <div class="map-body">
-            <table class="map-table">
-              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th title="Estimated time for this leg at the chosen velocity: the turn to face it, then the drive (from rest to rest)">Time</th><th></th></tr></thead>
-              <tbody id="map-points-body"></tbody>
-              <tfoot><tr><td colspan="10" id="map-total" class="map-total"></td></tr></tfoot>
-            </table>
-            <div class="map-side">
-              <div class="sp-title">Measure</div>
-              <label>from <select id="map-from"></select></label>
-              <label>to <select id="map-to"></select></label>
-              <p id="map-result" class="map-result"></p>
-            </div>
-          </div>
-        </div>
+
       </div>
     </section>
 
@@ -141,6 +109,45 @@
         </select>
       </div>
     </section>
+
+    <section class="map-pane" id="panel-map" aria-label="Auton map">
+          <h2 class="pane-title">Map an auton</h2>
+          <div class="map-bar">
+            <div class="seg" role="group" aria-label="Map tool">
+              <button data-map-mode="off" class="active">Off</button><button data-map-mode="plot">Plot points</button><button data-map-mode="measure">Measure</button>
+            </div>
+            <label>Snap <select id="map-snap">
+              <option value="0">off</option><option value="0.5" selected>0.5″</option><option value="1">1″</option><option value="6">6″</option><option value="12">1 ft</option><option value="24">tile (2 ft)</option>
+            </select></label>
+            <label title="Clicks within 2.5″ of a Goal, Toggle, Loader, stack or start snap onto it"><input type="checkbox" id="map-snap-poi" checked /> to field elements</label>
+            <label title="Motor velocity (% of full) for the timing estimates: the robot's top speed times this; its acceleration stays its own">Velocity <input id="map-speed" type="number" min="1" max="100" step="5" value="100" style="width: 4.5em" />% <span id="map-speed-info" class="muted"></span></label>
+            <span id="map-cursor" class="map-cursor" aria-live="off">x —, y —</span>
+            <button id="map-clear" class="ghost">Clear points</button>
+          </div>
+          <div class="map-bar plan-bar">
+            <label>Plan <input id="plan-name" placeholder="Untitled plan" maxlength="80" /></label>
+            <button id="plan-save" title="Keep this plan in this browser">Save</button>
+            <select id="plan-open" aria-label="Open a saved plan"><option value="">Open a saved plan…</option></select>
+            <button id="plan-delete" class="ghost danger" title="Delete this saved plan">Delete</button>
+            <button id="plan-export" class="ghost" title="Download this plan as a file">Export file</button>
+            <button id="plan-import" class="ghost" title="Open a plan file">Import file</button>
+            <button id="plan-link" class="ghost" title="Copy a link that opens this plan">Copy link</button>
+          </div>
+          <p id="map-help" class="muted map-help"></p>
+          <div class="map-body">
+            <table class="map-table">
+              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th title="Estimated time for this leg at the chosen velocity: the turn to face it, then the drive (from rest to rest)">Time</th><th></th></tr></thead>
+              <tbody id="map-points-body"></tbody>
+              <tfoot><tr><td colspan="10" id="map-total" class="map-total"></td></tr></tfoot>
+            </table>
+            <div class="map-side">
+              <div class="sp-title">Measure</div>
+              <label>from <select id="map-from"></select></label>
+              <label>to <select id="map-to"></select></label>
+              <p id="map-result" class="map-result"></p>
+            </div>
+          </div>
+    </section>
   </main>
 
   <dialog id="dlg-samples" class="dialog" aria-labelledby="dlg-samples-title">
@@ -152,14 +159,15 @@
     </form>
   </dialog>
 
-  <dialog id="dlg-robot" class="dialog wide" aria-labelledby="robot-title">
-    <form method="dialog" id="robot-form">
-      <h2 id="robot-title">Robot profile</h2>
-      <p class="muted">Real measurements in inches. The profile decides size, collisions and speed; a 3D model is only cosmetic. Drive ports are signed the way your code must declare them to drive forward.</p>
+  <main class="cad-page" id="cad-page" aria-label="CAD a robot" hidden>
+    <div class="cad-head">
+      <h2 id="robot-title">Robot</h2>
+      <p class="muted">Real measurements in inches. The layout decides size, collisions, speed and what the mechanisms reach; a 3D model is only cosmetic. Drive ports are signed the way your code must declare them to drive forward.</p>
+    </div>
       <div class="robot-grid">
         <div class="robot-main">
           <div class="seg rl-tabs" role="tablist" aria-label="Edit as">
-            <button type="button" data-rtab="layout" class="active" role="tab">Layout</button><button type="button" data-rtab="json" role="tab">JSON</button>
+            <button type="button" data-rtab="layout" class="active" role="tab">Layout</button><button type="button" data-rtab="parts" role="tab">Build from VEX parts</button><button type="button" data-rtab="json" role="tab">JSON</button>
           </div>
           <div id="robot-layout" class="robot-layout">
             <p class="muted rl-hint">Drag the shapes: the chassis and Toggle tools from their corners, lift tips, pivots and sensors anywhere (snaps to ¼″, Shift for ½″). Pick a part to edit its details. Ctrl+Z undoes.</p>
@@ -180,6 +188,31 @@
               </div>
             </div>
           </div>
+          <div id="robot-parts" class="robot-parts" hidden>
+            <p class="muted rl-hint">Snap C-channel, wheels, motors, gears, pulleys and more together on VEX's ½″ hole grid. The build becomes the robot's 3D model: only how it looks. How it drives and what it can do still come from its layout (the blue box is its size).</p>
+          <div class="pk-grid">
+            <div class="pk-side">
+              <input id="pk-search" type="search" placeholder="Search parts (pulley, sprocket, sensor…)" aria-label="Search parts" />
+              <div id="pk-palette" class="pk-palette" aria-label="Parts"></div>
+            </div>
+            <div class="pk-main">
+              <div class="pk-bar">
+                <label>Length <select id="pk-length"></select></label>
+                <label>Cartridge <select id="pk-cartridge"><option value="red">red (100 rpm)</option><option value="green" selected>green (200 rpm)</option><option value="blue">blue (600 rpm)</option></select></label>
+                <label>Build level <input id="pk-level" type="number" step="1" value="0" style="width: 4em" /> holes up</label>
+                <span id="pk-count" class="muted"></span>
+              </div>
+              <div id="pk-view" class="pk-view"></div>
+              <p id="pk-info" class="muted pk-info"></p>
+            </div>
+          </div>
+        <div class="pk-actions">
+          <button type="button" id="pk-undo" class="ghost">Undo</button>
+          <button type="button" id="pk-clear" class="ghost danger">Clear</button>
+          <button type="button" id="pk-fit" class="ghost" title="Set the robot's size, track width and wheels from the build">Fit the robot's size to the build</button>
+          <button type="button" id="pk-use" class="primary">Use as the robot's model</button>
+        </div>
+          </div>
           <div id="robot-json" class="json-editor" hidden></div>
         </div>
         <div class="robot-side">
@@ -187,7 +220,6 @@
           <ul id="robot-errors" class="errors"></ul>
           <div class="stack">
             <button type="button" id="rb-save" class="primary">Save as my robot</button>
-            <button type="button" id="rb-parts" class="ghost" title="Build the robot's look from C-channel, wheels, motors and more">Build the model from VEX parts…</button>
             <button type="button" id="rb-model" class="ghost">Attach 3D model (.glb)…</button>
             <button type="button" id="rb-model-clear" class="ghost">Remove 3D model</button>
             <button type="button" id="rb-import" class="ghost">Import robot (.json / .zip)…</button>
@@ -196,39 +228,7 @@
           </div>
         </div>
       </div>
-      <div class="dlg-actions"><button value="cancel" class="ghost">Close</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="dlg-parts" class="dialog wide" aria-labelledby="dlg-parts-title">
-    <form method="dialog">
-      <h2 id="dlg-parts-title">Build from VEX parts</h2>
-      <p class="muted">Snap C-channel, wheels, motors, gears and more together on VEX's ½″ hole grid. The build becomes the robot's 3D model: it is only how the robot looks. How it drives and what it can do still come from its profile (the blue box is its size).</p>
-      <div class="pk-grid">
-        <div class="pk-side">
-          <input id="pk-search" type="search" placeholder="Search parts (pulley, sprocket, sensor…)" aria-label="Search parts" />
-          <div id="pk-palette" class="pk-palette" aria-label="Parts"></div>
-        </div>
-        <div class="pk-main">
-          <div class="pk-bar">
-            <label>Length <select id="pk-length"></select></label>
-            <label>Cartridge <select id="pk-cartridge"><option value="red">red (100 rpm)</option><option value="green" selected>green (200 rpm)</option><option value="blue">blue (600 rpm)</option></select></label>
-            <label>Build level <input id="pk-level" type="number" step="1" value="0" style="width: 4em" /> holes up</label>
-            <span id="pk-count" class="muted"></span>
-          </div>
-          <div id="pk-view" class="pk-view"></div>
-          <p id="pk-info" class="muted pk-info"></p>
-        </div>
-      </div>
-      <div class="dlg-actions">
-        <button type="button" id="pk-undo" class="ghost">Undo</button>
-        <button type="button" id="pk-clear" class="ghost danger">Clear</button>
-        <button type="button" id="pk-fit" class="ghost" title="Set the robot's size, track width and wheels from the build">Fit the robot's size to the build</button>
-        <button type="button" id="pk-use" class="primary">Use as the robot's model</button>
-        <button value="cancel" class="ghost">Close</button>
-      </div>
-    </form>
-  </dialog>
+  </main>
 
   <dialog id="dlg-field" class="dialog" aria-labelledby="dlg-field-title">
     <form method="dialog">
