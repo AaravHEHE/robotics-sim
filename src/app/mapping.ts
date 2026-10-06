@@ -127,6 +127,55 @@ export function segments(points: MapPoint[]): Array<Measure & { turn: number | n
   return out;
 }
 
+// ---------------- timing estimates ----------------
+
+/** What a route's timing depends on: the drive's speed at the chosen velocity, and its acceleration. */
+export interface DriveLimits {
+  /** Top wheel speed at the chosen motor velocity (in/s). */
+  speed: number;
+  /** Acceleration and braking (in/s²). */
+  accel: number;
+  /** Distance between the left and right wheels (in): turns in place move the wheels on this circle. */
+  trackWidth: number;
+}
+
+/**
+ * Time to cover `dist` inches from rest to rest: speed up at `accel` to `speed`, cruise,
+ * brake at `accel` (a triangle when there's no room to reach full speed). Seconds.
+ */
+export function moveTime(dist: number, speed: number, accel: number): number {
+  const d = Math.abs(dist);
+  if (d < 1e-9) return 0;
+  if (!(speed > 0) || !(accel > 0)) return Infinity;
+  const ramp = (speed * speed) / accel; // distance spent speeding up and braking
+  return d >= ramp ? d / speed + speed / accel : 2 * Math.sqrt(d / accel);
+}
+
+/** Time to turn in place by `degrees`: each wheel travels its share of the track circle. */
+export function turnTime(degrees: number, limits: DriveLimits): number {
+  return moveTime((Math.abs(degrees) * Math.PI * limits.trackWidth) / 360, limits.speed, limits.accel);
+}
+
+/** The drive limits at `percent` of the motors' velocity (the acceleration is the robot's own). */
+export function limitsAt(percent: number, topSpeed: number, accel: number, trackWidth: number): DriveLimits {
+  return { speed: (topSpeed * Math.max(0, Math.min(100, percent))) / 100, accel, trackWidth };
+}
+
+/**
+ * Per segment of a route at the given limits: the turn at its start (to face along it) and
+ * the drive, from rest to rest; plus the running total. A segment whose start has no known
+ * heading (the first one, without a heading set) has no turn time. Seconds.
+ */
+export function routeTimes(points: MapPoint[], limits: DriveLimits): Array<{ turn: number; drive: number; total: number }> {
+  let total = 0;
+  return segments(points).map((s) => {
+    const turn = s.turn === null ? 0 : turnTime(s.turn, limits);
+    const drive = moveTime(s.dist, limits.speed, limits.accel);
+    total += turn + drive;
+    return { turn, drive, total };
+  });
+}
+
 // ---------------- plans: save and share ----------------
 
 export interface MapPlan {
@@ -138,6 +187,8 @@ export interface MapPlan {
   points: MapPoint[];
   /** When it was made (ms since 1970). */
   created: number;
+  /** The motor velocity (% of full) the timing estimates assume. */
+  speedPct?: number;
 }
 
 export const MAX_PLAN_POINTS = 200;
@@ -156,6 +207,7 @@ export function validatePlan(p: unknown): string[] {
     if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y) || Math.abs(q.x) > 200 || Math.abs(q.y) > 200) e.push(`Point ${i + 1} has no valid x and y.`);
     else if (q.heading !== undefined && !Number.isFinite(q.heading)) e.push(`Point ${i + 1} has an invalid heading.`);
   });
+  if (plan.speedPct !== undefined && !(Number.isFinite(plan.speedPct) && plan.speedPct > 0 && plan.speedPct <= 100)) e.push('The speed must be 1-100%.');
   return e;
 }
 
@@ -169,6 +221,7 @@ export function encodePlan(plan: MapPlan): string {
     f: plan.field,
     l: plan.layout,
     c: plan.created,
+    ...(plan.speedPct !== undefined ? { s: plan.speedPct } : {}),
     p: plan.points.map((q) => {
       const row: Array<number | string | null> = [round1(q.x), round1(q.y)];
       if (q.heading !== undefined || q.label) row.push(q.heading === undefined ? null : round1(q.heading));
@@ -184,7 +237,7 @@ export function encodePlan(plan: MapPlan): string {
 
 /** The plan in a link's text (throws a readable error when it isn't one). */
 export function decodePlan(text: string): MapPlan {
-  let compact: { v: number; n: string; f: string; l: string; c: number; p: Array<[number, number, (number | null)?, string?]> };
+  let compact: { v: number; n: string; f: string; l: string; c: number; s?: number; p: Array<[number, number, (number | null)?, string?]> };
   try {
     const b64 = text.replace(/-/g, '+').replace(/_/g, '/');
     const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
@@ -198,6 +251,7 @@ export function decodePlan(text: string): MapPlan {
     field: compact.f,
     layout: compact.l,
     created: compact.c,
+    ...(compact.s !== undefined ? { speedPct: compact.s } : {}),
     points: (compact.p ?? []).map((row, i) => {
       const q: MapPoint = { id: `p${i + 1}`, x: row[0], y: row[1] };
       if (typeof row[2] === 'number') q.heading = row[2];

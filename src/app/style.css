@@ -360,3 +360,5 @@ select, input[type='number'] {
   .pk-grid { grid-template-columns: 1fr; }
   .pk-palette { flex-direction: row; flex-wrap: wrap; max-height: 120px; }
 }
+.map-total { padding-top: 4px; font-size: 12px; }
+.map-total.over { color: var(--err, #d8343a); }

@@ -70,6 +70,7 @@
               <option value="0">off</option><option value="0.5" selected>0.5″</option><option value="1">1″</option><option value="6">6″</option><option value="12">1 ft</option><option value="24">tile (2 ft)</option>
             </select></label>
             <label title="Clicks within 2.5″ of a Goal, Toggle, Loader, stack or start snap onto it"><input type="checkbox" id="map-snap-poi" checked /> to field elements</label>
+            <label title="Motor velocity (% of full) for the timing estimates: the robot's top speed times this; its acceleration stays its own">Velocity <input id="map-speed" type="number" min="1" max="100" step="5" value="100" style="width: 4.5em" />% <span id="map-speed-info" class="muted"></span></label>
             <span id="map-cursor" class="map-cursor" aria-live="off">x —, y —</span>
             <button id="map-clear" class="ghost">Clear points</button>
           </div>
@@ -85,8 +86,9 @@
           <p id="map-help" class="muted map-help"></p>
           <div class="map-body">
             <table class="map-table">
-              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th></th></tr></thead>
+              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th title="Estimated time for this leg at the chosen velocity: the turn to face it, then the drive (from rest to rest)">Time</th><th></th></tr></thead>
               <tbody id="map-points-body"></tbody>
+              <tfoot><tr><td colspan="10" id="map-total" class="map-total"></td></tr></tfoot>
             </table>
             <div class="map-side">
               <div class="sp-title">Measure</div>

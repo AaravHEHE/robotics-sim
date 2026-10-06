@@ -33,6 +33,21 @@ The turn is measured from the way the robot arrived there, or from that point's 
 if it has one. **Start** puts the robot's start pose on a point, facing its heading or
 toward the next point.
 
+## Timing estimates
+
+Set **Velocity** to the motor velocity your code drives at, as a percentage of full speed
+(e.g. 70 for  at 70%, or a LemLib / EZ max speed of about 89 out of 127).
+The **Time** column then estimates each leg for the selected robot:
+
+- the turn in place to face the leg (if the robot's heading there is known), then the drive;
+- both from rest to rest: the robot speeds up and brakes at its own acceleration
+  (), and cruises at the velocity times its top speed;
+- hover over a time to see the turn and drive separately, and the running total.
+
+The total under the table is compared with the auto-stop (15 s or 60 s). It leaves out
+mechanism moves and waits, so keep some margin. These estimates are for planning only; a
+run still simulates your actual code.
+
 ## Measuring
 
 Pick **Measure** and click two spots: they snap to points and field elements. Or pick

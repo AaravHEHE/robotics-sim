@@ -143,6 +143,7 @@ function renderRobotSelect() {
 
 async function applyRobot() {
   const r = robot();
+  mapPanel?.robotChanged(); // its route timing uses this robot
   try {
     const glb = r.model ? await loadModel(r.model.assetId) : undefined;
     await viewer.setRobot(r, glb);
@@ -267,7 +268,7 @@ function applyField() {
 
 let mapPanel: MapPanel | null = null;
 function initMap() {
-  mapPanel = new MapPanel({ viewer, field, layoutId, setStart, status: setStatus });
+  mapPanel = new MapPanel({ viewer, field, layoutId, robot, autonMs: () => state.autonMs, setStart, status: setStatus });
   mapPanel.setMode('off');
 }
 

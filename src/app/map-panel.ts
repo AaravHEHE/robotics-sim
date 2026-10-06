@@ -3,10 +3,12 @@
 // elements, to plan autonomous routes.
 
 import type { FieldDef } from '../sim/field.ts';
+import { maxSpeed, type RobotProfile } from '../sim/profile.ts';
 import { deletePlan, download, idb, listPlans, pickFile, safe, savePlan, type SavedPlan } from './storage.ts';
 import { MapLayer } from './map-layer.ts';
 import {
-  clampToField, decodePlan, encodePlan, measure, nearestPoi, pointsOfInterest, segments, snap, validatePlan, type MapPlan, type MapPoint, type Poi,
+  clampToField, decodePlan, encodePlan, limitsAt, measure, nearestPoi, pointsOfInterest, routeTimes, segments, snap, validatePlan, type MapPlan, type MapPoint,
+  type Poi,
 } from './mapping.ts';
 import type { FieldViewer } from './viewer.ts';
 
@@ -16,6 +18,10 @@ export interface MapHost {
   viewer: FieldViewer;
   field: () => FieldDef;
   layoutId: () => string;
+  /** The selected robot (its speed and acceleration time the route). */
+  robot: () => RobotProfile;
+  /** The auto-stop time (ms): the route's total is compared with it. */
+  autonMs: () => number;
   /** Put the robot's start pose here. */
   setStart: (p: { x: number; y: number; theta: number }) => void;
   /** A message for the status bar. */
@@ -59,6 +65,8 @@ export class MapPanel {
   /** The plan being worked on: its saved id (null = not saved yet) and when it was made. */
   private plan: { id: string | null; created: number } = { id: null, created: Date.now() };
   private keepTimer = 0;
+  /** Motor velocity (% of full) for the timing estimates. */
+  private speedPct = 100;
 
   private readonly host: MapHost;
 
@@ -79,6 +87,10 @@ export class MapPanel {
     $<HTMLSelectElement>('map-from').onchange = () => this.pickMeasure();
     $<HTMLSelectElement>('map-to').onchange = () => this.pickMeasure();
     $<HTMLInputElement>('plan-name').onchange = () => this.changed();
+    $<HTMLInputElement>('map-speed').onchange = () => {
+      this.setSpeed(Number($<HTMLInputElement>('map-speed').value));
+      this.changed();
+    };
     $('plan-save').onclick = () => void this.save();
     $<HTMLSelectElement>('plan-open').onchange = (e) => void this.openSaved((e.target as HTMLSelectElement).value);
     $('plan-delete').onclick = () => void this.deleteSaved();
@@ -107,9 +119,10 @@ export class MapPanel {
         this.host.status(`Couldn't open the shared plan: ${(e as Error).message}`, 'err');
       }
     } else {
-      const w = await safe(idb.get<{ name: string; id: string | null; created: number; points: MapPoint[] }>('settings', WORKING_KEY), undefined);
+      const w = await safe(idb.get<{ name: string; id: string | null; created: number; points: MapPoint[]; speedPct?: number }>('settings', WORKING_KEY), undefined);
       if (w && Array.isArray(w.points)) {
         $<HTMLInputElement>('plan-name').value = w.name ?? '';
+        this.setSpeed(w.speedPct ?? 100);
         this.plan = { id: w.id ?? null, created: w.created ?? Date.now() };
         this.setPoints(w.points, false);
       }
@@ -124,13 +137,22 @@ export class MapPanel {
   private name = () => $<HTMLInputElement>('plan-name').value.trim() || 'Untitled plan';
 
   private current(): MapPlan {
-    return { v: 1, name: this.name(), field: this.host.field().id, layout: this.host.layoutId(), points: this.points.map((p) => ({ ...p })), created: this.plan.created };
+    return {
+      v: 1,
+      name: this.name(),
+      field: this.host.field().id,
+      layout: this.host.layoutId(),
+      points: this.points.map((p) => ({ ...p })),
+      created: this.plan.created,
+      speedPct: this.speedPct,
+    };
   }
 
   private open(plan: MapPlan, id: string | null): void {
     this.lastOpened = plan;
     this.plan = { id, created: plan.created };
     $<HTMLInputElement>('plan-name').value = plan.name;
+    this.setSpeed(plan.speedPct ?? 100);
     this.setPoints(plan.points);
   }
 
@@ -143,7 +165,10 @@ export class MapPanel {
   private changed(): void {
     clearTimeout(this.keepTimer);
     this.keepTimer = window.setTimeout(() => {
-      void safe(idb.put('settings', WORKING_KEY, { name: $<HTMLInputElement>('plan-name').value, id: this.plan.id, created: this.plan.created, points: this.points }), undefined);
+      void safe(
+        idb.put('settings', WORKING_KEY, { name: $<HTMLInputElement>('plan-name').value, id: this.plan.id, created: this.plan.created, points: this.points, speedPct: this.speedPct }),
+        undefined,
+      );
     }, 300);
   }
 
@@ -226,6 +251,18 @@ export class MapPanel {
     } catch {
       prompt('Copy this link to share the plan:', url);
     }
+  }
+
+  /** The motor velocity for the timing estimates (1-100%). */
+  private setSpeed(pct: number): void {
+    this.speedPct = Number.isFinite(pct) ? Math.max(1, Math.min(100, Math.round(pct))) : 100;
+    $<HTMLInputElement>('map-speed').value = String(this.speedPct);
+    this.render(false);
+  }
+
+  /** The robot or auto-stop changed: the timing follows. */
+  robotChanged(): void {
+    this.render(false);
   }
 
   /** The field or layout changed: its elements to measure to change too. */
@@ -443,11 +480,23 @@ export class MapPanel {
 
   private renderTable(): void {
     const body = $('map-points-body');
+    const robot = this.host.robot();
+    const limits = limitsAt(this.speedPct, maxSpeed(robot), robot.drivetrain.maxAccel, robot.drivetrain.trackWidth);
+    $('map-speed-info').textContent = `= ${limits.speed.toFixed(1)} in/s for ${robot.name}`;
     if (!this.points.length) {
-      body.innerHTML = `<tr><td colspan="9" class="empty">No points yet. Pick Plot points and click the field.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="10" class="empty">No points yet. Pick Plot points and click the field.</td></tr>`;
+      $('map-total').textContent = '';
       return;
     }
     const segs = segments(this.points);
+    const times = routeTimes(this.points, limits);
+    const total = times.at(-1)?.total ?? 0;
+    const budget = this.host.autonMs() / 1000;
+    const foot = $('map-total');
+    foot.textContent = times.length
+      ? `Estimated total: ${total.toFixed(2)} s of the ${budget} s auto-stop at ${this.speedPct}% velocity (turns and drives from rest to rest; mechanisms and waits not included)${total > budget ? ' — over the limit' : ''}.`
+      : '';
+    foot.classList.toggle('over', total > budget);
     body.innerHTML = this.points
       .map((p, i) => {
         const s = segs[i - 1];
@@ -460,6 +509,7 @@ export class MapPanel {
           <td>${s ? f1(s.dist) : ''}</td>
           <td>${s ? f1(s.heading) + '°' : ''}</td>
           <td>${s && s.turn !== null ? (s.turn >= 0 ? '+' : '') + f1(s.turn) + '°' : ''}</td>
+          <td title="${times[i - 1] ? `turn ${times[i - 1].turn.toFixed(2)} s + drive ${times[i - 1].drive.toFixed(2)} s; ${times[i - 1].total.toFixed(2)} s so far` : ''}">${times[i - 1] ? (times[i - 1].turn + times[i - 1].drive).toFixed(2) + ' s' : ''}</td>
           <td class="acts">
             <button data-a="up" title="Move up" aria-label="Move point ${i + 1} up" ${i ? '' : 'disabled'}>↑</button>
             <button data-a="down" title="Move down" aria-label="Move point ${i + 1} down" ${i < this.points.length - 1 ? '' : 'disabled'}>↓</button>
