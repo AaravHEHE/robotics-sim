@@ -126,13 +126,15 @@ export class ProjectBuilder {
     const incs = ['-I' + PROJECT_ROOT + '/include', '-I' + PROJECT_ROOT + '/src', '-isystem', SIM_INCLUDE];
 
     const objects: Record<string, Uint8Array> = {};
-    for (const u of units) {
+    for (const [i, u] of units.entries()) {
       const isC = u.path.endsWith('.c');
       const args = isC
         ? cFlags(incs)
         : cxxFlags([...incs, ...(usePch ? pchFlags(project.pch) : ['-include', 'sim/prelude.hpp'])]);
-      const key = await sha256(this.bundle.manifest.version, args.join(' '), u.path, u.text, isC ? '' : headerHash);
-      const objPath = '/obj/' + u.path.replace(/[^A-Za-z0-9]/g, '_') + '.o';
+      // C files include the project's headers too
+      const key = await sha256(this.bundle.manifest.version, args.join(' '), u.path, u.text, headerHash);
+      // numbered: src/a-b.cpp and src/a_b.cpp must not overwrite each other's object
+      const objPath = `/obj/${i}_${u.path.replace(/[^A-Za-z0-9]/g, '_')}.o`;
       const hit = this.cache.get(key);
       if (hit) {
         // most recently used last (see remember)

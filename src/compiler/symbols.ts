@@ -12,6 +12,8 @@ export interface ImportReport {
 }
 
 const LIBRARY_NS = /^(pros|lemlib|ez|okapi)::/;
+/** The same namespaces in a mangled name, for symbols the demangler can't read. */
+const LIBRARY_MANGLED = /^_ZN[KVrRO]*(4pros|6lemlib|2ez|5okapi)\d/;
 
 export function classifyImports(
   imports: Array<{ module: string; name: string; kind: string }>,
@@ -26,7 +28,7 @@ export function classifyImports(
       continue;
     }
     const name = demangleName(imp.name);
-    if (knownCApi.has(imp.name) || LIBRARY_NS.test(name)) report.unsupported.push({ symbol: imp.name, name });
+    if (knownCApi.has(imp.name) || LIBRARY_NS.test(name) || LIBRARY_MANGLED.test(imp.name)) report.unsupported.push({ symbol: imp.name, name });
     else report.undefined.push({ symbol: imp.name, name });
   }
   return report;

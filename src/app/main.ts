@@ -506,6 +506,11 @@ let reqId = 0;
 const pending = new Map<number, { resolve: (r: BuildResult) => void; reject: (e: Error) => void; timer: number }>();
 /** A build that sends nothing (no progress, no result) for this long is given up (ms). */
 const COMPILER_SILENCE_MS = 120_000;
+/**
+ * ... except while one file compiles or the program links: the worker can't send anything
+ * until clang returns, and a big EZ-Template file on a slow laptop can take minutes.
+ */
+const COMPILER_STEP_MS = 600_000;
 
 function compilerWorker(): Worker {
   if (compiler) return compiler;
@@ -515,7 +520,8 @@ function compilerWorker(): Worker {
     const p = pending.get(m.id);
     if (p) {
       clearTimeout(p.timer);
-      p.timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), COMPILER_SILENCE_MS);
+      const busy = m.type === 'progress' && /^(Compiling|Linking)/.test(m.message);
+      p.timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), busy ? COMPILER_STEP_MS : COMPILER_SILENCE_MS);
     }
     if (m.type === 'progress') {
       setStatus(m.message, '', m.total ? { loaded: m.loaded ?? 0, total: m.total } : undefined);

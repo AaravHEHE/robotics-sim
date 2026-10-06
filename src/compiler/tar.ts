@@ -21,12 +21,19 @@ export function parseTar(buf: ArrayBuffer | Uint8Array): TarFile[] {
     let name = str(off, 100);
     const prefix = str(off + 345, 155);
     if (prefix) name = prefix + '/' + name;
-    const size = parseInt(str(off + 124, 12).trim() || '0', 8);
+    const sizeField = str(off + 124, 12).trim() || '0';
+    if (!/^[0-7]+$/.test(sizeField)) throw new Error(`Bad tar entry size "${sizeField}" for ${name}.`);
+    const size = parseInt(sizeField, 8);
     const type = String.fromCharCode(u8[off + 156] || 48);
     const dataOff = off + 512;
+    if (dataOff + size > u8.length) throw new Error(`The tar file is cut off (in ${name}).`);
     if (type === 'L') {
       longName = str(dataOff, size);
-    } else {
+    } else if (type === 'x') {
+      // pax extended header: "<len> path=<value>\n" records for the next entry
+      const path = /(?:^|\n)\d+ path=([^\n]*)\n/.exec(dec.decode(u8.subarray(dataOff, dataOff + size)))?.[1];
+      if (path) longName = path;
+    } else if (type !== 'g') {
       if (longName) {
         name = longName;
         longName = null;
@@ -37,5 +44,6 @@ export function parseTar(buf: ArrayBuffer | Uint8Array): TarFile[] {
     }
     off = dataOff + Math.ceil(size / 512) * 512;
   }
+  if (off < u8.length && off + 512 > u8.length && u8[off] !== 0) throw new Error('The tar file is cut off (in a header).');
   return files;
 }
