@@ -45,6 +45,16 @@ import a real **PROS** project, including **LemLib** or **EZ-Template** code, th
     split into pieces the STEP reader can hold, its Pins, Cups, Toggles and screws are left
     out, and its parts are colored by part number. It stays in your browser and never
     changes the simulation.
+- **Auton mapping (the Map tab).** The field as a 12 × 12 ft coordinate plane in inches:
+  click to plot points, drag them, measure the distance and heading between any two
+  points or field elements (Goals, Toggles, Loaders, stacks, start positions), and read
+  each segment's distance, heading and turn. Save plans in the browser, export them as
+  files, or copy a link that opens them. See [docs/mapping.md](docs/mapping.md).
+- **Robot builder.** **Edit** a robot on a top and a side view: drag the chassis, wheel
+  track, lifts, intake zones, Toggle tools and sensors, edit details in a form, add or
+  remove mechanisms, and see it in 3D. **Build the model from VEX parts…** snaps
+  C-channel, wheels, motors, gears and more together on the ½″ hole grid as the robot's
+  3D model.
 
 Requires a browser with WebAssembly JSPI: Chrome/Edge 137+, Firefox 153+ or Safari 27+.
 
@@ -112,6 +122,8 @@ After changing anything in `shim/` or `src/compiler/flags.ts`, run
 - **Milestone 4:** the field resets between runs and the code follows the robot; robots
   rebuilt from videos of the real meta designs; competitive robot-specific autons;
   the official field model (loaded locally) and a more realistic look.
+- **Milestone 5:** auton mapping with shareable plans, the visual robot layout editor,
+  the VEX parts kit, and fixes from an error search.
 
 Next up are more drivetrains and driver control. See
 [docs/prototype-report.md](docs/prototype-report.md) for the feasibility study behind the

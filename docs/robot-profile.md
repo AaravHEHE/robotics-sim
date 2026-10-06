@@ -100,7 +100,29 @@ Notes:
   1 piece per Loader about every second, alternating Pins and Cups, up to 2 per chute.
   In head-to-head autonomous, Match Loads aren't allowed (`<SG11>`).
 
+## Editing a robot
+
+**Edit** opens the robot in two tabs that edit the same profile:
+
+- **Layout:** a top view (front up) and a side view (front to the right) on an inch grid.
+  - Drag the chassis from its corners (it stays centered), the wheel track, intake pickup
+    zones and hand-off points, Toggle tools (their footprint and height), sensor mounts,
+    lift carriages, and bar-lift tips and pivots. Dragging a tip keeps the pivot and sets
+    `length` and `startAngle`; dragging a pivot carries the whole lift.
+  - The side view shows each lift's path over its `range` and how far each claw reaches.
+  - Pick a part to edit everything else in the form. Add a mechanism or sensor (free ports
+    are picked, and a motor device is added for each motor), or remove one (its ports are
+    freed). Ctrl+Z undoes.
+- **JSON:** the profile itself. Every layout change appears here and is validated.
+
 ## 3D models (optional)
+
+**Build the model from VEX parts…** (in the robot dialog) builds the look from VEX parts on
+the ½″ hole grid ([data/parts/vex-parts.json](../data/parts/vex-parts.json); approximate
+dimensions). It is saved at real scale (`model.scale` 1), the build is kept to edit later,
+and it is included when you export the robot. **Fit the robot's size to the build** sets
+`size`, `trackWidth` and `wheelDiameter` from it.
+
 
 Attach a `.glb` (Onshape: right-click the assembly, then **Export → GLTF/GLB**). The
 model is scaled to fit the profile's footprint unless you set `model.scale`. Rotate it
