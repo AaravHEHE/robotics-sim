@@ -36,12 +36,12 @@ toward the next point.
 ## Timing estimates
 
 Set **Velocity** to the motor velocity your code drives at, as a percentage of full speed
-(e.g. 70 for  at 70%, or a LemLib / EZ max speed of about 89 out of 127).
+(e.g. 70 for `move_velocity` at 70%, or a LemLib / EZ max speed of about 89 out of 127).
 The **Time** column then estimates each leg for the selected robot:
 
 - the turn in place to face the leg (if the robot's heading there is known), then the drive;
 - both from rest to rest: the robot speeds up and brakes at its own acceleration
-  (), and cruises at the velocity times its top speed;
+  (`drivetrain.maxAccel`), and cruises at the velocity times its top speed;
 - hover over a time to see the turn and drive separately, and the running total.
 
 The total under the table is compared with the auto-stop (15 s or 60 s). It leaves out
