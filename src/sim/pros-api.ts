@@ -130,7 +130,9 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const t = taskOf(h);
     if (!t) return undefined;
     if (t === sched.current) return sched.parkForever();
+    if (t.state === 'done') return undefined;
     t.state = 'done';
+    sched.onTaskDone(t); // e.g. initialize() deleted by another task: autonomous still starts
     return undefined;
   });
   f.task_get_current = () => sched.current?.handle ?? 0;
@@ -139,18 +141,28 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.task_get_state = (h: number) => {
     const t = taskOf(h);
     if (!t) return 5; // E_TASK_STATE_INVALID
+    if (t.selfSuspended) return 3;
     return { running: 0, ready: 1, blocked: 2, suspended: 3, done: 4 }[t.state];
   };
-  f.task_suspend = (h: number) => {
+  susp('task_suspend', (h: number) => {
     const t = taskOf(h);
-    if (t && t.state !== 'done' && t !== sched.current) {
+    if (!t || t.state === 'done') return undefined;
+    if (t === sched.current) {
+      // a task suspending itself waits until another task resumes it
+      t.selfSuspended = true;
+      return sched.park(() => !t.selfSuspended);
+    }
+    if (t.state !== 'suspended') {
       t.wasSuspendedFrom = t.state;
       t.state = 'suspended';
     }
-  };
+    return undefined;
+  });
   f.task_resume = (h: number) => {
     const t = taskOf(h);
-    if (t && t.state === 'suspended') t.state = t.wasSuspendedFrom ?? 'ready';
+    if (!t) return;
+    if (t.selfSuspended) t.selfSuspended = false;
+    else if (t.state === 'suspended') t.state = t.wasSuspendedFrom ?? 'ready';
   };
   f.task_get_count = () => sched.liveTasks;
   f.task_get_name = (h: number) => {
@@ -163,18 +175,24 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const n = cstr(ptr);
     return sched.tasks.find((t) => t.name === n && t.state !== 'done')?.handle ?? 0;
   };
+  // notification values are uint32: kept unsigned (">>> 0") so bit 31 can't make one negative
   f.task_notify = (h: number) => {
     const t = taskOf(h);
-    if (t) t.notifyValue++;
+    if (t) t.notifyValue = (t.notifyValue + 1) >>> 0;
     return 1;
   };
   f.task_notify_ext = (h: number, value: number, action: number, prevPtr: number) => {
     const t = taskOf(h);
     if (!t) return 0;
     if (prevPtr) dv().setUint32(prevPtr, t.notifyValue >>> 0, true);
-    if (action === 1) t.notifyValue |= value; // E_NOTIFY_ACTION_BITS
-    else if (action === 2) t.notifyValue++; // INCR
-    else if (action === 3 || action === 4) t.notifyValue = value >>> 0; // OWRITE / NO_OWRITE
+    if (action === 1) t.notifyValue = (t.notifyValue | value) >>> 0; // E_NOTIFY_ACTION_BITS
+    else if (action === 2) t.notifyValue = (t.notifyValue + 1) >>> 0; // INCR
+    else if (action === 3) t.notifyValue = value >>> 0; // OWRITE
+    else if (action === 4) {
+      // NO_OWRITE: a notification still pending is kept, and the call fails (FreeRTOS pdFAIL)
+      if (t.notifyValue !== 0) return 0;
+      t.notifyValue = value >>> 0;
+    }
     return 1;
   };
   susp('task_notify_take', (clear: number, timeout: number) => {
@@ -182,15 +200,15 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const deadline = timeout >>> 0 === 0xffffffff ? Infinity : sched.now + (timeout >>> 0);
     const take = () => {
       const v = t.notifyValue;
-      t.notifyValue = clear ? 0 : Math.max(0, v - 1);
+      t.notifyValue = clear || v === 0 ? 0 : v - 1;
       return v >>> 0;
     };
-    if (t.notifyValue > 0 || timeout === 0) return take();
-    return sched.park(() => t.notifyValue > 0 || sched.now >= deadline, take);
+    if (t.notifyValue !== 0 || timeout === 0) return take();
+    return sched.park(() => t.notifyValue !== 0 || sched.now >= deadline, take);
   });
   f.task_notify_clear = (h: number) => {
     const t = taskOf(h);
-    const had = !!t && t.notifyValue > 0;
+    const had = !!t && t.notifyValue !== 0;
     if (t) t.notifyValue = 0;
     return had ? 1 : 0;
   };
@@ -201,6 +219,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   });
 
   // mutexes: handle -> owner task id (0 = free) and recursion count
+  const GLOBAL_OWNER = -1;
   const mutexes = new Map<number, { owner: number; count: number }>();
   let nextMutex = 0x20000;
   const newMutex = () => {
@@ -211,7 +230,8 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   const takeMutex = (h: number, timeout: number, recursive: boolean) => {
     const m = mutexes.get(h);
     if (!m) return 0;
-    const me = sched.current!.id;
+    // global constructors run before any task: they take mutexes as a task of their own
+    const me = sched.current?.id ?? GLOBAL_OWNER;
     const free = () => m.owner === 0 || (recursive && m.owner === me);
     const acquire = () => {
       if (!free()) return 0;
@@ -226,7 +246,8 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   };
   const giveMutex = (h: number) => {
     const m = mutexes.get(h);
-    if (!m || m.owner === 0) return 0;
+    // only the task holding a mutex can give it back (FreeRTOS fails the give otherwise)
+    if (!m || m.owner === 0 || m.owner !== (sched.current?.id ?? GLOBAL_OWNER)) return 0;
     if (--m.count <= 0) {
       m.owner = 0;
       m.count = 0;
@@ -301,20 +322,17 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.motor_move_relative = (port: number, pos: number, vel: number) => {
     const m = motor(port);
     if (!m) return PROS_ERR;
-    const base = m.mode === 'position' ? m.cmd : m.angle;
+    // relative to where the motor is now (motor_get_position), not to an earlier target
     m.mode = 'position';
-    m.cmd = base + m.fromUnits(pos) * sgn(port);
+    m.cmd = m.angle + m.fromUnits(pos) * sgn(port);
     m.profileRpm = Math.abs(vel);
     return 1;
   };
   f.motor_modify_profiled_velocity = (port: number, vel: number) => {
     const m = motor(port);
     if (!m) return PROS_ERR;
+    // "no effect if the motor is not following a profiled movement" (motors.h)
     if (m.mode === 'position') m.profileRpm = Math.abs(vel);
-    else {
-      m.mode = 'velocity';
-      m.cmd = sgn(port) * vel;
-    }
     return 1;
   };
   const getter = (fn: (m: MotorState, sign: number) => number, err: number = PROS_ERR_F) => (port: number) => {
@@ -329,7 +347,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     const m = motor(port);
     if (!m) return PROS_ERR;
     if (tsPtr) dv().setUint32(tsPtr, sched.now >>> 0, true);
-    return Math.round(m.reported(sgn(port)));
+    return Math.round(m.rawTicks(sgn(port)));
   };
   // Current: modest while moving, high only when a non-drive motor is stalled (e.g. an
   // arm at its hard stop). Drive motors are moved by the idealized drivetrain, never stalled.
@@ -343,8 +361,8 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.motor_get_efficiency = getter((m) => (m.rpm === 0 ? 0 : 80));
   f.motor_is_over_current = getter(() => 0, PROS_ERR);
   f.motor_is_over_temp = getter(() => 0, PROS_ERR);
-  f.motor_get_faults = getter(() => 0, 0);
-  f.motor_get_flags = getter(() => 0, 0);
+  f.motor_get_faults = getter(() => 0, PROS_ERR);
+  f.motor_get_flags = getter(() => 0, PROS_ERR);
   f.motor_get_power = getter((m) => Math.abs(m.rpm / (m.freeRpm || 1)) * 5);
   f.motor_get_temperature = getter(() => 30);
   f.motor_get_torque = getter(() => 0.1);
@@ -365,7 +383,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     m.brakeMode = mode;
     return 1;
   };
-  f.motor_get_brake_mode = getter((m) => m.brakeMode, 3);
+  f.motor_get_brake_mode = getter((m) => m.brakeMode, PROS_ERR); // E_MOTOR_BRAKE_INVALID
   f.motor_set_current_limit = (port: number, lim: number) => {
     const m = motor(port);
     if (!m) return PROS_ERR;
@@ -386,7 +404,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     m.encoderUnits = units;
     return 1;
   };
-  f.motor_get_encoder_units = getter((m) => m.encoderUnits, 3);
+  f.motor_get_encoder_units = getter((m) => m.encoderUnits, PROS_ERR); // E_MOTOR_ENCODER_INVALID
   f.motor_set_gearing = (port: number, gearset: number) => {
     const m = motor(port);
     if (!m) return PROS_ERR;
@@ -399,8 +417,8 @@ export function createProsApi(ctx: ApiContext): ProsApi {
     }
     return 1;
   };
-  f.motor_get_gearing = getter((m) => m.codeGearset, 3);
-  f.motor_get_type = getter(() => 0, 2);
+  f.motor_get_gearing = getter((m) => m.codeGearset, PROS_ERR); // E_MOTOR_GEARSET_INVALID
+  f.motor_get_type = getter(() => 0, PROS_ERR); // E_MOTOR_TYPE_INVALID
   f.motor_set_reversed = () => 1;
   f.motor_is_reversed = (port: number) => (port < 0 ? 1 : 0);
 
@@ -580,7 +598,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   };
 
   // ======================= Distance sensor =======================
-  const dist = (port: number) => (expectDevice(port, 'distance') ? (world.profile.devices.find((d) => d.port === port && d.type === 'distance') as Extract<typeof world.profile.devices[number], { type: 'distance' }>) : null);
+  const dist = (port: number) => (expectDevice(port, 'distance') ? (world.profile.devices.find((d) => d.port === Math.abs(port) && d.type === 'distance') as Extract<typeof world.profile.devices[number], { type: 'distance' }>) : null);
   f.distance_get = (port: number) => {
     const d = dist(port);
     if (!d) return PROS_ERR;

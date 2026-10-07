@@ -97,8 +97,10 @@ async function fetchCached(path: string, label: string): Promise<ArrayBuffer> {
 
 /** A cached asset that can't be decoded is corrupt: drop it so the next run downloads it again. */
 async function decoded<T>(path: string, label: string, decode: (buf: ArrayBuffer) => Promise<T> | T): Promise<T> {
+  // a download that fails says so itself (connection, incomplete): it is not "damaged"
+  const buf = await fetchCached(path, label);
   try {
-    return await decode(await fetchCached(path, label));
+    return await decode(buf);
   } catch (e) {
     await (await openCache())?.delete(assetUrl(path)).catch(() => false);
     throw new Error(`The ${label} download is damaged (${(e as Error).message}). Press Run again to download it again.`);

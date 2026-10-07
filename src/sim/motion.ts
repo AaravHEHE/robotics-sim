@@ -249,6 +249,11 @@ export interface TurnParams {
   maxSpeed: number;
   minSpeed: number;
   earlyExitRange: number;
+  /**
+   * Turn exactly target − heading, full turns included (EZ-Template's PID works on that
+   * unwrapped error: a 450° relative turn turns 450°), instead of the wrapped angle.
+   */
+  exact?: boolean;
 }
 
 /** In-place turn (or swing, with one side locked) to a heading or toward a point. */
@@ -272,9 +277,9 @@ export class Turn extends Motion {
   protected track(w: World): void {
     if (this.toGo === null) {
       this.startTheta = w.pose.theta;
-      let err = wrap180(this.target(w.pose) - w.pose.theta);
-      if (this.p.direction > 0 && err < -0.5) err += 360;
-      if (this.p.direction < 0 && err > 0.5) err -= 360;
+      let err = this.p.exact ? this.target(w.pose) - w.pose.theta : wrap180(this.target(w.pose) - w.pose.theta);
+      if (!this.p.exact && this.p.direction > 0 && err < -0.5) err += 360;
+      if (!this.p.exact && this.p.direction < 0 && err > 0.5) err -= 360;
       this.toGo = err;
     }
     this.traveled = Math.abs(w.pose.theta - this.startTheta);

@@ -92,7 +92,8 @@ export function prepareProject(input: ProjectFiles, libraries: Record<string, st
   const assets: Array<[string, Uint8Array]> = [];
   const notes: ProjectNote[] = [];
   let shadowed = 0;
-  for (const [path, data] of Object.entries(normalizeRoot(input))) {
+  const root = normalizeRoot(input);
+  for (const [path, data] of Object.entries(root)) {
     if (!path || IGNORED.some((r) => r.test(path))) continue;
     if (path.startsWith('static/')) {
       assets.push([path, typeof data === 'string' ? new TextEncoder().encode(data) : data]);
@@ -119,7 +120,15 @@ export function prepareProject(input: ProjectFiles, libraries: Record<string, st
   if (/#\s*include\s*[<"]liblvgl\/(?!llemu\.h)/.test(allText)) {
     notes.push({ level: 'warning', message: 'liblvgl (LVGL graphics) is not available in the simulator; code that draws on the brain screen will not compile.' });
   }
-  notes.push(...versionNotes(asText(input['project.pros'] ?? ''), libraries));
+  notes.push(...versionNotes(asText(root['project.pros'] ?? ''), libraries));
+  // LemLib's ASSET(name) finds a static/ file by its objcopy symbol name, so two files that map
+  // to the same name (static/a-b.txt and static/a_b.txt) can't both be embedded
+  const bySymbol = new Map<string, string>();
+  for (const [p] of assets) {
+    const other = bySymbol.get(assetSymbol(p));
+    if (other) notes.push({ level: 'error', message: `${other} and ${p} get the same asset name (${assetSymbol(p).slice('_binary_'.length)}): rename one.` });
+    bySymbol.set(assetSymbol(p), p);
+  }
   return {
     sources,
     files,

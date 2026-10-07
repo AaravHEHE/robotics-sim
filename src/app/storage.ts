@@ -79,13 +79,47 @@ export interface SavedProject {
  * Each browser tab keeps its own project (two open tabs must not overwrite each other's
  * code); a new tab starts from the project saved last in any tab.
  */
-const tabKey = (() => {
+/** A tab renews its claim on its id this often, and a claim older than LEASE_MS has lapsed (ms). */
+const LEASE_RENEW_MS = 2000;
+const LEASE_MS = 6000;
+const newTabId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+/**
+ * The tab's own key, and the key of the tab it was duplicated from (if any). "Duplicate tab"
+ * copies sessionStorage, so a copy would share its original's id: a tab therefore holds a lease
+ * on its id while it is open (released when it closes or reloads), and a copy that finds the
+ * lease held by a live tab takes a new id, starting from the original's project.
+ */
+const { tabKey, fromKey } = (() => {
   try {
     let id = sessionStorage.getItem('vexsim-tab');
-    if (!id) sessionStorage.setItem('vexsim-tab', (id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)));
-    return 'tab:' + id;
+    let from: string | null = null;
+    const lease = id ? Number(localStorage.getItem('vexsim-lease:' + id)) : 0;
+    if (id && Date.now() - lease < LEASE_MS) {
+      from = 'tab:' + id;
+      id = null;
+    }
+    if (!id) sessionStorage.setItem('vexsim-tab', (id = newTabId()));
+    const key = 'vexsim-lease:' + id;
+    const renew = () => {
+      try {
+        localStorage.setItem(key, String(Date.now()));
+      } catch {
+        /* storage off: duplicates can't be told apart */
+      }
+    };
+    renew();
+    setInterval(renew, LEASE_RENEW_MS);
+    addEventListener('pagehide', () => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* see renew */
+      }
+    });
+    addEventListener('pageshow', renew); // back from the back/forward cache
+    return { tabKey: 'tab:' + id, fromKey: from };
   } catch {
-    return 'current';
+    return { tabKey: 'current', fromKey: null };
   }
 })();
 
@@ -94,7 +128,9 @@ export const saveProject = async (p: SavedProject) => {
   await safe(idb.put('projects', 'current', p), undefined);
 };
 export const loadProject = async () =>
-  (await safe(idb.get<SavedProject>('projects', tabKey), undefined)) ?? (await safe(idb.get<SavedProject>('projects', 'current'), undefined));
+  (await safe(idb.get<SavedProject>('projects', tabKey), undefined)) ??
+  (fromKey ? await safe(idb.get<SavedProject>('projects', fromKey), undefined) : undefined) ??
+  (await safe(idb.get<SavedProject>('projects', 'current'), undefined));
 
 const TEXT_EXT = /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inc|ipp|txt|md|json|pros|mk|csv)$|Makefile$/i;
 
@@ -129,14 +165,25 @@ export const listCustomRobots = async (): Promise<RobotProfile[]> => {
   }
   return out;
 };
-export const saveCustomRobot = (r: RobotProfile) => safe(idb.put('robots', r.id, r), undefined);
+// saves reject when the browser can't store them (private window, storage full): callers say so
+export const saveCustomRobot = (r: RobotProfile) => idb.put('robots', r.id, r);
 export const deleteCustomRobot = (id: string) => safe(idb.del('robots', id), undefined);
-export const saveModel = (id: string, glb: ArrayBuffer) => safe(idb.put('models', id, glb), undefined);
+export const saveModel = (id: string, glb: ArrayBuffer) => idb.put('models', id, glb);
 export const loadModel = (id: string) => safe(idb.get<ArrayBuffer>('models', id), undefined);
 
 /** Export a robot as a .zip containing robot.json and, if present, model.glb. */
 /** A robot's VEX parts build (the parts kit), kept with the model it made. */
-export const saveAssembly = (assetId: string, asm: Assembly) => safe(idb.put('models', `asm:${assetId}`, asm), undefined);
+export const saveAssembly = (assetId: string, asm: Assembly) => idb.put('models', `asm:${assetId}`, asm);
+
+/** Delete the models (and their parts builds) that no saved robot uses any more. */
+export async function pruneModels(): Promise<void> {
+  const used = new Set((await listCustomRobots()).map((r) => r.model?.assetId).filter((x): x is string => !!x));
+  for (const k of await safe(idb.keys('models'), [])) {
+    const key = String(k);
+    const asset = key.startsWith('asm:') ? key.slice(4) : key;
+    if (!used.has(asset)) await safe(idb.del('models', key), undefined);
+  }
+}
 export const loadAssembly = (assetId: string) => safe(idb.get<Assembly>('models', `asm:${assetId}`), undefined);
 
 export async function robotToZip(r: RobotProfile): Promise<Uint8Array> {

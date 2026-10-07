@@ -574,13 +574,26 @@
   {
    "group": "Structure (aluminum)",
    "id": "gusset-angle",
-   "name": "Angle gusset",
-   "kind": "plate",
-   "web": 3,
+   "name": "Angle gusset (bent 90°)",
+   "kind": "gusset",
+   "web": 2,
+   "flange": 2,
    "lengths": [
     3
    ],
    "length": 3
+  },
+  {
+   "group": "Structure (aluminum)",
+   "id": "l-bracket",
+   "name": "L-bracket",
+   "kind": "gusset",
+   "web": 1,
+   "flange": 2,
+   "lengths": [
+    2
+   ],
+   "length": 2
   },
   {
    "group": "Structure (aluminum)",
@@ -617,7 +630,7 @@
    "group": "Structure (aluminum)",
    "id": "bearing-flat",
    "name": "Bearing flat",
-   "kind": "plate",
+   "kind": "bearing",
    "web": 1,
    "lengths": [
     3
@@ -657,75 +670,224 @@
   },
   {
    "group": "Hardware",
+   "id": "standoff-coupler",
+   "name": "Standoff coupler",
+   "kind": "standoff",
+   "lengths": [
+    1
+   ],
+   "length": 1
+  },
+  {
+   "group": "Hardware",
    "id": "spacer-0.125",
    "name": "Nylon spacer ⅛″",
-   "kind": "cylinder",
+   "kind": "spacer",
    "diameter": 0.38,
-   "length": 0.125,
+   "width": 0.125,
    "color": "#e8e4d8"
   },
   {
    "group": "Hardware",
    "id": "spacer-0.25",
    "name": "Nylon spacer ¼″",
-   "kind": "cylinder",
+   "kind": "spacer",
    "diameter": 0.38,
-   "length": 0.25,
+   "width": 0.25,
    "color": "#e8e4d8"
   },
   {
    "group": "Hardware",
    "id": "spacer-0.375",
    "name": "Nylon spacer ⅜″",
-   "kind": "cylinder",
+   "kind": "spacer",
    "diameter": 0.38,
-   "length": 0.375,
+   "width": 0.375,
    "color": "#e8e4d8"
   },
   {
    "group": "Hardware",
    "id": "spacer-0.5",
    "name": "Nylon spacer ½″",
-   "kind": "cylinder",
+   "kind": "spacer",
    "diameter": 0.38,
-   "length": 0.5,
+   "width": 0.5,
    "color": "#e8e4d8"
   },
   {
    "group": "Hardware",
+   "id": "spacer-thin-032",
+   "name": "Thin nylon spacer 0.032″",
+   "kind": "spacer",
+   "diameter": 0.5,
+   "width": 0.032,
+   "color": "#e8e4d8"
+  },
+  {
+   "group": "Hardware",
+   "id": "spacer-thin-064",
+   "name": "Thin nylon spacer 0.064″",
+   "kind": "spacer",
+   "diameter": 0.5,
+   "width": 0.064,
+   "color": "#e8e4d8"
+  },
+  {
+   "group": "Hardware",
+   "id": "spacer-8mm",
+   "name": "Plastic spacer 8 mm",
+   "kind": "spacer",
+   "diameter": 0.5,
+   "width": 0.315,
+   "color": "#3a3d42"
+  },
+  {
+   "group": "Hardware",
    "id": "collar",
-   "name": "Shaft collar",
-   "kind": "cylinder",
-   "diameter": 0.6,
-   "length": 0.32,
+   "name": "Shaft collar (set screw)",
+   "kind": "collar",
+   "diameter": 0.5,
+   "width": 0.3,
    "color": "#9aa0a6"
+  },
+  {
+   "group": "Hardware",
+   "id": "collar-clamp",
+   "name": "Clamping shaft collar",
+   "kind": "collar",
+   "diameter": 0.75,
+   "width": 0.3,
+   "color": "#4b4f56",
+   "style": "clamp"
   },
   {
    "group": "Hardware",
    "id": "collar-rubber",
    "name": "Rubber shaft collar",
-   "kind": "cylinder",
+   "kind": "collar",
    "diameter": 0.45,
-   "length": 0.3,
-   "color": "#1f2125"
+   "width": 0.3,
+   "color": "#1f2125",
+   "style": "rubber"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-0_25",
+   "name": "Screw 8-32 × ¼″ (star drive)",
+   "kind": "screw",
+   "shank": 0.25,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-0_375",
+   "name": "Screw 8-32 × ⅜″ (star drive)",
+   "kind": "screw",
+   "shank": 0.375,
+   "diameter": 0.32,
+   "color": "#2a2d31"
   },
   {
    "group": "Hardware",
    "id": "screw",
-   "name": "Screw 8-32 × ½″",
-   "kind": "cylinder",
-   "diameter": 0.164,
-   "length": 0.5,
+   "name": "Screw 8-32 × ½″ (star drive)",
+   "kind": "screw",
+   "shank": 0.5,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-0_625",
+   "name": "Screw 8-32 × ⅝″ (star drive)",
+   "kind": "screw",
+   "shank": 0.625,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-0_75",
+   "name": "Screw 8-32 × ¾″ (star drive)",
+   "kind": "screw",
+   "shank": 0.75,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-1",
+   "name": "Screw 8-32 × 1″ (star drive)",
+   "kind": "screw",
+   "shank": 1,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-1_25",
+   "name": "Screw 8-32 × 1¼″ (star drive)",
+   "kind": "screw",
+   "shank": 1.25,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-1_5",
+   "name": "Screw 8-32 × 1½″ (star drive)",
+   "kind": "screw",
+   "shank": 1.5,
+   "diameter": 0.32,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Hardware",
+   "id": "screw-2",
+   "name": "Screw 8-32 × 2″ (star drive)",
+   "kind": "screw",
+   "shank": 2,
+   "diameter": 0.32,
    "color": "#2a2d31"
   },
   {
    "group": "Hardware",
    "id": "nut",
    "name": "Keps nut 8-32",
-   "kind": "cylinder",
-   "diameter": 0.38,
-   "length": 0.15,
-   "color": "#9aa0a6"
+   "kind": "nut",
+   "diameter": 0.344,
+   "width": 0.14,
+   "color": "#9aa0a6",
+   "style": "keps"
+  },
+  {
+   "group": "Hardware",
+   "id": "nut-nylock",
+   "name": "Nylock nut 8-32",
+   "kind": "nut",
+   "diameter": 0.344,
+   "width": 0.19,
+   "color": "#9aa0a6",
+   "style": "nylock"
+  },
+  {
+   "group": "Hardware",
+   "id": "washer",
+   "name": "Steel washer #8",
+   "kind": "washer",
+   "diameter": 0.375,
+   "width": 0.032,
+   "color": "#b9bec5"
+  },
+  {
+   "group": "Hardware",
+   "id": "washer-teflon",
+   "name": "Teflon washer",
+   "kind": "washer",
+   "diameter": 0.5,
+   "width": 0.04,
+   "color": "#f2f2ee"
   },
   {
    "group": "Hardware",
@@ -752,6 +914,19 @@
     0.05
    ],
    "color": "#1f2125"
+  },
+  {
+   "group": "Hardware",
+   "id": "pillow-block",
+   "name": "Pillow block bearing",
+   "kind": "bearing",
+   "web": 1,
+   "lengths": [
+    2
+   ],
+   "length": 2,
+   "color": "#2a2d31",
+   "style": "block"
   },
   {
    "group": "Shafts & bearings",

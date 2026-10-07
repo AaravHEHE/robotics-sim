@@ -12,7 +12,7 @@ import { build } from './helpers.ts';
 
 /** Score, Toggles and Pins Placed on Goals (counting the ones on the field at the start). */
 const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?: Record<string, string> }> = {
-  'override-flex': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
+  'override-flex': { red: 35, blue: 0, pins: 6, toggles: { red1: 'red' } },
   'override-banshee': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-ace': { red: 55, blue: 0, pins: 8, toggles: { red2: 'red' } },
   'override-claw-gate': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },

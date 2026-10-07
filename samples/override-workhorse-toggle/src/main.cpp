@@ -62,18 +62,20 @@ void autonomous() {
   chassis.pid_targets_reset();
   chassis.drive_imu_reset();
   chassis.drive_sensor_reset();
-  chassis.odom_xyt_set(-60.7_in, -37_in, 90_deg);  // Red 1 (south) start
+  // Red 1 (south), 3.1" off the wall: the Preload standing in the rear claw must be inside the field
+  chassis.odom_xyt_set(-57.6_in, -37_in, 90_deg);
   chassis.drive_brake_set(MOTOR_BRAKE_HOLD);
 
   // 1. Preload into R1 (-47.1, -23.5). Out along y = -37 to a spot on R1's diagonal, turn
-  //    the back toward R1 and reverse until the claw (11.5" behind, bar raised a little)
-  //    is over it, without touching it.
-  liftTo(5);
+  //    the back toward R1 and reverse until the claw (12.35" behind with the bar at 18°) is
+  //    over it, without touching it. At 18° the Pin's bottom is 3.5" up, clear of the 3.25"
+  //    Goal: any lower and it would hit the Goal instead of going over it.
+  liftTo(18);
   chassis.pid_odom_set({{-33.64_in, -37_in}, fwd, DRIVE_SPEED});
   chassis.pid_wait();
   chassis.pid_turn_set(135_deg, TURN_SPEED);
   chassis.pid_wait();
-  chassis.pid_odom_set({{-38.96_in, -31.68_in}, rev, 70});
+  chassis.pid_odom_set({{-38.36_in, -32.28_in}, rev, 70});
   chassis.pid_wait();
   claw.retract();  // let go: the Pin drops into the Goal
   pros::delay(200);
@@ -95,8 +97,9 @@ void autonomous() {
   pros::delay(200);
 
   // Raise it and stack it on the Preload, reversing into R1 along its other diagonal: the
-  // Cup nests over the Pin's top. The raised bar reaches a little further back (12.5").
-  liftTo(22);
+  // Cup nests over the Pin's top. At 36° the Cup's bottom is 7.25" up, over the Preload's
+  // 6.8" top, and the bar reaches a little further back (12.5").
+  liftTo(36);
   chassis.pid_turn_set(321.6_deg, TURN_SPEED);
   chassis.pid_wait();
   chassis.pid_odom_set({{-58.4_in, -34.86_in}, fwd, DRIVE_SPEED});

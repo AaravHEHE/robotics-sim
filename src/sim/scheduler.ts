@@ -29,6 +29,8 @@ export interface Task {
   namePtr: number;
   phase: number | null;
   wasSuspendedFrom: TaskState | null;
+  /** Suspended itself (task_suspend on itself): parked until another task resumes it. */
+  selfSuspended?: boolean;
 }
 
 export class StuckError extends Error {}

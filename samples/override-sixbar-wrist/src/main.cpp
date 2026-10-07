@@ -76,13 +76,13 @@ void autonomous() {
 
   // 1. Flip the Preload red end down and raise it while turning toward R1 (-47.1, -23.5).
   wristTo(180);
-  liftTo(10);  // the flipped Pin hangs ~3.5" below the claw: just clear of the Goal
+  liftTo(16);  // the flipped Pin hangs 3.5" below the claw: its bottom 3.6" up, clear of the 3.25" Goal
   // 2" out from the wall first: turning in place right against it would swing a corner into it
   chassis.pid_drive_set(2_in, DRIVE_SPEED);
   chassis.pid_wait();
   chassis.pid_turn_set(40.8_deg, TURN_SPEED);  // straight at R1 from (-58.7, -37)
   chassis.pid_wait();
-  // stop 11.1" from the Goal's center: the slightly raised claw reaches ~10.6" ahead
+  // stop 11.1" from the Goal's center: the raised claw reaches ~10.8" ahead
   chassis.pid_odom_set({{-54.35_in, -31.95_in}, fwd, DRIVE_SPEED});
   chassis.pid_wait();
   claw.retract();  // the Pin drops into the Goal
@@ -97,13 +97,14 @@ void autonomous() {
   approach(-47.09, -47.09, 10);
   claw.extend();
   pros::delay(150);
-  liftTo(16);  // the claw 7" up and 10.9" ahead: the Cup's bottom just over the Preload's top
-  approach(-47.09, -23.55, 10.85);
+  liftTo(27);  // the claw 10.2" up and 11.1" ahead: the Cup's bottom 7.2" up, over the Preload's 6.8" top
+  approach(-47.09, -23.55, 11.06);
   claw.retract();
   pros::delay(150);
-  liftTo(0);
-
-  // 3. Up the lane x = -58.5 (between the wall-group Cups and R1) to the Red 1 Toggle.
+  // 3. Up the lane x = -58.5 (between the wall-group Cups and R1) to the Red 1 Toggle, with
+  //    the 6-bar folded up over the robot: the claw out in front would hit the wall before
+  //    the chassis reaches the Toggle.
+  liftTo(110);
   chassis.pid_drive_set(-6_in, DRIVE_SPEED);
   chassis.pid_wait();
   approach(-58.5, -36, 0);

@@ -2,12 +2,15 @@
 // physics, steps them with the simulator, and records what the replay viewer needs.
 
 import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
-import type { World } from '../../sim/world.ts';
-import type { Piece, PinColor } from './elements.ts';
+import { octagon, type Obstacle, type World } from '../../sim/world.ts';
+import { dhypot } from '../../sim/dmath.ts';
+import { nestRest, stackTop, type Piece, type PinColor } from './elements.ts';
+import { footprintRadius, goalShape, phasing } from './overlaps.ts';
 import { Manipulators, type GameOps } from './manipulators.ts';
-import { FloorPhysics, initPhysics, PHYSICS_DT_MS } from './physics.ts';
+import { FloorPhysics, initPhysics, PHYSICS_DT_MS, type Carried } from './physics.ts';
+import { toField } from '../../sim/lift.ts';
 import { installSensors } from './sensors.ts';
-import { inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type Violation } from './rules.ts';
+import { autonomousViolation, inMidfield, RuleMonitor, sideOf, startsOnAutonLine, touchingPerimeter, type RobotPart, type Violation } from './rules.ts';
 import { autonomousBonus, awp, score, type AwpCheck, type Mode, type ScoreBreakdown } from './scoring.ts';
 import { initialState, type FloorStack, type OverrideState } from './state.ts';
 import { ToggleSim } from './toggle.ts';
@@ -62,6 +65,8 @@ export class OverrideGame implements GameOps {
   private physicsClock = 0;
   private readonly rec: OverrideRecording;
   private readonly lastTrack = new Map<string, [number, number, number]>();
+  /** The robot's collision shape of each Goal (see updateGoalObstacles). */
+  private readonly goalObstacles = new Map<string, Obstacle>();
 
   private constructor(field: FieldDef, layout: string, world: World) {
     this.field = field;
@@ -85,6 +90,16 @@ export class OverrideGame implements GameOps {
     }
     this.notes = [];
     this.manipulators = new Manipulators(this, world);
+    for (const g of field.goals ?? []) {
+      const ob = world.obstacles.find((o) => o.id === `goal ${g.id}`);
+      if (ob) this.goalObstacles.set(g.id, ob);
+    }
+    this.updateGoalObstacles();
+    this.updateStackObstacles();
+    world.attachments = this.manipulators.attachments();
+    world.attachmentsAt = () => this.manipulators.attachments();
+    this.keepInside();
+    this.noteStartingOnPieces();
     installSensors(world, field, this.state);
     this.rec = {
       id: 'override',
@@ -97,6 +112,42 @@ export class OverrideGame implements GameOps {
       notes: this.notes,
       result: null,
     };
+  }
+
+  /**
+   * A robot set against the perimeter with its claw out behind it would have its Preload
+   * through the wall: it is placed that much further in instead (the Preload stands on the tiles).
+   */
+  private keepInside(): void {
+    const half = this.field.perimeter.inside / 2;
+    const { pose } = this.world;
+    let dx = 0;
+    let dy = 0;
+    for (const a of this.world.attachments) {
+      if (a.bottom >= this.field.perimeter.wallHeight) continue;
+      const [x, y] = toField(pose, a);
+      if (x - a.r < -half) dx = Math.max(dx, -half - (x - a.r));
+      if (x + a.r > half) dx = Math.min(dx, half - (x + a.r));
+      if (y - a.r < -half) dy = Math.max(dy, -half - (y - a.r));
+      if (y + a.r > half) dy = Math.min(dy, half - (y + a.r));
+    }
+    if (!dx && !dy) return;
+    pose.x += dx;
+    pose.y += dy;
+    this.physics.teleportRobot({ x: pose.x, y: pose.y, heading: pose.theta });
+    this.notes.push(`What the robot holds would start through the perimeter wall, so the robot is placed ${dhypot(dx, dy).toFixed(2)}″ further into the field.`);
+  }
+
+  /**
+   * A robot placed on top of floor pieces can't be there: they get shoved out from under it
+   * at once, possibly into the wall. Say so, so the start position can be fixed.
+   */
+  private noteStartingOnPieces(): void {
+    const fp = this.world.footprint();
+    const under = phasing(this.field, { ...this.state, goals: {}, held: {} }, fp).filter((p) => p.what.endsWith('inside the robot'));
+    if (under.length) {
+      this.notes.push(`The robot is placed on top of ${under.length} Scoring Object${under.length > 1 ? 's' : ''}: they are pushed out from under it. Move the start position so it is clear of them.`);
+    }
   }
 
   static async create(field: FieldDef, layout: string, world: World): Promise<OverrideGame> {
@@ -121,6 +172,9 @@ export class OverrideGame implements GameOps {
    */
   robotTeleported(): void {
     this.physics.teleportRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
+    this.world.placed();
+    this.keepInside();
+    this.noteStartingOnPieces();
     const side = sideOf([this.world.pose.x, this.world.pose.y]);
     if (this.mode !== 'h2h' || side === 'line' || side === this.alliance) return;
     if (!this.manipulators.untouched()) return;
@@ -137,16 +191,25 @@ export class OverrideGame implements GameOps {
   /** Advance by one simulator step (1 ms); physics runs every PHYSICS_DT_MS. */
   step(dtMs: number): void {
     this.clock += dtMs;
+    // where the claws are now (the lifts move every step): what the robot carries collides there
+    this.world.attachments = this.manipulators.attachments();
     this.toggles.step(dtMs, this.state.toggles, this.manipulators.contactShapes());
-    this.rules.check(this.clock, this.world.footprint());
+    this.rules.check(this.clock, this.world.footprint(), this.robotParts());
     this.physicsClock += dtMs;
     while (this.physicsClock >= PHYSICS_DT_MS) {
       this.physicsClock -= PHYSICS_DT_MS;
       this.physics.setRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
+      this.physics.setCarried(this.carried());
       this.physics.step();
       this.syncFromPhysics();
-      this.world.pinnedObstacles = this.physics.pinnedObstacles(this.world.footprint());
+      this.world.pinnedObstacles = this.physics.pinnedObstacles([
+        { poly: this.world.footprint(), bottom: 0 },
+        ...this.world.attachments.filter((a) => !a.fixedOnly).map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom, passes: (id: string) => this.physics.passes(a.slot ?? a.id, id) })),
+      ]);
       this.manipulators.step(this.clock);
+      this.world.attachments = this.manipulators.attachments();
+      this.updateGoalObstacles();
+      this.updateStackObstacles();
       for (const id of this.opponentSide) {
         if (!this.physics.touchingRobot(id)) continue;
         this.rules.add(this.clock, 'SG7', 'The robot touched a Scoring Object on the opposing side of the Autonomous Line.');
@@ -158,6 +221,39 @@ export class OverrideGame implements GameOps {
       this.dirty = false;
       this.snapshot(this.clock);
     }
+  }
+
+  /**
+   * Pieces on a Goal are part of it for anything carried into it from the side: the Goal is
+   * as tall as its stack, and above the Goal top as wide as the pieces still above that height.
+   */
+  private updateGoalObstacles(): void {
+    for (const g of this.field.goals ?? []) {
+      const ob = this.goalObstacles.get(g.id);
+      if (ob) Object.assign(ob, goalShape(g, this.state.goals[g.id] ?? []));
+    }
+  }
+
+  /**
+   * The stacks standing on the floor, for lifts lowering things onto them: a held piece stops
+   * on top of one, or slides down onto it if it fits and is centred (see Obstacle.nest).
+   */
+  private updateStackObstacles(): void {
+    this.world.stackObstacles = this.state.floor.map((s) => ({
+      id: `stack ${s.id}`,
+      poly: octagon(s.x, s.y, 2 * footprintRadius(s.pieces)),
+      top: stackTop(s.pieces, 0, false),
+      nest: { x: s.x, y: s.y, rest: (kind: string) => nestRest(s.pieces, 0, false, kind) },
+    }));
+  }
+
+  /** What the robot carries, in the field frame, for the floor physics. */
+  private carried(): Carried[] {
+    return this.world.attachments.filter((a) => !a.fixedOnly).map((a) => {
+      const [x, y] = toField(this.world.pose, a);
+      // the same body whatever the claw holds: what it was passing through carries over
+      return { id: a.slot ?? a.id, x, y, r: a.r, bottom: a.bottom };
+    });
   }
 
   // ---------------- GameOps (used by the manipulators) ----------------
@@ -189,12 +285,20 @@ export class OverrideGame implements GameOps {
   }
 
   rebuildFloor(stack: FloorStack): void {
-    this.physics.remove(stack.id);
-    this.physics.addStack(stack, false);
+    this.physics.restack(stack);
+    // taking part of a stack, or setting pieces on one, touches it (SG7e)
+    if (this.opponentSide.has(stack.id)) {
+      this.rules.add(this.clock, 'SG7', 'The robot took from or added to a Scoring Object on the opposing side of the Autonomous Line.');
+      this.opponentSide.clear(); // reported once
+    }
   }
 
   changed(): void {
     this.dirty = true;
+  }
+
+  liftedOutOf(clawName: string, stackId: string): void {
+    this.physics.expectOverlap(`claw:${clawName}`, stackId);
   }
 
   violation(rule: string, message: string): void {
@@ -225,7 +329,12 @@ export class OverrideGame implements GameOps {
 
   /** Score the current state as if the run ended now. */
   score(): OverrideResult {
-    return scoreState(this.field, this.mode, this.alliance, this.state, this.world.footprint(), this.rules.violations.length > 0, this.clock);
+    return scoreState(this.field, this.mode, this.alliance, this.state, this.world.footprint(), this.rules.violations.some(autonomousViolation), this.clock, this.robotParts());
+  }
+
+  /** The claws and what they hold, as outlines for the rules (field frame). */
+  private robotParts(): RobotPart[] {
+    return this.world.attachments.map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom }));
   }
 
   /** Record motion samples for objects that moved since their last sample. */
@@ -266,8 +375,9 @@ export function scoreState(
   footprint: Vec2[],
   violation: boolean,
   t: number,
+  parts: RobotPart[] = [],
 ): OverrideResult {
-  const mid = inMidfield(field, footprint);
+  const mid = inMidfield(field, footprint, parts);
   const s = score({
     field,
     state,
@@ -275,7 +385,7 @@ export function scoreState(
     autonomous: mode === 'h2h',
     robotsInMidfield: { red: mid && alliance === 'red' ? 1 : 0, blue: mid && alliance === 'blue' ? 1 : 0 },
   });
-  const perimeter = touchingPerimeter(field, footprint);
+  const perimeter = touchingPerimeter(field, footprint, parts);
   return {
     t,
     score: s,

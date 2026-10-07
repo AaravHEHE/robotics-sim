@@ -145,6 +145,11 @@ export async function readFieldModel(
 // ---------------- STEP ----------------
 
 const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/';
+/** SHA-256 of the reader's files in that release: anything else from the CDN is not run. */
+const OCCT_SHA256 = {
+  js: '3fb44ce11d00611f9b3f3c5775d520ebab48930c1f08279b7b1316f05f0d3379',
+  wasm: '33391fc9d94ea5c869a6718488bf0a9a464222bac9bdc764dfe1690cef281952',
+};
 const NO_READER = 'Could not download the STEP reader (occt-import-js from cdn.jsdelivr.net). Check the connection, or export the model as GLB.';
 /** Triangle sizes: within 3 mm of the true surface, and 0.8 rad between facets. */
 const TESSELLATION = { linearDeflectionType: 'absolute_value', linearDeflection: 3, angularDeflection: 0.8 };
@@ -163,10 +168,30 @@ interface ChunkMesh {
  * its memory can't shrink, and the page stays responsive during a multi-minute read).
  */
 const WORKER = `
-try { importScripts('${OCCT}occt-import-js.js'); } catch (err) { postMessage({ ok: false, noReader: true, message: String(err && err.message || err) }); }
+// the reader comes from a CDN: run it only if it is byte-for-byte the pinned release
+const fetchChecked = async (file, sha) => {
+  const r = await fetch('${OCCT}' + file);
+  if (!r.ok) throw new Error(file + ': HTTP ' + r.status);
+  const bytes = await r.arrayBuffer();
+  const hex = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (hex !== sha) throw new Error(file + ' is not the expected file (integrity check failed).');
+  return bytes;
+};
+const reader = (async () => {
+  const js = await fetchChecked('occt-import-js.js', '${OCCT_SHA256.js}');
+  importScripts(URL.createObjectURL(new Blob([js], { type: 'text/javascript' })));
+  return fetchChecked('occt-import-js.wasm', '${OCCT_SHA256.wasm}');
+})();
+reader.catch((err) => postMessage({ ok: false, noReader: true, message: String(err && err.message || err) }));
 onmessage = async (e) => {
+  let wasmBinary;
   try {
-    const occt = await occtimportjs({ locateFile: (f) => '${OCCT}' + f });
+    wasmBinary = await reader;
+  } catch {
+    return; // already reported
+  }
+  try {
+    const occt = await occtimportjs({ wasmBinary });
     const res = occt.ReadStepFile(new TextEncoder().encode(e.data.text), e.data.params);
     if (!res.success) throw new Error('This STEP file could not be read.');
     let top = res.root;

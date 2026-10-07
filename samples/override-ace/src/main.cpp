@@ -93,41 +93,51 @@ void autonomous() {
   // 3" out from the wall first: turning in place right against it swings a corner into it
   backOff(-3);
 
-  // 1. Preload into R2: the claw holds it 11" ahead, its bottom just above the Goal.
+  // 1. Preload into R2: the claw holds it 11" ahead. The cascade lifts it 3.2" so its
+  //    bottom (3.7" up) clears the 3.25" Goal: carried any lower it would hit the Goal.
+  cascadeTo(90);
   approach(R2_X, R2_Y, 11);
   claw.retract();
   pros::delay(150);
 
   // 2. Claw down at the floor, open, around the stack at (-47, -47); clamp, carry it back.
+  //    The Cup's bottom must come in over the Preload's 6.8" top: the cascade lifts it to 7.2".
   backOff(6);
+  cascadeTo(0);
   chainBarTo(-25);
   approach(-47.09, -47.09, 9.97);
   claw.extend();
   pros::delay(150);
   chainBarTo(0);
+  cascadeTo(70);
   backOff(6);
   approach(R2_X, R2_Y, 11);
   claw.retract();
   pros::delay(150);
 
   // 3. The stack at (-23.5, -23.5), north of R2: up the lane west of R2 first (a straight
-  //    line would clip it), then up one Pin with the cascade to set it on top.
+  //    line would clip it), then up with the cascade until the Cup's bottom (14.4" up) is over
+  //    the 13.9" top of the stack on R2, and set it on top.
   backOff(6);
+  cascadeTo(0);
   chainBarTo(-25);
   approach(-36, -38, 0);
   approach(-23.55, -23.55, 9.97);
   claw.extend();
   pros::delay(150);
   chainBarTo(0);
-  cascadeTo(170);
+  cascadeTo(270);
   backOff(6);
   approach(R2_X, R2_Y, 11);
   claw.retract();
   pros::delay(150);
 
   // 4. Over to the Red 2 Toggle (bottom wall, x = 0) and hit it at full speed: two faces.
+  //    The chain bar swings straight up first: the claw out in front would hit the wall
+  //    before the finger reaches the Toggle.
   backOff(6);
   cascadeTo(0);
+  chainBarTo(90);
   approach(-4, -36, 0);  // along y = -35, clear of R2 and of the stack at (0, -23.5)
   chassis.pid_turn_set(180_deg, TURN_SPEED);
   chassis.pid_wait();

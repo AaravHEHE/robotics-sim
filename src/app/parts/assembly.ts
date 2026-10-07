@@ -19,7 +19,14 @@ export type PartKind =
   | 'standoff'
   | 'shaft'
   | 'box'
-  | 'cylinder';
+  | 'cylinder'
+  | 'screw'
+  | 'nut'
+  | 'washer'
+  | 'collar'
+  | 'spacer'
+  | 'bearing'
+  | 'gusset';
 
 export interface PartDef {
   id: string;
@@ -30,6 +37,8 @@ export interface PartDef {
   /** Steel parts are darker (structure); `finish` black for slide rails. */
   material?: 'steel';
   finish?: 'black';
+  /** A screw's length under its head (in). */
+  shank?: number;
   /** Thickness of a shaft, rope or tubing (in). */
   thickness?: number;
   /** Chain pitch (in): #25 = 0.25, #35 = 0.375. */
@@ -42,7 +51,7 @@ export interface PartDef {
   length?: number;
   diameter?: number;
   width?: number;
-  style?: 'omni' | 'traction' | 'flex' | 'mecanum' | 'spool';
+  style?: 'omni' | 'traction' | 'flex' | 'mecanum' | 'spool' | 'keps' | 'nylock' | 'clamp' | 'rubber' | 'block';
   size?: [number, number, number];
   cartridges?: string[];
   cartridge?: string;
@@ -75,6 +84,10 @@ export interface Assembly {
 }
 
 export const PITCH = 0.5;
+/** A button-head screw's head height (in). */
+export const SCREW_HEAD = 0.09;
+/** How far a bearing flat's round boss stands off its plate (in). */
+export const BEARING_BOSS = 0.09;
 export const MAX_PARTS = 500;
 
 /** A part's outer size before rotation (in): x along its length, y across, z up. */
@@ -115,6 +128,22 @@ export function partSize(def: PartDef, p: Pick<Placed, 'length'>): [number, numb
       return [len, def.thickness ?? 0.125, def.thickness ?? 0.125];
     case 'cylinder':
       return [def.length ?? 3, def.diameter ?? 1, def.diameter ?? 1];
+    case 'screw':
+      // the head (x 0 to 0.09) then the shank
+      return [SCREW_HEAD + (def.shank ?? 0.5), def.diameter ?? 0.32, def.diameter ?? 0.32];
+    case 'nut': {
+      // across the corners of the hex
+      const ac = (def.diameter ?? 0.344) / Math.cos(Math.PI / 6);
+      return [def.width ?? 0.14, ac, ac];
+    }
+    case 'washer':
+    case 'collar':
+    case 'spacer':
+      return [def.width ?? 0.125, def.diameter ?? 0.5, def.diameter ?? 0.5];
+    case 'bearing':
+      return [len, (def.web ?? 1) * PITCH, def.style === 'block' ? 0.5 : 0.063 + BEARING_BOSS];
+    case 'gusset':
+      return [len, (def.web ?? 2) * PITCH, (def.flange ?? 2) * PITCH];
     default:
       return def.size ?? [1, 1, 1];
   }
