@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { CUP } from '../src/games/override/elements.ts';
+import { CUP, stackTop } from '../src/games/override/elements.ts';
 import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
@@ -112,7 +112,7 @@ async function onField(robotId: string, start: { x: number; y: number; theta: nu
       game.step(1);
       const held = world.attachments.map((a) => {
         const [x, y] = toField(world.pose, a);
-        return { name: a.id, x, y, r: a.r, bottom: a.bottom, fixedOnly: a.fixedOnly };
+        return { name: a.id, x, y, r: a.r, bottom: a.bottom, fixedOnly: a.fixedOnly, nest: a.nest };
       });
       for (const p of phasing(f, game.state, world.footprint(), held)) problems.push(`${p.what} by ${p.depth.toFixed(2)}`);
     }
@@ -184,18 +184,63 @@ describe('nothing phases through anything', () => {
     expect(s.problems).toEqual([]);
   });
 
-  it('a lift lowering a held Pin onto a Goal from above stops on the Goal top', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+  it('a lift lowering a held Pin off-centre onto a Goal stops on the Goal top', async () => {
+    const s = await onField('override-sixbar-wrist', { x: R2.x + 1, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.world.adiOut.set('A', true);
     s.sixBar(16); // carried over the Goal top
     s.run(300);
     s.drive(60);
-    s.run(900); // the Pin is over the Goal, just off its center
+    s.run(900); // the Pin is over the Goal, 1" off its center
     s.drive(0);
     s.world.motor(7).cmd = -127; // now drive the 6-bar down, all the way
     s.run(1000);
     const held = s.world.attachments.find((a) => a.id.startsWith('claw:'))!;
     expect(held.bottom).toBeGreaterThan(3.248 - 0.3); // resting on the Goal top, not sunk into it
+    expect(s.problems).toEqual([]);
+  });
+
+  it('centred on the Goal, a lowered Pin slides into the socket until the claw meets the Goal top', async () => {
+    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    s.world.adiOut.set('A', true);
+    s.sixBar(16);
+    s.run(300);
+    const held = () => s.world.attachments.find((a) => a.id.startsWith('claw:'))!;
+    // placed with the Pin right over the Goal's centre
+    s.world.pose = { x: R2.x - held().x, y: R2.y - held().y, theta: 0 };
+    s.game.robotTeleported();
+    s.run(100);
+    const [hx, hy] = toField(s.world.pose, held());
+    expect(Math.hypot(hx - R2.x, hy - R2.y)).toBeLessThan(0.4);
+    s.world.motor(7).cmd = -127;
+    s.run(1000);
+    expect(held().bottom).toBeLessThan(3.248 - 1); // into the socket
+    expect(held().bottom).toBeGreaterThan(0.315 - 0.05); // never below where it sits
+    expect(s.clawAt().z).toBeGreaterThan(3.248 - 0.3); // the jaws stop on the Goal top
+    // pulling away sideways drags the robot back over it: the Pin can't leave the socket sideways
+    s.drive(-60);
+    s.run(300);
+    const [x2, y2] = toField(s.world.pose, held());
+    expect(Math.hypot(x2 - R2.x, y2 - R2.y)).toBeLessThan(0.45);
+    expect(s.problems).toEqual([]);
+  });
+
+  it('a lift lowering a held Pin onto a floor stack stops on top of it', async () => {
+    // the clear-up Cup holding a yellow Pin at (-23.548, -23.548): a Pin can't go on a Pin
+    const s = await onField('override-sixbar-wrist', { x: -23.548, y: -45, theta: 0 });
+    const stack = s.game.state.floor.find((st) => Math.hypot(st.x + 23.548, st.y + 23.548) < 0.1)!;
+    const top = stackTop(stack.pieces, 0, false);
+    s.world.adiOut.set('A', true);
+    s.sixBar(60); // high over the stack
+    s.run(300);
+    const held = () => s.world.attachments.find((a) => a.id.startsWith('claw:'))!;
+    s.world.pose = { x: stack.x - held().x, y: stack.y - held().y, theta: 0 };
+    s.game.robotTeleported();
+    s.run(100);
+    expect(held().bottom).toBeGreaterThan(top);
+    s.world.motor(7).cmd = -127;
+    s.run(1500);
+    expect(held().bottom).toBeGreaterThan(top - 0.3); // stopped on the Pin's top, not sunk into it
+    expect(Math.hypot(stack.x + 23.548, stack.y + 23.548)).toBeLessThan(0.5); // not shoved either
     expect(s.problems).toEqual([]);
   });
 

@@ -2,10 +2,10 @@
 // physics, steps them with the simulator, and records what the replay viewer needs.
 
 import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
-import type { Obstacle, World } from '../../sim/world.ts';
+import { octagon, type Obstacle, type World } from '../../sim/world.ts';
 import { dhypot } from '../../sim/dmath.ts';
-import type { Piece, PinColor } from './elements.ts';
-import { goalShape, phasing } from './overlaps.ts';
+import { nestRest, stackTop, type Piece, type PinColor } from './elements.ts';
+import { footprintRadius, goalShape, phasing } from './overlaps.ts';
 import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS, type Carried } from './physics.ts';
 import { toField } from '../../sim/lift.ts';
@@ -95,6 +95,7 @@ export class OverrideGame implements GameOps {
       if (ob) this.goalObstacles.set(g.id, ob);
     }
     this.updateGoalObstacles();
+    this.updateStackObstacles();
     world.attachments = this.manipulators.attachments();
     world.attachmentsAt = () => this.manipulators.attachments();
     this.keepInside();
@@ -203,11 +204,12 @@ export class OverrideGame implements GameOps {
       this.syncFromPhysics();
       this.world.pinnedObstacles = this.physics.pinnedObstacles([
         { poly: this.world.footprint(), bottom: 0 },
-        ...this.world.attachments.filter((a) => !a.fixedOnly).map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom, passes: (id: string) => this.physics.passes(a.id, id) })),
+        ...this.world.attachments.filter((a) => !a.fixedOnly).map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom, passes: (id: string) => this.physics.passes(a.slot ?? a.id, id) })),
       ]);
       this.manipulators.step(this.clock);
       this.world.attachments = this.manipulators.attachments();
       this.updateGoalObstacles();
+      this.updateStackObstacles();
       for (const id of this.opponentSide) {
         if (!this.physics.touchingRobot(id)) continue;
         this.rules.add(this.clock, 'SG7', 'The robot touched a Scoring Object on the opposing side of the Autonomous Line.');
@@ -232,11 +234,25 @@ export class OverrideGame implements GameOps {
     }
   }
 
+  /**
+   * The stacks standing on the floor, for lifts lowering things onto them: a held piece stops
+   * on top of one, or slides down onto it if it fits and is centred (see Obstacle.nest).
+   */
+  private updateStackObstacles(): void {
+    this.world.stackObstacles = this.state.floor.map((s) => ({
+      id: `stack ${s.id}`,
+      poly: octagon(s.x, s.y, 2 * footprintRadius(s.pieces)),
+      top: stackTop(s.pieces, 0, false),
+      nest: { x: s.x, y: s.y, rest: (kind: string) => nestRest(s.pieces, 0, false, kind) },
+    }));
+  }
+
   /** What the robot carries, in the field frame, for the floor physics. */
   private carried(): Carried[] {
     return this.world.attachments.filter((a) => !a.fixedOnly).map((a) => {
       const [x, y] = toField(this.world.pose, a);
-      return { id: a.id, x, y, r: a.r, bottom: a.bottom };
+      // the same body whatever the claw holds: what it was passing through carries over
+      return { id: a.slot ?? a.id, x, y, r: a.r, bottom: a.bottom };
     });
   }
 
@@ -282,7 +298,7 @@ export class OverrideGame implements GameOps {
   }
 
   liftedOutOf(clawName: string, stackId: string): void {
-    this.physics.expectOverlap(`claw:${clawName}:`, stackId);
+    this.physics.expectOverlap(`claw:${clawName}`, stackId);
   }
 
   violation(rule: string, message: string): void {

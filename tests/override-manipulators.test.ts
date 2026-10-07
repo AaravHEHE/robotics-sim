@@ -6,7 +6,7 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import { OverrideGame } from '../src/games/override/game.ts';
 import { loaderMouth, startingState } from '../src/games/override/manipulators.ts';
 import type { FieldDef } from '../src/sim/field.ts';
-import { clawEffector, clawTilt, liftEffector, toRobot } from '../src/sim/lift.ts';
+import { clawEffector, clawTilt, heldBottom, liftEffector, toRobot } from '../src/sim/lift.ts';
 import { validateProfile, type ClawSpec, type DeviceSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../src/sim/profile.ts';
 import { World } from '../src/sim/world.ts';
 import { prosProject, robot, simulate } from './helpers.ts';
@@ -93,14 +93,19 @@ describe('lift kinematics', () => {
 describe('Override claws', () => {
   it('starts with the Preload and places it on the alliance Goal', async () => {
     const r = await testRobot([LIFT, claw]);
-    // robot facing +x, its claw (10" ahead) over Goal R1
-    const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    // robot facing +x; lifted 20°, the Pin's bottom (3.9" up) clears the Goal top and the claw
+    // (11.4" ahead) is over Goal R1
+    const { game, run, world, lift } = await setup(r, { x: R1.x - 11.73, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
     expect(game.state.held.Claw.map((p) => p.kind === 'pin' && p.colors)).toEqual([['red', 'yellow']]);
+    lift(20);
     run(250);
     world.adiOut.set('B', false); // open
     run(250);
     expect(game.state.held.Claw).toEqual([]);
     expect(game.state.goals.R1.map((p) => p.id)).toEqual(['preload']);
+    // it fell the 3.6" from where it was let go into the socket
+    expect(game.state.transit.preload.from.z).toBeCloseTo(3.92, 1);
+    expect(game.state.transit.preload.to!.z).toBeCloseTo(0.315, 2);
     expect(game.score().score.red).toBe(5); // red half visible; yellow half unowned (neutral Toggle)
   });
 
@@ -131,9 +136,9 @@ describe('Override claws', () => {
     expect(game.state.floor.length).toBe(n - 1);
     expect(game.state.held.Claw.map((p) => p.kind)).toEqual(['cup', 'pin']); // taken whole, in order
     // carry it over R1 and lower it in: a Cup can't be Placed directly in a Goal (SC2)
-    world.pose = { x: R1.x - 10.3, y: R1.y, theta: 90 };
+    world.pose = { x: R1.x - 11.73, y: R1.y, theta: 90 };
     game.robotTeleported();
-    lift(10); // cup bottom ~2" up, just above the Goal top
+    lift(20); // the Cup's bottom ~4" up, above the Goal top
     run(250);
     world.adiOut.set('B', false);
     run(250);
@@ -463,8 +468,17 @@ describe('each robot type works like its real counterpart', () => {
     a.world.adiOut.set('B', false);
     a.run(250);
     expect(a.game.state.goals.R1).toEqual([]);
-    // level (arm down) it places
-    const b = await setup(r, { x: R1.x - 10, y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+    // a longer arm raised only 17° holds it nearly upright, over the Goal top: it places
+    const ARM2: LiftSpec = { ...ARM, length: 12, home: { y: 10, z: 5 } };
+    const r2 = await testRobot([ARM2, claw]);
+    const grip = clawEffector(r2, claw as ClawSpec, () => 0).z; // the Preload starts on the tiles
+    const at = heldBottom(r2, claw as ClawSpec, () => 17, grip);
+    expect(at.z).toBeGreaterThan(3.248);
+    const b = await setup(r2, { x: R1.x - at.y, y: R1.y, theta: 90 }, 'h2h', (w) => {
+      w.adiOut.set('B', true);
+      w.motor(7).angle = 17 / 0.2;
+      w.motor(7).brakeMode = 2;
+    });
     b.run(250);
     b.world.adiOut.set('B', false);
     b.run(250);
@@ -474,8 +488,13 @@ describe('each robot type works like its real counterpart', () => {
   it('a roller claw spits pieces out one at a time, bottom first', async () => {
     const rollerClaw: MechanismSpec = { kind: 'claw', name: 'Claw', lift: 'Lift', grip: 'roller', motors: [8], ratio: 1 };
     const r = await testRobot([LIFT, rollerClaw]);
-    const { game, run, world } = await setup(r, { x: R1.x - 10.3, y: R1.y, theta: 90 });
+    // the rollers on the Pin's collar, just under the Cup's rim, the Pin's bottom 6" up
+    const { game, run, world } = await setup(r, { x: R1.x - 11.6, y: R1.y, theta: 90 }, 'h2h', (w) => {
+      w.motor(7).angle = 30 / 0.2;
+      w.motor(7).brakeMode = 2;
+    });
     game.state.held.Claw = [{ kind: 'pin', id: 'p', colors: ['red', 'yellow'] }, { kind: 'cup', id: 'c', up: 'clear' }];
+    (game.manipulators as unknown as { claws: Array<{ grip: number }> }).claws[0].grip = 3;
     world.motor(8).cmd = -127; // spin out
     const placed: number[] = [];
     run(1000, (t) => {

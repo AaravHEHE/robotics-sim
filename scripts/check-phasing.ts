@@ -28,7 +28,7 @@ OverrideGame.prototype.step = function (this: OverrideGame, dtMs: number) {
   const world = (this as unknown as { world: World }).world;
   const held = world.attachments.map((a) => {
     const [x, y] = toField(world.pose, a);
-    return { name: a.id.split(':')[1], x, y, r: a.r, bottom: a.bottom, fixedOnly: a.fixedOnly };
+    return { name: a.id.split(':')[1], x, y, r: a.r, bottom: a.bottom, fixedOnly: a.fixedOnly, nest: a.nest };
   });
   for (const p of phasing(this.field, this.state, world.footprint(), held)) {
     current.push({ t: clock, ...p });

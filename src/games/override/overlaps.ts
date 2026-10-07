@@ -4,8 +4,8 @@
 
 import { datan2, dcos, dhypot, dsin } from '../../sim/dmath.ts';
 import type { FieldDef, GoalDef, Vec2 } from '../../sim/field.ts';
-import { crossSection, fieldObstacles, goalWidthAt, octagon, satMtv, type Obstacle } from '../../sim/world.ts';
-import { CUP, layoutStack, PIN, stackTop, type Piece } from './elements.ts';
+import { CARRY_CLEARANCE, crossSection, fieldObstacles, goalWidthAt, NEST_CAPTURE, octagon, satMtv, type Obstacle } from '../../sim/world.ts';
+import { CUP, layoutStack, nestRest, PIN, stackTop, type Piece } from './elements.ts';
 import type { OverrideState } from './state.ts';
 
 /** Overlap (in) the soft contacts of the floor physics may show for a moment. */
@@ -81,9 +81,10 @@ function polyDepth(b: Body, poly: Vec2[]): number {
  * A Goal's collision shape with the pieces on it, for something carried into it from the
  * side: as tall as its stack, and above the Goal top as wide as the pieces above that height.
  */
-export function goalShape(g: GoalDef, pieces: Piece[]): Required<Pick<Obstacle, 'top' | 'at'>> {
+export function goalShape(g: GoalDef, pieces: Piece[]): Required<Pick<Obstacle, 'top' | 'at' | 'nest'>> {
   const slots = layoutStack(pieces, g.height, true);
   return {
+    nest: { x: g.x, y: g.y, rest: (kind) => nestRest(pieces, g.height, true, kind) },
     top: Math.max(g.height, ...slots.map((s) => s.top)),
     at: (z) => {
       if (z < g.height) return octagon(g.x, g.y, goalWidthAt(g, z));
@@ -116,10 +117,19 @@ export interface HeldStack {
   bottom: number;
   /** An open claw's jaws: only Goal bodies, Loaders and walls count (they close around pieces). */
   fixedOnly?: boolean;
+  /** Its lowest piece's kind: centred on a stack it fits on, it may be below that stack's top. */
+  nest?: string;
 }
 
-/** Held this close to the centre of a Goal or stack, a held stack is going onto it (in). */
-const ONTO = 1.5;
+/**
+ * Is a held stack sliding onto a stack (on a Goal or the floor) rather than through it:
+ * centred on it, of a kind that sits on it, and not below where it would sit?
+ */
+function onto(h: HeldStack, x: number, y: number, pieces: Piece[], base: number, onGoal: boolean): boolean {
+  if (!h.nest || h.fixedOnly || dhypot(x - h.x, y - h.y) > NEST_CAPTURE + 0.05) return false;
+  const rest = nestRest(pieces, base, onGoal, h.nest);
+  return rest !== null && h.bottom >= rest - PIECE_SLOP;
+}
 
 /** Everything phasing through something else right now. */
 export function phasing(field: FieldDef, state: OverrideState, robot: Vec2[] | null, held: HeldStack[] = []): Phasing[] {
@@ -149,7 +159,8 @@ export function phasing(field: FieldDef, state: OverrideState, robot: Vec2[] | n
     for (const b of h.fixedOnly ? [] : bodies) {
       const s = state.floor.find((x) => x.id === b.id);
       const top = s ? stackTop(s.pieces, 0, false) : PIN.collarDiameter;
-      if (h.bottom >= top || (s && dhypot(s.x - h.x, s.y - h.y) <= ONTO)) continue;
+      // (carried down onto it, it rests within the chamfer clearance, as on a Goal)
+      if (h.bottom >= top - CARRY_CLEARANCE || (s && onto(h, s.x, s.y, s.pieces, 0, false))) continue;
       const d = depth(disc, b);
       if (d > ROBOT_SLOP) out.push({ what: `${disc.id} inside ${b.id}`, depth: d });
     }
@@ -158,7 +169,7 @@ export function phasing(field: FieldDef, state: OverrideState, robot: Vec2[] | n
       const ob = g && !h.fixedOnly ? { ...ob0, ...goalShape(g, state.goals[g.id] ?? []) } : ob0;
       const cross = crossSection(ob, h.bottom, h.fixedOnly);
       if (!cross) continue;
-      if (g && dhypot(g.x - h.x, g.y - h.y) <= ONTO) continue;
+      if (g && onto(h, g.x, g.y, state.goals[g.id] ?? [], g.height, true)) continue;
       const m = satMtv(octagon(h.x, h.y, 2 * h.r), cross);
       const d = m ? dhypot(m[0], m[1]) : 0;
       if (d > ROBOT_SLOP) out.push({ what: `${disc.id} inside ${ob.id}`, depth: d });

@@ -7,21 +7,22 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
-import { clawEffector, clawTilt, toField, toRobot, type Point3 } from '../../sim/lift.ts';
-import { box, octagon, satMtv } from '../../sim/world.ts';
+import { clawEffector, clawPitch, clawTilt, heldBottom, toField, toRobot, type Point3 } from '../../sim/lift.ts';
+import { box, CARRY_CLEARANCE, NEST_CAPTURE, octagon, satMtv } from '../../sim/world.ts';
 import { isMotorized, isPneumatic, type Capacity, type ClawSpec, type IntakeSpec, type LiftSpec, type MechanismSpec, type PreloadOrientation, type RobotProfile, type StagingSpec, type ToggleToolSpec, type WristSpec } from '../../sim/profile.ts';
 import type { Attachment, World } from '../../sim/world.ts';
-import { CUP, layoutStack, PIN, type Piece, type PinColor } from './elements.ts';
+import { CUP, layoutStack, nestRest, PIN, stackTop, type Piece, type PinColor } from './elements.ts';
 import { placedPrefix } from './scoring.ts';
 import { initialState, type FloorStack, type LyingPin, type OverrideState, type Transit } from './state.ts';
 import { sideOf } from './rules.ts';
 import type { ContactShape } from './toggle.ts';
 
-/** Horizontal tolerance for releasing onto a Goal or stack (in). */
-export const PLACE_TOLERANCE = 1.5;
-/** How far below / above the resting height a released stack may be and still nest (in). */
-export const PLACE_BELOW = 2;
-export const PLACE_ABOVE = 4;
+/** How far off a Goal's or stack's centre a stack let go above it still falls onto it (in). */
+export const PLACE_TOLERANCE = 1;
+/** A stack let go this far below where it sits on a stack was not on it (contact slop, in). */
+const PLACE_SLOP = 0.3;
+/** Most a stack may fall onto a Goal or stack and still land on it (in above its top). */
+export const DROP_MAX = 3;
 /** Height a claw must be at or below to take from a Loader's bottom opening, or a lying Pin. */
 const LOW_REACH = PIN.collarDiameter + 1.5;
 /** Output speed (rpm) above which rollers and intakes count as spinning. */
@@ -34,6 +35,8 @@ const ROLLER_DIAMETER = 2.75;
 const HANDOFF_REACH = 2.5;
 /** A claw closes at least this far from either end of the piece it grips (in). */
 const GRIP_MARGIN = 1;
+/** A roller claw's rollers still hold a piece whose bottom is this far above them (in). */
+const ROLLER_REACH = 1;
 /** Half the width between a claw's jaws (in): what is further to the side isn't gripped. */
 const JAW_HALF_WIDTH = 1.25;
 /** A Placed piece is only taken off a Goal when centered in the jaws (in). */
@@ -373,10 +376,11 @@ export class Manipulators {
       const e = clawEffector(this.profile, c.spec, (m) => this.world.mechanismState(m));
       const drivenBy = this.liftDrive(c.spec);
       // the jaws themselves can't reach into a Goal's body, a Loader or the wall either
-      out.push({ id: `jaws:${c.spec.name}`, x: e.x, y: e.y, r: JAW_HALF_WIDTH, bottom: e.z - GRIP_MARGIN, fixedOnly: true, drivenBy });
+      out.push({ id: `jaws:${c.spec.name}`, slot: `jaws:${c.spec.name}`, x: e.x, y: e.y, r: JAW_HALF_WIDTH, bottom: e.z - GRIP_MARGIN, fixedOnly: true, drivenBy });
       const held = this.ops.state.held[c.spec.name];
       if (!held?.length) continue;
-      out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, x: e.x, y: e.y, r: stackRadius(held), bottom: e.z - c.grip, drivenBy });
+      const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, c.flipped);
+      out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, slot: `claw:${c.spec.name}`, nest: held[0].kind, x: b.x, y: b.y, r: stackRadius(held), bottom: b.z, drivenBy });
     }
     return out;
   }
@@ -393,6 +397,9 @@ export class Manipulators {
       if (isPneumatic(lift)) pistons.push(lift.adi!.toUpperCase());
       name = lift.base;
     }
+    // a motor wrist swings what it holds too
+    const wrist = this.profile.mechanisms.find((m): m is WristSpec => m.kind === 'wrist' && m.claw === claw.name);
+    if (wrist && isMotorized(wrist)) motors.push(...wrist.motors!.map((p) => Math.abs(p)));
     return { motors, pistons };
   }
 
@@ -537,7 +544,8 @@ export class Manipulators {
   /** Put pieces into a claw; `grip` = how far above the stack bottom it holds them. */
   private receive(c: ClawRuntime, pieces: Piece[], grip: number): void {
     const held = this.ops.state.held[c.spec.name];
-    if (!held.length) c.grip = gripOn(pieces[0], grip);
+    // `grip` is measured straight down: along a pitched claw the grip point is that much further
+    if (!held.length) c.grip = gripOn(pieces[0], grip / Math.max(0.5, dcosDeg(clawPitch(this.profile, c.spec, (m) => this.world.mechanismState(m), c.flipped))));
     this.addToClaw(c, pieces);
   }
 
@@ -556,46 +564,78 @@ export class Manipulators {
     this.ops.state.held[c.spec.name] = stack;
   }
 
-  /** Let go of the held stack, or only its bottom `count` pieces (a roller claw spitting out). */
+  /** Where the bottom of what a claw holds is: field position and height. */
+  private heldAt(c: ClawRuntime): { x: number; y: number; z: number } {
+    const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, c.flipped);
+    const [x, y] = toField(this.world.pose, b);
+    return { x, y, z: b.z };
+  }
+
+  /**
+   * Let go of the held stack, or only its bottom `count` pieces (a roller claw spitting out).
+   * It goes onto a Goal or stack only if it can really get there: lowered onto it (centred,
+   * not below where it sits: the lift stops there), or let go above it close enough to its
+   * centre to fall on. Otherwise it falls to the floor.
+   */
   private release(c: ClawRuntime, count = Infinity): void {
     const { state, field } = this.ops;
     const held = state.held[c.spec.name];
-    const e = this.effector(c.spec);
-    const bottom = e.z - c.grip;
+    const b = this.heldAt(c);
     const first = held[0];
     const slots = layoutStack(held, 0, false);
     const upright = this.tilt(c.spec) <= MAX_TILT;
-    const nests = (existing: Piece[], base: number, onGoal: boolean) => {
-      // a tilted stack doesn't go on; a stack alternates Pin, Cup, Pin...: a Pin can't stand on a Pin, nor a Cup on a Cup
-      if (!upright) return false;
-      if (existing.length && existing[existing.length - 1].kind === first.kind) return false;
-      const rest = restingBottom(existing, base, onGoal, first);
-      return bottom >= rest - PLACE_BELOW && bottom <= rest + PLACE_ABOVE;
-    };
+    // what stays in the claw stays where it is in the world, held by its new bottom piece; if
+    // that is now out of the rollers' reach above them, nothing holds it: it was resting on
+    // what went out (a Pin sitting in a Cup), and goes with it
+    if (count < held.length) {
+      const grip = c.grip - (slots[count].bottom - slots[0].bottom);
+      if (grip < -ROLLER_REACH) count = held.length;
+      else c.grip = grip;
+    }
     const pieces = held.splice(0, count);
-    // what stays in the claw is held by its new bottom piece
-    // (never below the bottom of the remaining stack: a roller holds what is left at its base)
-    c.grip = held.length ? Math.max(GRIP_MARGIN, c.grip - (slots[pieces.length].bottom - slots[0].bottom)) : 0;
+    if (!held.length) c.grip = 0;
+    /** Where the stack lands on `existing` (its bottom), or null if it doesn't get there. */
+    const landsOn = (existing: Piece[], base: number, onGoal: boolean, x: number, y: number): number | null => {
+      // a tilted stack doesn't go on; a stack alternates Pin, Cup, Pin...
+      const rest = upright ? nestRest(existing, base, onGoal, first.kind) : null;
+      if (rest === null || b.z < rest - PLACE_SLOP) return null;
+      const top = Math.max(base, stackTop(existing, base, onGoal));
+      if (b.z > top + DROP_MAX) return null;
+      // below the top only centred (the lift lowered it on); from above, close enough to fall on
+      return dhypot(b.x - x, b.y - y) <= (b.z < top - CARRY_CLEARANCE ? NEST_CAPTURE + 0.05 : PLACE_TOLERANCE) ? rest : null;
+    };
+    /** The pieces fall from where they were let go onto their place on the stack. */
+    const fall = (x: number, y: number, rest: number) => {
+      const h = b.z - rest;
+      if (h <= 0.05 && dhypot(b.x - x, b.y - y) <= 0.05) return;
+      const t1 = this.now + Math.max(GRAB_MS / 2, 1000 * Math.sqrt((2 * Math.max(0, h)) / GRAVITY));
+      for (const p of pieces) this.setTransit(p.id, { from: { x: b.x, y: b.y, z: b.z }, to: { x, y, z: rest }, t0: this.now, t1 });
+    };
     for (const g of field.goals ?? []) {
-      if (dhypot(e.x - g.x, e.y - g.y) > PLACE_TOLERANCE) continue;
-      if (!nests(state.goals[g.id], g.height, true)) break; // over a Goal but it won't sit: falls off
+      if (dhypot(b.x - g.x, b.y - g.y) > PLACE_TOLERANCE) continue;
+      const rest = landsOn(state.goals[g.id], g.height, true, g.x, g.y);
+      if (rest === null) break; // over a Goal but it won't sit: falls off
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
         this.ops.violation('SG9', `The robot added Scoring Objects to opponent Goal ${g.id}.`);
       } else if (this.ops.mode === 'h2h' && g.color === 'neutral' && this.opposingSide(g)) {
         this.ops.violation('SG7', `The robot placed Scoring Objects on Goal ${g.id}, on the opposing side of the Autonomous Line.`);
       }
       state.goals[g.id].push(...pieces);
+      fall(g.x, g.y, rest);
       this.ops.changed();
       return;
     }
     for (const s of state.floor) {
-      if (dhypot(e.x - s.x, e.y - s.y) > PLACE_TOLERANCE || !nests(s.pieces, 0, false)) continue;
+      if (dhypot(b.x - s.x, b.y - s.y) > PLACE_TOLERANCE) continue;
+      const rest = landsOn(s.pieces, 0, false, s.x, s.y);
+      if (rest === null) continue;
       s.pieces.push(...pieces);
+      fall(s.x, s.y, rest);
       this.ops.rebuildFloor(s);
       this.ops.changed();
       return;
     }
-    this.dropAt(pieces, e.x, e.y, bottom);
+    this.dropAt(pieces, b.x, b.y, b.z);
     this.ops.changed();
   }
 

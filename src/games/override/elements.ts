@@ -84,3 +84,16 @@ export function stackTop(pieces: Piece[], baseHeight: number, onGoal: boolean): 
   const s = layoutStack(pieces, baseHeight, onGoal);
   return s.length ? s[s.length - 1].top : baseHeight;
 }
+
+/**
+ * Where the bottom of a piece of `kind` sits when set on top of `existing` (on a Goal of
+ * height `base`, or the floor), or null if it can't sit there: a stack alternates Pin, Cup,
+ * Pin... (a Pin can't stand on a Pin, nor a Cup on a Cup).
+ */
+export function nestRest(existing: Piece[], base: number, onGoal: boolean, kind: string): number | null {
+  if (kind !== 'pin' && kind !== 'cup') return null;
+  if (existing.length && existing[existing.length - 1].kind === kind) return null;
+  const next: Piece = kind === 'pin' ? { kind, id: '', colors: ['red', 'red'] } : { kind, id: '', up: 'gray' };
+  const slots = layoutStack([...existing, next], base, onGoal);
+  return slots[slots.length - 1].bottom;
+}

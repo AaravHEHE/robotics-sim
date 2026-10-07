@@ -258,6 +258,13 @@ export class World {
   /** The pairs in `overlapping` that met from above: lowering further would sink into it. */
   private readonly resting = new Set<string>();
   private readonly knownAttachments = new Set<string>();
+  /** Attachment / stack pairs where the attachment is centred on the stack, sliding onto it (`Obstacle.nest`). */
+  private readonly nested = new Set<string>();
+  /**
+   * The stacks standing on the floor (set by a game): a lift lowering something onto one stops
+   * on it like on a Goal; sideways the floor physics pushes them, so they don't block the robot.
+   */
+  stackObstacles: Obstacle[] = [];
   /**
    * What the robot carries for the mechanisms' current positions (set by a game): a lift that
    * would lower something into what it rests on stalls there, as a real lift stops on a Goal.
@@ -535,23 +542,72 @@ export class World {
     this.knownAttachments.clear();
   }
 
+  private static key(a: Attachment, ob: Obstacle): string {
+    return (a.slot ?? a.id) + '\n' + ob.id;
+  }
+
+  /** Field-frame centre of an attachment at the current pose. */
+  attachmentCentre(a: Pick<Attachment, 'x' | 'y'>): Vec2 {
+    const s = dsinDeg(this.pose.theta);
+    const c = dcosDeg(this.pose.theta);
+    return [this.pose.x + a.x * c + a.y * s, this.pose.y - a.x * s + a.y * c];
+  }
+
   /**
-   * A lift that has lowered a claw, or what it holds, onto a Goal (or Loader, or stuck piece)
-   * from above can't push it down into it: the lift stops where it was.
+   * The part of an obstacle an attachment runs into, or null: nothing, if it is above it, or
+   * centred on a stack it is sliding down onto (see `Obstacle.nest`) and not below where it sits.
+   */
+  private sectionOf(a: Attachment, ob: Obstacle): Vec2[] | null {
+    if (ob.nest && this.nested.has(World.key(a, ob))) {
+      const rest = ob.nest.rest(a.nest!);
+      if (rest !== null && a.bottom >= rest - NEST_SLOP) return null;
+    }
+    return crossSection(ob, a.bottom, a.fixedOnly);
+  }
+
+  /** Is an attachment centred enough on a stack to slide down onto it? */
+  private centredOn(a: Attachment, ob: Obstacle): boolean {
+    if (!ob.nest || !a.nest || a.fixedOnly || ob.nest.rest(a.nest) === null) return false;
+    const [cx, cy] = this.attachmentCentre(a);
+    return dhypot(cx - ob.nest.x, cy - ob.nest.y) <= NEST_CAPTURE + 1e-9;
+  }
+
+  /** What a lift can lower things onto: the obstacles, and the stacks standing on the floor. */
+  private stallObstacles(): Obstacle[] {
+    const out = [...this.obstacles, ...this.pinnedObstacles];
+    for (const ob of this.stackObstacles) if (!out.some((o) => o.id === ob.id)) out.push(ob);
+    return out;
+  }
+
+  /**
+   * A lift that has lowered a claw, or what it holds, onto a Goal (or Loader, or stack) from
+   * above can't push it down into it, and one that swings it sideways into one is stopped by
+   * it: the lift stays where it was.
    */
   private stallLifts(anglesBefore: Map<number, number>, pistonsBefore: Map<string, number>): void {
-    if (!this.attachmentsAt || !this.resting.size) return;
-    const before = new Map(this.attachments.map((a) => [a.id, a.bottom]));
-    const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
+    if (!this.attachmentsAt || !this.attachments.length) return;
+    const before = new Map(this.attachments.map((a) => [a.slot ?? a.id, a]));
+    const obstacles = this.stallObstacles();
     for (const a of this.attachmentsAt()) {
-      if (!a.drivenBy || !(a.bottom < (before.get(a.id) ?? -Infinity))) continue;
+      const was = before.get(a.slot ?? a.id);
+      if (!a.drivenBy || !was) continue;
       const poly = this.attachmentPoly(a);
-      const sinks = obstacles.some((ob) => {
-        if (!this.resting.has(a.id + '\n' + ob.id)) return false;
-        const cross = crossSection(ob, a.bottom, a.fixedOnly);
-        return !!cross && !!satMtv(poly, cross);
+      const wasPoly = this.attachmentPoly(was);
+      const lower = a.bottom < was.bottom - 1e-9;
+      const blocked = obstacles.some((ob) => {
+        // floor stacks only stop what comes down onto them; sideways, the floor physics pushes them
+        const stack = this.stackObstacles.includes(ob);
+        const key = World.key(a, ob);
+        if (this.overlapping.has(key) && !this.resting.has(key)) return false; // picked up touching it
+        const cross = this.sectionOf(a, ob);
+        if (!cross || !satMtv(poly, cross)) return false;
+        if (this.resting.has(key)) return lower;
+        // swung into it: it wasn't in the way before the lift moved
+        if (stack) return false;
+        const old = this.sectionOf(was, ob);
+        return !old || !satMtv(wasPoly, old);
       });
-      if (!sinks) continue;
+      if (!blocked) continue;
       for (const port of a.drivenBy.motors) {
         const m = this.motors.get(port);
         if (!m) continue;
@@ -564,28 +620,33 @@ export class World {
 
   /** Field-frame outline of an attachment at the current pose. */
   attachmentPoly(a: Attachment): Vec2[] {
-    const s = dsinDeg(this.pose.theta);
-    const c = dcosDeg(this.pose.theta);
-    return octagon(this.pose.x + a.x * c + a.y * s, this.pose.y - a.x * s + a.y * c, 2 * a.r);
+    const [x, y] = this.attachmentCentre(a);
+    return octagon(x, y, 2 * a.r);
   }
 
   /** Track which attachment / obstacle pairs may overlap (see `overlapping`). */
   private updateOverlapping(obstacles: Obstacle[]): void {
-    const now = new Set(this.attachments.map((a) => a.id));
-    for (const key of [...this.overlapping]) {
-      if (now.has(key.slice(0, key.indexOf('\n')))) continue;
-      this.overlapping.delete(key);
-      this.resting.delete(key);
+    const now = new Set(this.attachments.map((a) => a.slot ?? a.id));
+    for (const set of [this.overlapping, this.resting, this.nested]) {
+      for (const key of [...set]) if (!now.has(key.slice(0, key.indexOf('\n')))) set.delete(key);
     }
     for (const a of this.attachments) {
-      const fresh = !this.knownAttachments.has(a.id);
+      const fresh = !this.knownAttachments.has(a.slot ?? a.id);
       const poly = this.attachmentPoly(a);
       for (const ob of obstacles) {
-        const key = a.id + '\n' + ob.id;
+        const key = World.key(a, ob);
+        // sliding down onto a stack: it must be centred on it while still above it
+        // (once below its top it stays on it: it can't leave sideways, see resolveObstacles)
+        const rest = ob.nest && a.nest && !a.fixedOnly ? ob.nest.rest(a.nest) : null;
+        if (rest === null) this.nested.delete(key);
+        else if (crossSection(ob, a.bottom, a.fixedOnly) === null) {
+          if (this.centredOn(a, ob)) this.nested.add(key);
+          else this.nested.delete(key);
+        } else if (fresh && this.centredOn(a, ob) && a.bottom >= rest - 0.3) this.nested.add(key); // taken off the stack
         if (!satMtv(poly, ob.poly)) {
           this.overlapping.delete(key);
           this.resting.delete(key);
-        } else if (!crossSection(ob, a.bottom, a.fixedOnly) && satMtv(poly, topOutline(ob, a.fixedOnly))) {
+        } else if (!this.sectionOf(a, ob) && (this.nested.has(key) || satMtv(poly, topOutline(ob, a.fixedOnly)))) {
           this.overlapping.add(key);
           this.resting.add(key);
         } else if (fresh) this.overlapping.add(key);
@@ -599,7 +660,7 @@ export class World {
   private resolveObstacles(): void {
     let hit = '';
     const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
-    if (this.attachments.length || this.overlapping.size) this.updateOverlapping(obstacles);
+    if (this.attachments.length || this.overlapping.size) this.updateOverlapping(this.stallObstacles());
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       for (const ob of obstacles) {
@@ -613,12 +674,27 @@ export class World {
       // what the robot carries outside its frame runs into anything it is not above
       for (const a of this.attachments) {
         for (const ob of obstacles) {
-          if (this.overlapping.has(a.id + '\n' + ob.id) || (a.fixedOnly && this.pinnedObstacles.includes(ob))) continue;
-          const cross = crossSection(ob, a.bottom, a.fixedOnly);
+          if (this.overlapping.has(World.key(a, ob)) || (a.fixedOnly && this.pinnedObstacles.includes(ob))) continue;
+          const cross = this.sectionOf(a, ob);
           const mtv = cross && satMtv(this.attachmentPoly(a), cross);
           if (!mtv) continue;
           this.pose.x += mtv[0];
           this.pose.y += mtv[1];
+          hit = ob.id;
+          moved = true;
+        }
+      }
+      // a piece slid down onto a stack can't leave it sideways until it is lifted off the top
+      for (const a of this.attachments) {
+        for (const ob of [...obstacles, ...this.stackObstacles]) {
+          if (!ob.nest || !this.nested.has(World.key(a, ob)) || crossSection(ob, a.bottom, a.fixedOnly) === null) continue;
+          const [cx, cy] = this.attachmentCentre(a);
+          const dx = ob.nest.x - cx;
+          const dy = ob.nest.y - cy;
+          const d = dhypot(dx, dy);
+          if (d <= NEST_CAPTURE) continue;
+          this.pose.x += (dx / d) * (d - NEST_CAPTURE);
+          this.pose.y += (dy / d) * (d - NEST_CAPTURE);
           hit = ob.id;
           moved = true;
         }
@@ -802,12 +878,31 @@ export interface Obstacle {
   at?: (z: number) => Vec2[];
   /** The fixed part alone, when `top` / `at` also cover movable things on it (a Goal's pieces). */
   body?: { top?: number; at?: (z: number) => Vec2[] };
+  /**
+   * Pieces stacked here (field frame centre): a carried piece that fits on top (a Cup over a
+   * Pin's end, a Pin's end into a Cup) and is centred on it slides down below the top, to
+   * `rest(kind)` (its bottom when sitting on the stack); null: that kind can't sit there.
+   */
+  nest?: { x: number; y: number; rest: (kind: string) => number | null };
 }
+
+/** How far off a stack's axis a carried piece can be and still slide onto it (in): Cup rim vs Pin cone. */
+export const NEST_CAPTURE = 0.4;
+/** A piece lowered onto a stack stops this close above where it sits (contact, in). */
+const NEST_SLOP = 0.02;
 
 /** A part of the robot outside its frame that runs into things: a claw, or the stack it holds. */
 export interface Attachment {
   /** Changes whenever what is carried changes (a new pickup counts as appearing). */
   id: string;
+  /**
+   * The same part whatever it carries (a claw): what it was touching carries over when `id`
+   * changes (a roller spitting out its bottom piece, a wrist flip, an intake adding pieces).
+   * Only an attachment that appears under a new slot (a claw that was empty) starts out free.
+   */
+  slot?: string;
+  /** What its lowest piece is (`'pin'`, `'cup'`): it can slide down onto a stack it fits on. */
+  nest?: string;
   /** Centre in the robot frame (+x right, +y forward), inches. */
   x: number;
   y: number;

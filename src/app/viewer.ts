@@ -68,6 +68,8 @@ export class FieldViewer {
   private readonly toggleRolls = new Map<string, THREE.Group>();
   /** Movable piece nodes (floor stacks, lying pins) of the shown game state, by id. */
   private pieceNodes = new Map<string, THREE.Object3D>();
+  /** Standing pieces by id, and where each was built (its place on its stack). */
+  private pieceMeshes = new Map<string, { mesh: THREE.Object3D; home: THREE.Vector3 }>();
   private lyingIds = new Set<string>();
   private gameRec: OverrideRecording | null = null;
   private shownSnapshot = -1;
@@ -427,12 +429,14 @@ export class FieldViewer {
   setGameState(state: OverrideState | null) {
     this.gameGroup.clear();
     this.pieceNodes = new Map();
+    this.pieceMeshes = new Map();
     this.lyingIds = new Set(state?.lying.map((l) => l.id) ?? []);
     this.lastGameState = state;
     this.manipVis?.setHeld(state);
     if (state && this.field) {
-      const { group, nodes } = piecesGroup(this.field, state);
+      const { group, nodes, pieces } = piecesGroup(this.field, state);
       this.pieceNodes = nodes;
+      this.pieceMeshes = new Map([...pieces].map(([id, mesh]) => [id, { mesh, home: mesh.position.clone() }]));
       this.gameGroup.add(group);
       for (const t of state.toggles) {
         // +angle = top rolls outward = negative rotation about the local x axis
@@ -627,6 +631,22 @@ export class FieldViewer {
     }
     // dropped pieces fall from where they were let go
     for (const [id, tr] of Object.entries(this.lastGameState?.transit ?? {})) {
+      if (tr.to) {
+        // set down above a Goal or stack: it falls onto its place there
+        const p = this.pieceMeshes.get(id);
+        if (!p) continue;
+        p.mesh.position.copy(p.home);
+        if (t >= tr.t1) continue;
+        const s = Math.max(0, (t - tr.t0) / 1000);
+        const h = tr.from.z - tr.to.z;
+        const fallen = 0.5 * GRAVITY_IN * s * s;
+        const k = h > 0 ? Math.min(1, fallen / h) : Math.min(1, (t - tr.t0) / Math.max(1, tr.t1 - tr.t0));
+        // three: x = field x, y up, z = -field y
+        p.mesh.position.x += (tr.from.x - tr.to.x) * (1 - k);
+        p.mesh.position.y += Math.max(0, h - fallen);
+        p.mesh.position.z -= (tr.from.y - tr.to.y) * (1 - k);
+        continue;
+      }
       const node = this.pieceNodes.get(id);
       if (!node) continue;
       const s = Math.max(0, (t - tr.t0) / 1000);

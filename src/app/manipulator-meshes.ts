@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { layoutStack, type Piece } from '../games/override/elements.ts';
 import { clawClosed } from '../games/override/manipulators.ts';
 import type { OverrideState, Transit } from '../games/override/state.ts';
-import { baseOffset, clawEffector, liftEffector, liftPosition, toRobot, type Point3 } from '../sim/lift.ts';
+import { baseOffset, clawEffector, clawPitch, liftEffector, liftPosition, toRobot, type Point3 } from '../sim/lift.ts';
 import type { ClawSpec, IntakeSpec, LiftSpec, MechanismSpec, RobotProfile, StagingSpec } from '../sim/profile.ts';
 import { cupMesh, pinMesh } from './override-meshes.ts';
 import { partSize } from './parts/assembly.ts';
@@ -422,11 +422,8 @@ export class ManipulatorVisuals {
     const state = this.state;
     const e = local(clawEffector(this.profile, c.spec, v));
     c.pivot.position.copy(e);
-    // a claw on a single-pivot arm pitches with the arm; a motor wrist turns it
-    const lift = c.spec.lift ? this.profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === c.spec.lift) : undefined;
-    let pitch = lift?.lift === 'arm' ? v(lift) * (lift.facing === 'rear' ? -1 : 1) : 0;
-    const wrist = this.profile.mechanisms.find((m) => m.kind === 'wrist' && m.claw === c.spec.name);
-    if (wrist && !wrist.adi) pitch += v(wrist) - (state?.flipped?.[c.spec.name] ? 180 : 0);
+    // a claw on a single-pivot arm pitches with the arm; a motor wrist turns it (as the simulator has it)
+    const pitch = clawPitch(this.profile, c.spec, v, !!state?.flipped?.[c.spec.name]);
     c.pivot.rotation.set(pitch * DEG, 0, 0);
     c.stack.position.set(0, -(state?.grip[c.spec.name] ?? 0), 0);
     c.stack.quaternion.identity();

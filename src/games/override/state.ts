@@ -38,6 +38,8 @@ export interface ToggleState {
 export interface Transit {
   /** Field position it started from, and the height of its bottom (in). */
   from: { x: number; y: number; z: number };
+  /** Where it ends up, when that is on a Goal or stack (its bottom there): it falls onto it. */
+  to?: { x: number; y: number; z: number };
   /** It started out lying, pointing this way (degrees): it is turned upright on the way. */
   lying?: number;
   t0: number;

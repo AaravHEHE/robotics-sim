@@ -52,7 +52,7 @@ export interface BodyPose {
 
 /** Something the robot carries that pushes floor pieces: a held stack (field frame, in). */
 export interface Carried {
-  /** Changes whenever what is carried changes. */
+  /** The carrying part (a claw): the same body whatever it holds. */
   id: string;
   x: number;
   y: number;
@@ -235,13 +235,20 @@ export class FloorPhysics {
     }
     for (const c of list) {
       let h = this.carried.get(c.id);
+      // taken out of a floor stack: it starts out passing through what is left of that stack
+      for (let k = this.expected.length - 1; k >= 0; k--) {
+        if (c.id !== this.expected[k].carried) continue;
+        this.passing.add(c.id + '\n' + this.expected[k].piece);
+        this.expected.splice(k, 1);
+      }
+      if (h && h.c.r !== c.r) {
+        // what it carries changed size: a new outline, same pairs
+        this.carriedOf.delete(h.body.handle);
+        this.world.removeRigidBody(h.body);
+        this.carried.delete(c.id);
+        h = undefined;
+      }
       if (!h) {
-        // taken out of a floor stack: it starts out passing through what is left of that stack
-        for (let k = this.expected.length - 1; k >= 0; k--) {
-          if (!c.id.startsWith(this.expected[k].prefix)) continue;
-          this.passing.add(c.id + '\n' + this.expected[k].piece);
-          this.expected.splice(k, 1);
-        }
         const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(c.x * M, c.y * M));
         this.world.createCollider(RAPIER.ColliderDesc.ball(c.r * M).setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS), body);
         h = { body, c };
@@ -251,6 +258,7 @@ export class FloorPhysics {
       h.c.x = c.x;
       h.c.y = c.y;
       h.c.bottom = c.bottom;
+      h.c.r = c.r;
       for (const id of this.bodies.keys()) {
         const key = c.id + '\n' + id;
         if (!this.overlapsDisc(id, c.x, c.y, c.r)) this.passing.delete(key);
@@ -261,10 +269,10 @@ export class FloorPhysics {
     this.expected.length = 0; // only for the stack picked up just before this step
   }
 
-  /** A carried stack about to appear (id starting with `prefix`) comes out of this piece. */
-  private readonly expected: Array<{ prefix: string; piece: string }> = [];
-  expectOverlap(prefix: string, piece: string): void {
-    this.expected.push({ prefix, piece });
+  /** A carried stack (`carried`: its id) is taking pieces out of this piece: they start out overlapping. */
+  private readonly expected: Array<{ carried: string; piece: string }> = [];
+  expectOverlap(carried: string, piece: string): void {
+    this.expected.push({ carried, piece });
   }
 
   /** Does a carried stack pass through a piece right now (see setCarried)? */
