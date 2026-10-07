@@ -87,6 +87,8 @@ Found with `scripts/check-phasing.ts` (every shipped sample, checked after every
 | A held stack lowered onto a loose floor stack sank into it. | Floor stacks stall a lift like a Goal does. |
 | For a moment after a roller claw spat a piece out, a wrist flipped, or an intake handed pieces to the claw, the claw passed through anything. The Pin left in a roller claw jumped 3.5″ down into the Cup it had just spat out. | What a claw was touching carries over whatever it holds. What stays in a roller claw stays where it is, and a Pin resting in the spat Cup goes with it. |
 
+When a piece let go at a Goal doesn't land on it, the run's Notes say why: too low, off-centre, too high, tilted, or a Pin on a Pin or Cup on a Cup. When what a claw holds runs into a Goal below its top, the Events say so. A project saved in the browser that is an unedited copy of an older sample is replaced by the current sample when the app opens; an edited copy is kept, with a note.
+
 The sample autons used to carry pieces too low and relied on this. They now lift over each
 Goal and stack first; Flex no longer stacks, because its tilting arm claw can't lift a Cup
 over a Placed Pin and still set it down level ([robots.md](robots.md)).

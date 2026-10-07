@@ -472,6 +472,13 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   }
   if (marker && marker.t1 === null) marker.t1 = sched.now;
   for (const c of world.collisions) {
+    // what a claw holds (or its jaws) carried into a Goal below its top: the commonest auton bug
+    const by = c.by?.split(':');
+    const part = by ? (by[0] === 'claw' ? `What ${by[1]} holds` : `The ${by[1]} claw`) : '';
+    if (part && /^(goal|loader) /.test(c.wall)) {
+      events.push({ t: c.t, level: 'info', message: `${part} ran into ${c.wall} below its top (and what is on it), stopping the robot. Lift it higher before driving in.` });
+      continue;
+    }
     events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : /^piece /.test(c.wall) ? `Robot pushed a Scoring Object (${c.wall.slice(6)}) that couldn't move out of the way.` : /^(near|far|left|right)$/.test(c.wall) ? `Robot hit the ${c.wall} wall.` : `Robot hit ${c.wall}.` });
   }
   let gameRec: OverrideRecording | null = null;

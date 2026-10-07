@@ -595,15 +595,25 @@ export class Manipulators {
     const pieces = held.splice(0, count);
     if (!held.length) c.grip = 0;
     /** Where the stack lands on `existing` (its bottom), or null if it doesn't get there. */
-    const landsOn = (existing: Piece[], base: number, onGoal: boolean, x: number, y: number): number | null => {
-      // a tilted stack doesn't go on; a stack alternates Pin, Cup, Pin...
-      const rest = upright ? nestRest(existing, base, onGoal, first.kind) : null;
-      if (rest === null || b.z < rest - PLACE_SLOP) return null;
+    const what = first.kind === 'pin' ? 'Pin' : 'Cup';
+    const inches = (v: number) => `${v.toFixed(1)}″`;
+    /** Where the stack lands on `existing` (its bottom), or why it doesn't get there. */
+    const landsOn = (existing: Piece[], base: number, onGoal: boolean, x: number, y: number): number | string => {
+      if (!upright) return `the claw was tilted ${Math.round(this.tilt(c.spec))}° (at most ${MAX_TILT}° sets a stack down)`;
+      // a stack alternates Pin, Cup, Pin...
+      const rest = nestRest(existing, base, onGoal, first.kind);
+      if (rest === null) return `a ${what} can't sit on a ${what}`;
       const top = Math.max(base, stackTop(existing, base, onGoal));
-      if (b.z > top + DROP_MAX) return null;
+      const off = dhypot(b.x - x, b.y - y);
+      if (b.z < rest - PLACE_SLOP) return `its bottom was ${inches(rest - b.z)} below where it would sit (it can't have got there: carry it over the top first)`;
+      if (b.z > top + DROP_MAX) return `it was let go ${inches(b.z - top)} above the top (at most ${inches(DROP_MAX)} lands on it)`;
       // below the top only centred (the lift lowered it on); from above, close enough to fall on
-      return dhypot(b.x - x, b.y - y) <= (b.z < top - CARRY_CLEARANCE ? NEST_CAPTURE + 0.05 : PLACE_TOLERANCE) ? rest : null;
+      const max = b.z < top - CARRY_CLEARANCE ? NEST_CAPTURE + 0.05 : PLACE_TOLERANCE;
+      if (off > max) return `it was ${inches(off)} off the center (at most ${inches(max)})`;
+      return rest;
     };
+    /** Say why a stack let go over a Goal or stack fell off instead: autons can be fixed from it. */
+    let missed = '';
     /** The pieces fall from where they were let go onto their place on the stack. */
     const fall = (x: number, y: number, rest: number) => {
       const h = b.z - rest;
@@ -612,9 +622,15 @@ export class Manipulators {
       for (const p of pieces) this.setTransit(p.id, { from: { x: b.x, y: b.y, z: b.z }, to: { x, y, z: rest }, t0: this.now, t1 });
     };
     for (const g of field.goals ?? []) {
-      if (dhypot(b.x - g.x, b.y - g.y) > PLACE_TOLERANCE) continue;
+      // (near misses say why: a release up to 3 in off a Goal is meant for it)
+      if (dhypot(b.x - g.x, b.y - g.y) > 3) continue;
       const rest = landsOn(state.goals[g.id], g.height, true, g.x, g.y);
-      if (rest === null) break; // over a Goal but it won't sit: falls off
+      if (typeof rest === 'string') {
+        missed = `At ${(this.now / 1000).toFixed(2)} s, the ${what} ${c.spec.name} let go at Goal ${g.id} didn't land on it: ${rest}.`;
+        // over the Goal but it won't sit: it falls off (beside it, it may still land on a stack there)
+        if (dhypot(b.x - g.x, b.y - g.y) <= PLACE_TOLERANCE) break;
+        continue;
+      }
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
         this.ops.violation('SG9', `The robot added Scoring Objects to opponent Goal ${g.id}.`);
       } else if (this.ops.mode === 'h2h' && g.color === 'neutral' && this.opposingSide(g)) {
@@ -628,13 +644,15 @@ export class Manipulators {
     for (const s of state.floor) {
       if (dhypot(b.x - s.x, b.y - s.y) > PLACE_TOLERANCE) continue;
       const rest = landsOn(s.pieces, 0, false, s.x, s.y);
-      if (rest === null) continue;
+      if (typeof rest === 'string') continue;
       s.pieces.push(...pieces);
       fall(s.x, s.y, rest);
       this.ops.rebuildFloor(s);
       this.ops.changed();
       return;
     }
+    // say why it fell instead of landing on the Goal it was let go at: autons can be fixed from it
+    if (missed) this.ops.note(missed);
     this.dropAt(pieces, b.x, b.y, b.z);
     this.ops.changed();
   }
