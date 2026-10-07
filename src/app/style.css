@@ -274,8 +274,7 @@ select, input[type='number'] {
 .score-table th, .score-table td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); }
 .score-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
 
-/* ---------------- Map tab (auton mapping) ---------------- */
-.bottom.tall { height: 340px; }
+/* ---------------- Map workspace (auton mapping) ---------------- */
 .map-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .map-bar label { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -298,7 +297,6 @@ select, input[type='number'] {
 .map-side select { max-width: 100%; }
 .map-result { margin: 4px 0 0; font-size: 12px; }
 @media (max-width: 900px) {
-  .bottom.tall { height: 60vh; }
   .map-table input { width: 5ch; }
 }
 
@@ -364,3 +362,45 @@ select, input[type='number'] {
 .map-total.over { color: var(--err, #d8343a); }
 .pk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pk-side input { width: 100%; }
+
+/* ---------------- workspaces: Run autons / Map an auton / CAD a robot ---------------- */
+.workspaces { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); }
+.workspaces button { border: none; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
+.workspaces button:hover { color: var(--text); }
+.workspaces button.active { background: var(--accent); color: #fff; }
+body:not([data-mode='run']) .run-only { display: none !important; }
+body[data-mode='cad'] .no-cad { display: none !important; }
+
+/* run: code + field; the map pane is the Map workspace's */
+.map-pane { display: none; }
+.pane-title { margin: 0 0 4px; font-size: 15px; }
+
+/* map: the field beside the plan */
+body[data-mode='map'] .code-pane { display: none; }
+body[data-mode='map'] .layout { grid-template-columns: minmax(0, 1fr) minmax(440px, 42%); }
+body[data-mode='map'] .map-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: auto; padding: 12px 16px; border-left: 1px solid var(--border); background: var(--surface); }
+body[data-mode='map'] .map-body { flex-direction: column; align-items: stretch; overflow-x: auto; }
+body[data-mode='map'] .map-side { max-width: none; }
+
+/* cad: the robot editor fills the page */
+.cad-page { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 24px; }
+.cad-page[hidden], main.layout[hidden] { display: none !important; }
+.cad-head { max-width: 1400px; margin: 0 auto 10px; }
+.cad-head h2 { margin: 0 0 4px; }
+.cad-head p { margin: 0; font-size: 13px; }
+.cad-page .robot-grid { max-width: 1400px; margin: 0 auto; grid-template-columns: minmax(0, 1fr) 280px; align-items: start; }
+.cad-page .robot-side { position: sticky; top: 0; }
+.pk-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.cad-page .rl-view { height: min(40vh, 380px); }
+.cad-page .rl-preview { height: 280px; }
+.cad-page .pk-view { height: min(62vh, 620px); }
+.cad-page .json-editor { height: min(70vh, 700px); }
+
+@media (max-width: 900px) {
+  .workspaces { order: -1; flex: 1 1 100%; }
+  .workspaces button { flex: 1; padding: 6px 4px; }
+  body[data-mode='map'] .layout { display: flex; flex-direction: column; }
+  body[data-mode='map'] .map-pane { border-left: none; border-top: 1px solid var(--border); overflow: visible; }
+  .cad-page .robot-grid { grid-template-columns: 1fr; }
+  .cad-page .robot-side { position: static; }
+}

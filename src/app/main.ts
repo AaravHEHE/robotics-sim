@@ -110,9 +110,39 @@ document.querySelectorAll<HTMLButtonElement>('.btab').forEach((b) => {
 function showTab(name: string) {
   document.querySelectorAll('.btab').forEach((x) => x.classList.toggle('active', (x as HTMLElement).dataset.tab === name));
   document.querySelectorAll('.bpanel').forEach((x) => x.classList.toggle('active', x.id === 'panel-' + name));
-  // the map needs room for its table
-  document.querySelector('.bottom')?.classList.toggle('tall', name === 'map');
 }
+
+// ---------------- workspaces: run autons, map an auton, CAD a robot ----------------
+
+type Workspace = 'run' | 'map' | 'cad';
+let workspace: Workspace = 'run';
+function setWorkspace(mode: Workspace) {
+  const prev = workspace;
+  workspace = mode;
+  document.body.dataset.mode = mode;
+  document.querySelectorAll<HTMLButtonElement>('.workspaces [data-mode]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+    b.setAttribute('aria-selected', String(b.dataset.mode === mode));
+  });
+  document.querySelector<HTMLElement>('main.layout')!.hidden = mode === 'cad';
+  $('cad-page').hidden = mode !== 'cad';
+  try {
+    localStorage.setItem('workspace', mode);
+  } catch {
+    /* private window: not remembered */
+  }
+  if (mode === 'map' && prev !== 'map') {
+    // plan from above, with the plot tool ready
+    document.querySelector<HTMLButtonElement>('.view-buttons [data-view="top"]')?.click();
+    mapPanel?.setMode('plot');
+  }
+  if (mode !== 'map') mapPanel?.setMode('off');
+  if (mode === 'cad') {
+    if (cadRobotId !== state.robotId) openRobotEditor();
+    else if (!$('robot-parts').hidden) partsBuilder?.refresh();
+  }
+}
+document.querySelectorAll<HTMLButtonElement>('.workspaces [data-mode]').forEach((b) => (b.onclick = () => setWorkspace(b.dataset.mode as Workspace)));
 
 // camera buttons
 document.querySelectorAll<HTMLButtonElement>('.view-buttons button').forEach((b) => {
@@ -173,11 +203,14 @@ $<HTMLSelectElement>('robot-select').onchange = async (e) => {
   clearRecording();
   await applyRobot();
   persistSettings();
+  if (workspace === 'cad') openRobotEditor();
   const { auton } = samplesFor(state.robotId);
   if (!auton) return;
   if (codeIsUnchangedSample()) {
     await openSample(auton);
-    setStatus(`Opened “${auton.name}”, the auton written for this robot. Press Run.`, 'ok');
+    if (workspace === 'run') setStatus(`Opened “${auton.name}”, the auton written for this robot. Press Run.`, 'ok');
+  } else if (workspace !== 'run') {
+    // your own code stays; the Auton button opens this robot's auton
   } else if (confirm(`Open the auton written for “${robot().name}”?\n\nYour current code was written for its own robot's ports; on this robot its motors and pistons may do nothing. OK replaces it (use Export first to keep a copy). Cancel keeps your code.`)) {
     await openSample(auton);
     setStatus(`Opened “${auton.name}”. Press Run.`, 'ok');
@@ -1095,25 +1128,33 @@ $('btn-samples').onclick = () => {
   $<HTMLDialogElement>('dlg-samples').showModal();
 };
 
-// ---------------- robot editor dialog ----------------
+// ---------------- robot editor (the CAD workspace) ----------------
 
 let robotEditor: ReturnType<typeof jsonEditor> | null = null;
 let layoutEditor: LayoutEditor | null = null;
 let partsBuilder: PartsBuilder | null = null;
+/** The robot the CAD workspace is editing (its unsaved edits survive switching workspaces). */
+let cadRobotId: string | null = null;
+/** Opens the parts kit on the robot being edited (set by openRobotEditor). */
+let openPartsKit: () => Promise<void> = async () => {};
 
-/** The robot dialog's tabs: the visual layout editor, or the JSON. */
-function showRobotTab(tab: 'layout' | 'json') {
+type RobotTab = 'layout' | 'parts' | 'json';
+/** The CAD workspace's tabs: the layout editor, the VEX parts kit, or the JSON. */
+function showRobotTab(tab: RobotTab) {
   document.querySelectorAll<HTMLButtonElement>('[data-rtab]').forEach((b) => b.classList.toggle('active', b.dataset.rtab === tab));
   $('robot-layout').hidden = tab !== 'layout';
+  $('robot-parts').hidden = tab !== 'parts';
   $('robot-json').hidden = tab !== 'json';
+  if (tab === 'parts') void openPartsKit();
 }
-document.querySelectorAll<HTMLButtonElement>('[data-rtab]').forEach((b) => (b.onclick = () => showRobotTab(b.dataset.rtab as 'layout' | 'json')));
-// Ctrl+Z in the layout editor (the JSON editor has its own)
-$('dlg-robot').addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !$('robot-layout').hidden && !(e.target as HTMLElement).closest('input, textarea, select')) {
-    e.preventDefault();
-    layoutEditor?.undo();
-  }
+document.querySelectorAll<HTMLButtonElement>('[data-rtab]').forEach((b) => (b.onclick = () => showRobotTab(b.dataset.rtab as RobotTab)));
+// Ctrl+Z in the layout editor and the parts kit (the JSON editor has its own)
+$('cad-page').addEventListener('keydown', (e) => {
+  if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') || (e.target as HTMLElement).closest('input, textarea, select, .json-editor')) return;
+  if (!$('robot-layout').hidden) layoutEditor?.undo();
+  else if (!$('robot-parts').hidden) partsBuilder?.undo();
+  else return;
+  e.preventDefault();
 });
 let editingGlb: { assetId: string } | null = null;
 
@@ -1130,12 +1171,13 @@ function robotSummary(r: RobotProfile): string {
 /**
  * Set while the layout editor writes its change into the robot JSON, so that edit doesn't
  * redraw the layout it came from. Module-level: the layout editor (and its callback) is made
- * once, but the dialog is opened many times.
+ * once, but the editor is opened many times.
  */
 let fromLayout = false;
 
-function openRobotDialog() {
+function openRobotEditor() {
   const r = robot();
+  cadRobotId = r.id;
   const isPreset = PRESETS.includes(r);
   $('robot-title').textContent = isPreset ? `${r.name} (preset)` : r.name;
   const host = $('robot-json');
@@ -1161,6 +1203,7 @@ function openRobotDialog() {
   );
   layoutEditor.reset();
   layoutEditor.load(r);
+  let partsLoaded = false;
   showRobotTab('layout');
   editingGlb = r.model ? { assetId: r.model.assetId } : null;
   const validate = () => {
@@ -1219,7 +1262,6 @@ function openRobotDialog() {
     editingGlb = { assetId };
     // real inches: no fitting to the footprint
     editRobotJson((p) => (p.model = { assetId, scale: 1 }));
-    $<HTMLDialogElement>('dlg-parts').close();
     setStatus(`The ${b.asm.parts.length}-part build is the robot's model now. Save the robot to keep it.`, 'ok');
   };
   robotEditor.onDidChangeModelContent(() => {
@@ -1259,12 +1301,17 @@ function openRobotDialog() {
     clearRecording();
     await applyRobot();
     persistSettings();
-    $<HTMLDialogElement>('dlg-robot').close();
+    openRobotEditor(); // now editing the saved robot
     setStatus(`Saved robot “${p.name}” in this browser.`, 'ok');
   };
-  $('rb-parts').onclick = async () => {
+  openPartsKit = async () => {
+    if (partsLoaded) return partsBuilder?.refresh();
     const p = parseRobotJson();
-    if (!p) return setStatus('Fix the robot profile first (see the errors).', 'err');
+    if (!p) {
+      showRobotTab('json');
+      return setStatus('Fix the robot profile first (see the errors).', 'err');
+    }
+    partsLoaded = true;
     partsBuilder ??= new PartsBuilder({
       view: $('pk-view'),
       palette: $('pk-palette'),
@@ -1277,7 +1324,6 @@ function openRobotDialog() {
     });
     if (import.meta.env.DEV) Object.assign(window, { __parts: partsBuilder });
     partsBuilder.load(editingGlb ? ((await loadAssembly(editingGlb.assetId)) ?? null) : null, p.size);
-    $<HTMLDialogElement>('dlg-parts').showModal();
     partsBuilder.refresh();
   };
   $('rb-model').onclick = async () => {
@@ -1338,11 +1384,11 @@ function openRobotDialog() {
     clearRecording();
     await applyRobot();
     persistSettings();
-    $<HTMLDialogElement>('dlg-robot').close();
+    openRobotEditor();
+    setStatus(`Deleted “${r.name}”.`, 'ok');
   };
-  $<HTMLDialogElement>('dlg-robot').showModal();
 }
-$('btn-robot').onclick = openRobotDialog;
+$('btn-robot').onclick = () => setWorkspace('cad');
 
 // ---------------- settings persistence ----------------
 
@@ -1405,7 +1451,15 @@ async function boot() {
   }
   if (skipped.length) setStatus(`Skipped saved robot${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')}: ${skipped.length > 1 ? 'they no longer match' : 'it no longer matches'} the robot format. Open it from an exported file to fix it.`, 'err');
   // the plan being worked on, or one shared in the link (which opens the Map tab)
-  if (await mapPanel?.restore()) showTab('map');
+  let start: Workspace = 'run';
+  try {
+    const w = localStorage.getItem('workspace');
+    if (w === 'map' || w === 'cad') start = w;
+  } catch {
+    /* private window */
+  }
+  if (await mapPanel?.restore()) start = 'map';
+  setWorkspace(start);
 }
 
 void boot()
