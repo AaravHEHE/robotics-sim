@@ -183,6 +183,8 @@ export interface RotationState {
 export interface Collision {
   t: number;
   wall: string;
+  /** What hit it, when it wasn't the chassis: an attachment's id (`claw:...`, `jaws:...`). */
+  by?: string;
 }
 
 /** Idealized motion controller: returns desired side wheel velocities (in/s). */
@@ -659,6 +661,7 @@ export class World {
   /** Push the robot out of static field elements (goals, loaders, field objects). */
   private resolveObstacles(): void {
     let hit = '';
+    let hitBy = '';
     const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
     if (this.attachments.length || this.overlapping.size) this.updateOverlapping(this.stallObstacles());
     for (let iter = 0; iter < 3; iter++) {
@@ -681,6 +684,7 @@ export class World {
           this.pose.x += mtv[0];
           this.pose.y += mtv[1];
           hit = ob.id;
+          hitBy = a.id;
           moved = true;
         }
       }
@@ -702,7 +706,7 @@ export class World {
       if (!moved) break;
     }
     // pressing on something reports it once, not on every step the contact flickers
-    if (hit && hit !== this.lastObstacle && !(this.time - (this.lastContact.get(hit) ?? -Infinity) < 500)) this.collisions.push({ t: this.time, wall: hit });
+    if (hit && hit !== this.lastObstacle && !(this.time - (this.lastContact.get(hit) ?? -Infinity) < 500)) this.collisions.push({ t: this.time, wall: hit, ...(hitBy ? { by: hitBy } : {}) });
     if (hit) this.lastContact.set(hit, this.time);
     this.lastObstacle = hit;
   }

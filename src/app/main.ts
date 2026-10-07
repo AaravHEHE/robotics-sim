@@ -28,6 +28,8 @@ import { validateAssembly, type Assembly } from './parts/assembly.ts';
 import { CATALOG, PartsBuilder } from './parts/builder.ts';
 import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
+import sampleHistory from './sample-history.json';
+import { isOlderCopy, type SampleHistory } from './sample-upgrade.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const fieldModules = import.meta.glob('../../data/fields/*.json', { eager: true, import: 'default' }) as Record<string, FieldDef>;
@@ -234,6 +236,12 @@ function codeIsUnchangedSample(): boolean {
   const orig = editableFiles(sampleProject(state.projectName));
   const keys = Object.keys(orig);
   return keys.length === Object.keys(now).length && keys.every((k) => now[k] === orig[k]);
+}
+
+/** The sample a saved project is an unedited copy of an older version of (see isOlderCopy), or null. */
+function staleSample(name: string, files: Record<string, string>): SampleMeta | null {
+  const s = SAMPLES.find((x) => x.id === name);
+  return s && isOlderCopy(editableFiles(files), editableFiles(sampleProject(s.id)), (sampleHistory as SampleHistory)[s.id]) ? s : null;
 }
 
 async function openRobotSample(kind: 'auton' | 'test') {
@@ -1439,11 +1447,20 @@ async function boot() {
   await applyRobot();
 
   const saved = await safe(loadProject(), undefined);
-  if (saved && Object.keys(saved.files).length) {
+  const stale = saved ? staleSample(saved.name, saved.files) : null;
+  if (stale) {
+    // an unedited copy of an older version of a sample: its routine was written for older
+    // physics, so open the sample as it is now (with its robot, field and start)
+    await openSample(stale);
+    setStatus(`Updated “${stale.name}” to its current version: the simulator's physics changed since you opened it, and the old routine no longer works. Press Run.`, 'ok');
+  } else if (saved && Object.keys(saved.files).length) {
     const binary: Record<string, Uint8Array> = {};
     for (const [p, b] of Object.entries(saved.binary ?? {})) binary[p] = fromBase64(b);
     loadFiles(saved.name, saved.files, binary);
-    setStatus('Restored your last project. Press Run (Ctrl+Enter).');
+    const edited = SAMPLES.find((x) => x.id === saved.name && (sampleHistory as Record<string, unknown>)[x.id]);
+    if (edited && !codeIsUnchangedSample()) {
+      setStatus(`Restored your last project, your edited copy of “${edited.name}”. That sample has since been updated for the simulator's stricter physics: if your copy no longer scores, open the sample again from Samples and compare.`);
+    } else setStatus('Restored your last project. Press Run (Ctrl+Enter).');
   } else {
     // first visit: the plain PROS starter on the empty field
     await openSample(SAMPLES[0]);
