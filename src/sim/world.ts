@@ -230,6 +230,12 @@ export class World {
   vR = 0;
   /** Forward acceleration of the robot center, in/s^2 (for the IMU accelerometer). */
   accelForward = 0;
+
+  /** One recorded row of dynamics (the columns of `DYN_COLUMNS`). Current, heat and battery are not modelled yet. */
+  dynSample(): number[] {
+    const w = ((this.vL - this.vR) / this.profile.drivetrain.trackWidth) * (180 / Math.PI);
+    return [this.accelForward, w, 0, 0, 25, 25, 12.8];
+  }
   readonly motors = new Map<number, MotorState>();
   readonly imus = new Map<number, ImuState>();
   readonly rotations = new Map<number, RotationState>();

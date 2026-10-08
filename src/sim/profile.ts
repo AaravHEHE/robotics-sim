@@ -212,6 +212,20 @@ export const isPneumatic = (m: MechanismSpec): boolean => typeof m.adi === 'stri
 /** Is it driven by motors? */
 export const isMotorized = (m: MechanismSpec): boolean => Array.isArray(m.motors) && m.motors.length > 0;
 
+/** Optional physical details of the robot (inches, pounds). Defaults are in `dynamics-spec.ts`. */
+export interface DynamicsSpec {
+  /** Center of mass: x right, y forward from the footprint's center, z above the tiles. */
+  centerOfMass?: { x?: number; y?: number; z?: number };
+  /** Moment of inertia about the vertical axis through the center of mass, lb·in² (default: a uniform box). */
+  inertia?: number;
+  /** Coefficient of friction between the wheels and the tiles. */
+  wheelFriction?: number;
+  /** Wheels touching the floor on each side (default: the drive's motors per side, at least 2). */
+  wheelsPerSide?: number;
+  /** Internal resistance of the battery plus wiring, ohms. */
+  batteryResistance?: number;
+}
+
 export interface RobotProfile {
   schema: 1;
   id: string;
@@ -220,6 +234,8 @@ export interface RobotProfile {
   /** Overall footprint used for collisions and the default box model. */
   size: { width: number; length: number; height: number };
   mass?: number;
+  /** How the robot's weight and grip behave. Every field is optional; see `resolveDynamics`. */
+  dynamics?: DynamicsSpec;
   drivetrain: {
     type: 'tank';
     /** Signed ports, written the way code must declare them for "forward" to drive forward. */
@@ -265,6 +281,21 @@ export function validateProfile(p: unknown): string[] {
   if (!r.name || typeof r.name !== 'string') e.push('name is required.');
   if (!r.size || !isNum(r.size.width, 1, 36) || !isNum(r.size.length, 1, 36) || !isNum(r.size.height, 1, 36)) {
     e.push('size.width / length / height must be numbers in inches (1-36).');
+  }
+  if (r.mass !== undefined && !isNum(r.mass, 0.1, 200)) e.push('mass must be a number of pounds (0.1-200).');
+  const dy = r.dynamics;
+  if (dy !== undefined) {
+    if (!dy || typeof dy !== 'object') e.push('dynamics must be an object.');
+    else {
+      const c = dy.centerOfMass;
+      if (c !== undefined && (!c || typeof c !== 'object' || !(['x', 'y'] as const).every((k) => c[k] === undefined || isNum(c[k], -20, 20)) || (c.z !== undefined && !isNum(c.z, 0, 36)))) {
+        e.push('dynamics.centerOfMass x / y must be -20 to 20 and z 0 to 36 inches.');
+      }
+      if (dy.inertia !== undefined && !isNum(dy.inertia, 1, 100000)) e.push('dynamics.inertia must be 1-100000 lb·in².');
+      if (dy.wheelFriction !== undefined && !isNum(dy.wheelFriction, 0.05, 3)) e.push('dynamics.wheelFriction must be 0.05-3.');
+      if (dy.wheelsPerSide !== undefined && !(Number.isInteger(dy.wheelsPerSide) && dy.wheelsPerSide >= 1 && dy.wheelsPerSide <= 8)) e.push('dynamics.wheelsPerSide must be a whole number 1-8.');
+      if (dy.batteryResistance !== undefined && !isNum(dy.batteryResistance, 0, 2)) e.push('dynamics.batteryResistance must be 0-2 ohms.');
+    }
   }
   const d = r.drivetrain;
   if (!d) e.push('drivetrain is required.');

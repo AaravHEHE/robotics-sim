@@ -19,7 +19,27 @@
         "height": { "type": "number", "minimum": 1, "maximum": 36 }
       }
     },
-    "mass": { "type": "number", "description": "Pounds (informational)" },
+    "mass": { "type": "number", "minimum": 0.1, "maximum": 200, "description": "Pounds. Used by the dynamics (acceleration, pushing, tipping) once those read it; default 12" },
+    "dynamics": {
+      "type": "object",
+      "description": "Optional physical details; defaults are in src/sim/dynamics-spec.ts",
+      "additionalProperties": false,
+      "properties": {
+        "centerOfMass": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number", "minimum": -20, "maximum": 20, "description": "Right of the footprint center, inches" },
+            "y": { "type": "number", "minimum": -20, "maximum": 20, "description": "Forward of the footprint center, inches" },
+            "z": { "type": "number", "minimum": 0, "maximum": 36, "description": "Height above the tiles, inches (default 0.3 x height)" }
+          }
+        },
+        "inertia": { "type": "number", "minimum": 1, "maximum": 100000, "description": "About the vertical axis through the center of mass, lb·in² (default: a uniform box)" },
+        "wheelFriction": { "type": "number", "minimum": 0.05, "maximum": 3, "description": "Wheel-to-tile friction coefficient (default 0.9)" },
+        "wheelsPerSide": { "type": "integer", "minimum": 1, "maximum": 8, "description": "Wheels on the floor per side (default: drive motors per side, at least 2)" },
+        "batteryResistance": { "type": "number", "minimum": 0, "maximum": 2, "description": "Battery and wiring resistance, ohms (default 0.15)" }
+      }
+    },
     "drivetrain": {
       "type": "object",
       "required": ["type", "left", "right", "cartridge", "wheelDiameter", "wheelRpm", "trackWidth", "maxAccel"],

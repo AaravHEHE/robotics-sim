@@ -433,7 +433,9 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   const mechs = opts.profile.mechanisms;
   const stride = 6 + mechs.length;
   const frames: number[] = [];
+  const dyn: number[] = [];
   const pushFrame = () => {
+    dyn.push(...world.dynSample());
     frames.push(sched.now, world.pose.x, world.pose.y, world.pose.theta, world.vL, world.vR);
     for (const m of mechs) frames.push(world.mechanismState(m));
     game?.recordFrame(sched.now);
@@ -497,6 +499,8 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     frameEveryMs: frameEvery,
     stride,
     frames: Float64Array.from(frames),
+    dyn: Float64Array.from(dyn),
+    contacts: world.collisions.map((c) => ({ t: c.t, what: c.wall })),
     mechanisms: mechs.map((m) => m.name),
     autonStart,
     autonEnd,

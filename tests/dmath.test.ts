@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datan, datan2, dcos, dsin, wrap180 } from '../src/sim/dmath.ts';
+import { datan, datan2, dcos, dexp, dlog, dpow, dsin, wrap180 } from '../src/sim/dmath.ts';
 
 describe('deterministic math', () => {
   const xs = [0, 1e-9, 0.1, 0.5, 0.785, 1, 1.5707963, 2, 3, 3.14159, 4, 6.28, 10, 100, -0.3, -2.5, -50, 1234.5];
@@ -32,5 +32,26 @@ describe('deterministic math', () => {
     expect(wrap180(-190)).toBe(170);
     expect(wrap180(180)).toBe(180);
     expect(wrap180(720 + 45)).toBe(45);
+  });
+
+  it('exp, log and pow match Math within a couple of ulp', () => {
+    for (const x of [0, 1, -1, 0.5, 10, -10, 3.7, -0.001, 100, -100, 700, -700, 1e-9]) expect(Math.abs(dexp(x) - Math.exp(x)) / Math.exp(x)).toBeLessThan(5e-16);
+    for (const x of [1e-6, 0.1, 0.5, 2, 10, 1234.5, 1e10, 1e-10]) expect(Math.abs(dlog(x) - Math.log(x)) / Math.abs(Math.log(x))).toBeLessThan(1e-15);
+    expect(dpow(2, 10)).toBe(1024);
+    expect(dpow(10, -2)).toBe(0.01);
+    expect(dpow(-2, 3)).toBe(-8);
+    expect(Math.abs(dpow(1.5, 2.5) - Math.pow(1.5, 2.5)) / Math.pow(1.5, 2.5)).toBeLessThan(1e-14);
+    expect(dexp(-800)).toBe(0);
+    expect(dexp(800)).toBe(Infinity);
+    expect(dlog(0)).toBe(-Infinity);
+  });
+
+  it('exp and log are bit-exact for known values (cross-engine reference)', () => {
+    expect(dexp(1)).toBe(2.7182818284590455);
+    expect(dexp(-1)).toBe(0.36787944117144233);
+    expect(dexp(3.7)).toBe(40.4473043600674);
+    expect(dlog(10)).toBe(2.3025850929940455);
+    expect(dlog(2)).toBe(0.6931471805599455);
+    expect(dpow(1.5, 2.5)).toBe(2.7556759606310757);
   });
 });

@@ -22,6 +22,7 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | --- | --- |
 | `schema` | Always `1`. |
 | `id`, `name`, `description` | Identification. |
+| `mass` | Pounds (default 12). `dynamics` (optional) gives the center of mass `{x, y, z}` in inches (z above the tiles; default 0.3 of the height), the moment of inertia in lb·in² (default a uniform box), `wheelFriction` (default 0.9), `wheelsPerSide` and `batteryResistance` (ohms, default 0.15). Defaults and the V5 motor figures are in `src/sim/dynamics-spec.ts`; the motor numbers are estimates from VEX's published ratings. |
 | `size.width / length / height` | Overall footprint and height. Width and length are the collision box against the field walls. |
 | `drivetrain.type` | `"tank"`. Other drivetrains are not supported yet. |
 | `drivetrain.left`, `drivetrain.right` | Smart ports of each side's motors, **signed the way your code must declare them to drive forward**. For example, if your code says `pros::MotorGroup left({-1, -2, -3})`, use `[-1, -2, -3]`. If the code's reversal doesn't match, the robot spins or drives backwards, just like the real one. |

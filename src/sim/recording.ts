@@ -18,12 +18,39 @@ export interface MotionMarker {
   path?: Array<{ x: number; y: number }>;
 }
 
+/** Per-frame dynamics, in the order each frame stores them (see `World.dynSample`). */
+export const DYN_COLUMNS = [
+  'accel', // forward acceleration, in/s^2
+  'yawRate', // deg/s, clockwise positive
+  'currentL', // A, one drive motor on the left
+  'currentR',
+  'tempL', // degrees C
+  'tempR',
+  'battery', // V at the terminals
+] as const;
+
+/** A contact: when, with what, and (when the model has them) where, the normal and the impulse. */
+export interface ContactRecord {
+  t: number;
+  what: string;
+  x?: number;
+  y?: number;
+  /** Unit normal pointing at the robot. */
+  nx?: number;
+  ny?: number;
+  /** N·s */
+  impulse?: number;
+}
+
 export interface Recording {
   frameEveryMs: number;
   /** Per frame: t, x, y, theta, vL, vR, then one value per mechanism. */
   stride: number;
   frames: Float64Array;
   mechanisms: string[];
+  /** One row of `DYN_COLUMNS` per frame, kept apart from `frames` so its layout never moves. Absent in older recordings. */
+  dyn?: Float64Array;
+  contacts?: ContactRecord[];
   /** Simulated time (ms since program start) when autonomous() began. */
   autonStart: number | null;
   /** When autonomous() returned, if it did before the stop time. */

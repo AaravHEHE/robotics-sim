@@ -161,3 +161,85 @@ export function wrap180(a: number): number {
   else if (r <= -180) r += 360;
   return r;
 }
+
+// ---- exp, log and pow (for motor, battery and heat models) ----
+// Same rule as above: only + - * / and Math.sqrt, so every engine gives the same bits.
+
+const LN2_HI = 6.93147180369123816490e-1;
+const LN2_LO = 1.90821492927058770002e-10;
+const INV_LN2 = 1.44269504088896338700;
+
+/** e^x (fdlibm's algorithm; 0 below -745, Infinity above 709.78). */
+export function dexp(x: number): number {
+  if (x !== x) return x;
+  if (x > 709.782712893384) return Infinity;
+  if (x < -745.1332191019411) return 0;
+  const k = Math.round(x * INV_LN2);
+  const hi = x - k * LN2_HI;
+  const lo = k * LN2_LO;
+  const r = hi - lo;
+  const t = r * r;
+  const c = r - t * (1.66666666666666019037e-1 + t * (-2.77777777770155933842e-3 + t * (6.61375632143793436117e-5 + t * (-1.65339022054652515390e-6 + t * 4.13813679705723846039e-8))));
+  let y = 1 - ((lo - (r * c) / (2 - c)) - hi);
+  // scale by 2^k with exact doublings (no Math.pow)
+  let n = k;
+  while (n > 0) {
+    y *= 2;
+    n--;
+  }
+  while (n < 0) {
+    y *= 0.5;
+    n++;
+  }
+  return y;
+}
+
+/** Natural log by Newton iterations on dexp (x > 0); accurate to a few ulp, and deterministic. */
+export function dlog(x: number): number {
+  if (!(x > 0)) return x === 0 ? -Infinity : NaN;
+  if (x === Infinity) return Infinity;
+  // reduce to [0.5, 1) * 2^e with exact halvings/doublings
+  let m = x;
+  let e = 0;
+  while (m >= 1) {
+    m *= 0.5;
+    e++;
+  }
+  while (m < 0.5) {
+    m *= 2;
+    e--;
+  }
+  // atanh series: ln(m) = 2 * (s + s^3/3 + s^5/5 + ...), s = (m-1)/(m+1), |s| <= 1/3
+  const s = (m - 1) / (m + 1);
+  const s2 = s * s;
+  let term = s;
+  let sum = 0;
+  for (let k = 1; k < 60; k += 2) {
+    sum += term / k;
+    term *= s2;
+  }
+  return 2 * sum + e * (LN2_HI + LN2_LO);
+}
+
+/** x^y for x > 0 (and integer y for any x). */
+export function dpow(x: number, y: number): number {
+  if (y === 0) return 1;
+  if (x === 0) return y > 0 ? 0 : Infinity;
+  if (x < 0) {
+    if (!Number.isInteger(y)) return NaN;
+    return (Math.abs(y) % 2 === 1 ? -1 : 1) * dpow(-x, y);
+  }
+  if (Number.isInteger(y) && Math.abs(y) <= 64) {
+    // small whole powers by repeated squaring: exact where the result is
+    let r = 1;
+    let b = x;
+    let n = Math.abs(y);
+    while (n > 0) {
+      if (n % 2 === 1) r *= b;
+      b *= b;
+      n = Math.floor(n / 2);
+    }
+    return y < 0 ? 1 / r : r;
+  }
+  return dexp(y * dlog(x));
+}
