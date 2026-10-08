@@ -130,7 +130,7 @@ export class DriveDynamics {
    * Advance the machine one step of `dt` seconds: how each side accelerates (in/s^2). Updates
    * the battery, motor current and temperature as a side effect.
    */
-  step(L: SideState, R: SideState, dt: number): DriveStep {
+  step(L: SideState, R: SideState, dt: number, load = 0): DriveStep {
     const m = this.dyn.mass;
     const k = this.k;
     const vL = L.v * INCH;
@@ -141,8 +141,11 @@ export class DriveDynamics {
     const wdotExt = w === 0 ? 0 : -(w > 0 ? 1 : -1) * Math.min(this.scrub / this.dyn.inertia, Math.abs(w) / dt);
     const extL = (wdotExt * this.track) / 2;
     const extR = -extL;
-    const reqL = L.powered ? ((L.target - L.v) * INCH) / dt - extL : 0;
-    const reqR = R.powered ? ((R.target - R.v) * INCH) / dt - extR : 0;
+    // pieces being pushed resist the way the robot is going (or trying to go, from rest)
+    const heading = Math.abs(L.v + R.v) > 0.2 ? Math.sign(L.v + R.v) : Math.sign(L.target + R.target);
+    const drag = (heading * load) / m;
+    const reqL = L.powered ? ((L.target - L.v) * INCH) / dt - extL + drag : 0;
+    const reqR = R.powered ? ((R.target - R.v) * INCH) / dt - extR + drag : 0;
     const limit = (s: SideState, i: 0 | 1, u: number, v: number) => this.forceLimit(s, u, v, vApp, this.temp[i]);
     let FL = 0;
     let FR = 0;
@@ -174,7 +177,10 @@ export class DriveDynamics {
     const sum = (FL + FR) / m;
     const dif = (FL - FR) * k;
     this.account([L, R], [FL, FR], [vL, vR], dt);
-    return { aL: (sum + dif + extL) / INCH, aR: (sum - dif + extR) / INCH };
+    let net = load === 0 ? 0 : -drag;
+    // static friction: a robot at rest that can't push the load stays put instead of rolling back
+    if (load > 0 && Math.abs(L.v + R.v) <= 0.2 && heading !== 0 && (sum + net) * heading < 0) net = -sum;
+    return { aL: (sum + dif + extL + net) / INCH, aR: (sum - dif + extR + net) / INCH };
   }
 
   /** Current, battery and heat from the forces the sides pushed with. */

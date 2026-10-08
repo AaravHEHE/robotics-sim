@@ -39,6 +39,8 @@ const COAST_DECEL = 150;
 const RESTITUTION = 0.15;
 /** How long a hit lasts (s), for judging whether it tips the robot. */
 const IMPACT_TIME = 0.03;
+/** The most impacts one run keeps (a robot pressed against something for minutes would log millions). */
+const MAX_CONTACTS = 5000;
 /** Share of free speed motions plan with under the drive dynamics. */
 const CRUISE_FRACTION = 0.85;
 /** Friction that brings a braking robot to a final stop (in/s^2). */
@@ -273,6 +275,8 @@ export class World {
   readonly obstacles: Obstacle[];
   /** Movable objects that currently can't move out of the robot's way (set by a game). */
   pinnedObstacles: Obstacle[] = [];
+  /** Force (N) the pieces the robot is pushing along the floor resist with (set by the game). */
+  pushLoad = 0;
   /** Claws and what they hold, outside the robot's frame (set by a game): they can't pass through things either. */
   attachments: Attachment[] = [];
   /**
@@ -466,7 +470,7 @@ export class World {
     const eR = tR - this.vR;
     if (this.drive) {
       // motors, battery, grip and the body's mass and inertia decide how each side speeds up
-      const a = this.drive.step(this.sideState(d.left, this.vL, tL), this.sideState(d.right, this.vR, tR), dt);
+      const a = this.drive.step(this.sideState(d.left, this.vL, tL), this.sideState(d.right, this.vR, tR), dt, this.pushLoad);
       dL = a.aL * dt;
       dR = a.aR * dt;
       this.recordDriveTelemetry();
@@ -787,17 +791,10 @@ export class World {
     if (d < 1e-12) return;
     const nx = mtv[0] / d;
     const ny = mtv[1] / d;
-    // the corner furthest into the thing: the one most against the push
-    let best = fp[0];
+    // the corner(s) furthest into the thing (a flat face lands on two corners together)
     let bd = Infinity;
-    for (const p of fp) {
-      const k = p[0] * nx + p[1] * ny;
-      if (k < bd) {
-        bd = k;
-        best = p;
-      }
-    }
-    this.impacts.push({ x: best[0], y: best[1], nx, ny, what });
+    for (const p of fp) bd = Math.min(bd, p[0] * nx + p[1] * ny);
+    for (const p of fp) if (p[0] * nx + p[1] * ny <= bd + 0.02) this.impacts.push({ x: p[0], y: p[1], nx, ny, what });
   }
 
   /**
@@ -818,7 +815,8 @@ export class World {
     // centre of mass in the field frame
     const comX = this.pose.x + (dyn.com.x / IN) * cy + (dyn.com.y / IN) * sx;
     const comY = this.pose.y - (dyn.com.x / IN) * sx + (dyn.com.y / IN) * cy;
-    for (const im of impacts) {
+    // a few passes, so contacts that touch together (a face lands on two corners) share the impulse
+    for (const im of [...impacts, ...impacts, ...impacts]) {
       const vf = (this.vL + this.vR) / 2;
       const w = -((this.vL - this.vR) / this.trackWidth); // rad/s, counterclockwise positive
       const rx = (im.x - comX) * IN;
@@ -829,7 +827,8 @@ export class World {
       const vn = vx * im.nx + vy * im.ny; // negative: moving into it
       if (vn > -0.0076) continue; // under 0.3 in/s: resting against it (handled by the stall)
       const rxn = rx * im.ny - ry * im.nx;
-      const e = RESTITUTION;
+      // slow touches don't bounce (a robot pressed against a wall rests; it doesn't chatter)
+      const e = RESTITUTION * Math.max(0, Math.min(1, (-vn - 0.1) / 0.2));
       const J = (-(1 + e) * vn) / (1 / dyn.mass + (rxn * rxn) / dyn.inertia);
       // change of the centre of mass' velocity and of the spin
       const dvx = (J * im.nx) / dyn.mass;
@@ -839,7 +838,7 @@ export class World {
       const dwCw = -dw; // clockwise positive
       this.vL += dvf + (dwCw * this.trackWidth) / 2;
       this.vR += dvf - (dwCw * this.trackWidth) / 2;
-      this.contacts.push({ t: this.time, what: im.what, x: im.x, y: im.y, nx: im.nx, ny: im.ny, impulse: J });
+      if (this.contacts.length < MAX_CONTACTS && !(this.contacts.length && this.contacts[this.contacts.length - 1].t === this.time && this.contacts[this.contacts.length - 1].what === im.what)) this.contacts.push({ t: this.time, what: im.what, x: im.x, y: im.y, nx: im.nx, ny: im.ny, impulse: J });
       // tipping: the impulse's moment about the wheel contact line against the weight's over the contact's duration
       const support = Math.max(0.5 * this.profile.size.length - this.profile.drivetrain.wheelDiameter / 2, 1) * IN;
       const ratio = (J * dyn.com.z) / (dyn.mass * G_SI * support * IMPACT_TIME);

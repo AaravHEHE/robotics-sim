@@ -162,6 +162,16 @@ document.querySelectorAll<HTMLButtonElement>('.view-buttons button').forEach((b)
   };
 });
 
+// physics overlay
+{
+  const btn = $<HTMLButtonElement>('btn-physics');
+  btn.onclick = () => {
+    const on = btn.getAttribute('aria-pressed') !== 'true';
+    btn.setAttribute('aria-pressed', String(on));
+    viewer.setPhysics(on, $<HTMLElement>('physics-hud'));
+  };
+}
+
 // ---------------- robots ----------------
 
 function renderRobotSelect() {

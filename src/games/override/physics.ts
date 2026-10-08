@@ -392,6 +392,22 @@ export class FloorPhysics {
     return touching;
   }
 
+  /**
+   * Mass (kg) of the free pieces the robot is pushing right now: the ones touching it that are
+   * not wedged against something (those stop the chassis instead, see `pinnedObstacles`).
+   */
+  pushedMass(): number {
+    let kg = 0;
+    for (const [id, b] of this.bodies) {
+      if (this.pinned.has(id) || !this.touchingRobot(id)) continue;
+      kg += b.mass();
+    }
+    return kg;
+  }
+
+  /** Floor friction on a sliding piece (Coulomb coefficient; the colliders' own value). */
+  static readonly FLOOR_FRICTION = 0.4;
+
   free(): void {
     this.events.free();
     this.world.free();

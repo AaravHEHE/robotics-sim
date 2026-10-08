@@ -202,6 +202,8 @@ export class OverrideGame implements GameOps {
       this.physics.setCarried(this.carried());
       this.physics.step();
       this.syncFromPhysics();
+      // pushing pieces along the floor is work for the drive
+      this.world.pushLoad = this.physics.pushedMass() * FloorPhysics.FLOOR_FRICTION * 9.80665;
       this.world.pinnedObstacles = this.physics.pinnedObstacles([
         { poly: this.world.footprint(), bottom: 0 },
         ...this.world.attachments.filter((a) => !a.fixedOnly).map((a) => ({ poly: this.world.attachmentPoly(a), bottom: a.bottom, passes: (id: string) => this.physics.passes(a.slot ?? a.id, id) })),

@@ -117,3 +117,20 @@ describe('drive dynamics', () => {
     expect(vR).toBeCloseTo(-tgt, 3);
   });
 });
+
+describe('pushing a load', () => {
+  it('a pushed load slows the speed-up, and one the drive cannot move holds it still', async () => {
+    const p = await robot('tank-6m-450');
+    const n = p.drivetrain.left.length;
+    const accelWith = (load: number) => {
+      const dd = new DriveDynamics(p);
+      return dd.step(side(20, 70, { motors: n }), side(20, 70, { motors: n }), 0.001, load).aL;
+    };
+    expect(accelWith(5)).toBeLessThan(accelWith(0));
+    // a load far past what the wheels can grip: the robot does not move at all
+    const dd = new DriveDynamics(p);
+    const a = dd.step(side(0, 70, { motors: n }), side(0, 70, { motors: n }), 0.001, 500);
+    expect(a.aL).toBeLessThanOrEqual(0);
+    expect(a.aL).toBeGreaterThan(-1e-9);
+  });
+});
