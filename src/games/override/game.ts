@@ -3,8 +3,8 @@
 
 import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
 import { octagon, type Obstacle, type World } from '../../sim/world.ts';
-import { dhypot } from '../../sim/dmath.ts';
-import { nestRest, stackTop, type Piece, type PinColor } from './elements.ts';
+import { datan2, dhypot } from '../../sim/dmath.ts';
+import { CUP, nestRest, PIN, stackTop, type Piece, type PinColor } from './elements.ts';
 import { footprintRadius, goalShape, phasing } from './overlaps.ts';
 import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS, type Carried } from './physics.ts';
@@ -45,6 +45,9 @@ export interface OverrideRecording {
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+/** Slowest hit (in/s) that tips a stack over. */
+const TIP_SPEED = 6;
 
 export class OverrideGame implements GameOps {
   readonly field: FieldDef;
@@ -202,6 +205,7 @@ export class OverrideGame implements GameOps {
       this.physics.setCarried(this.carried());
       this.physics.step();
       this.syncFromPhysics();
+      this.checkToppling();
       // pushing pieces along the floor is work for the drive
       this.world.pushLoad = this.physics.pushedMass() * FloorPhysics.FLOOR_FRICTION * 9.80665;
       this.world.pinnedObstacles = this.physics.pinnedObstacles([
@@ -327,6 +331,45 @@ export class OverrideGame implements GameOps {
         l.heading = p.heading;
       }
     }
+  }
+
+  /**
+   * A standing stack hit by something carried tips over when it is pushed high enough that its
+   * base would tip before it slides: above the height where the stack's radius equals the floor
+   * friction times that height (about 4 in for these pieces), and hard enough to matter. Pins
+   * end up lying along the push, each beyond the last; Cups stand where they land.
+   */
+  private checkToppling(): void {
+    for (const s of [...this.state.floor]) {
+      const hit = this.physics.hitByCarried(s.id);
+      if (!hit || hit.speed < TIP_SPEED) continue;
+      const push = Math.max(hit.carried.bottom, 0) + 1; // about where the lower part of what is carried meets it
+      const top = stackTop(s.pieces, 0, false);
+      const r = Math.max(...s.pieces.map((p) => (p.kind === 'cup' ? CUP.rimDiameter : PIN.collarDiameter) / 2));
+      if (push >= top || push * FloorPhysics.FLOOR_FRICTION <= r) continue; // pushed low: it slides
+      this.topple(s, hit.carried);
+    }
+  }
+
+  private topple(s: FloorStack, from: { x: number; y: number }): void {
+    const dx = s.x - from.x;
+    const dy = s.y - from.y;
+    const d = dhypot(dx, dy) || 1;
+    const ux = dx / d;
+    const uy = dy / d;
+    const heading = (datan2(ux, uy) * 180) / Math.PI;
+    const old = this.opponentSide.has(s.id);
+    this.state.floor.splice(this.state.floor.indexOf(s), 1);
+    this.physics.remove(s.id);
+    this.opponentSide.delete(s.id);
+    s.pieces.forEach((p, i) => {
+      const x = s.x + ux * (1.5 + 3 * i);
+      const y = s.y + uy * (1.5 + 3 * i);
+      const id = p.kind === 'pin' ? this.addLying(p.colors, x, y, heading) : this.addFloor([p], x, y);
+      if (old) this.opponentSide.add(id);
+    });
+    this.notes.push(`At ${(this.clock / 1000).toFixed(2)} s, a stack was hit high up while moving and tipped over.`);
+    this.dirty = true;
   }
 
   /** Score the current state as if the run ended now. */

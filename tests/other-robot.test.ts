@@ -143,7 +143,7 @@ describe('the Override field with a second robot', () => {
     const b = await build(await readProjectDir(path.join(repoRoot, 'samples', meta.id)));
     expect(b.ok).toBe(true);
     const profile = await robot(meta.robot);
-    const rec = await runProgram(await WebAssembly.compile(b.wasm!), { profile, field: f, start: { x: meta.start?.x ?? 0, y: meta.start?.y ?? 0, theta: meta.start?.theta ?? 0 }, autonMs: 3000 } as never);
+    const rec = await runProgram(await WebAssembly.compile(b.wasm!), { profile, field: f, start: { x: -60.7, y: -37, theta: 90 }, autonMs: 3000 } as never);
     expect(rec.error).toBeNull();
     expect(rec.others?.map((o) => o.id)).toEqual(['partner']);
     expect(rec.otherFrames!.length).toBe((rec.frames.length / rec.stride) * 3);
