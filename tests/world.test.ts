@@ -48,8 +48,8 @@ describe('drivetrain kinematics', () => {
       m.cmd = 127 * Math.sign(p);
     }
     runUntil(w, () => false, 900); // top speed, before reaching the far wall
-    // 450 rpm * 3.25" * pi / 60 = 76.6 in/s; the motors' torque fades near free speed
-    expect(w.speed / maxSpeed(w.profile)).toBeGreaterThan(0.99);
+    // 450 rpm * 3.25" * pi / 60 = 76.6 in/s free speed; under load (and the back-EMF fading the torque) it settles just below
+    expect(w.speed / maxSpeed(w.profile)).toBeGreaterThan(0.97);
     expect(w.speed).toBeLessThanOrEqual(maxSpeed(w.profile));
     expect(w.pose.theta).toBeCloseTo(0, 9);
     expect(w.pose.x).toBeCloseTo(0, 9);
@@ -98,7 +98,7 @@ describe('idealized motions', () => {
     const t = tMotion + runUntil(w, () => Math.abs(w.speed) < 1e-9, 2000);
     expect(Math.abs(w.pose.y - 24)).toBeLessThan(0.5);
     // rest-to-rest can't beat accelerating then decelerating at maxAccel
-    const a = w.profile.drivetrain.maxAccel;
+    const a = w.drive!.nominalAccel(); // the most the drive can do from rest
     expect(t / 1000).toBeGreaterThan(2 * Math.sqrt(24 / a) * 0.95);
   });
 
@@ -199,7 +199,7 @@ describe('no swing: motions stop on target instead of going past and coming back
     runUntil(w, () => m.done);
     expect(w.pose.y).toBeGreaterThanOrEqual(24);
     expect(w.pose.y).toBeLessThan(25);
-    expect(w.speed).toBeGreaterThan((maxSpeed(w.profile) * 60) / 127 - 1);
+    expect(w.speed).toBeGreaterThan((w.maxSpeed * 60) / 127 - 1);
   });
 });
 

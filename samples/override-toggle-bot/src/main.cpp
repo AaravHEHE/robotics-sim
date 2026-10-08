@@ -54,7 +54,7 @@ void drive(double inches, int maxSpeed = 127, int timeoutMs = 2500) {
   }
   leftDrive.brake();
   rightDrive.brake();
-  pros::delay(100);
+  pros::delay(40);
 }
 
 // Turn in place to a field heading (degrees, clockwise from the top wall): a PD loop.
@@ -74,7 +74,7 @@ void turnTo(double target, int maxSpeed = 127) {
   }
   leftDrive.brake();
   rightDrive.brake();
-  pros::delay(100);
+  pros::delay(40);
 }
 
 // Is the optical sensor looking at something red? (Red hues wrap around 0°.)

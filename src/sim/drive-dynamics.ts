@@ -200,10 +200,10 @@ export class DriveDynamics {
   }
 
   /** The force one side can push with from rest, N. */
-  private stallForce(): number {
+  private stallForce(atSpeed = 0): number {
     const d = this.profile.drivetrain;
     const side: SideState = { v: 0, target: 1, powered: true, brake: 0, motors: d.left.length, currentLimit: motorConstants(d.cartridge).spec.currentLimit };
-    return this.forceLimit(side, 1, 0, 12, AMBIENT_C);
+    return this.forceLimit(side, 1, atSpeed, 12, AMBIENT_C);
   }
 
   /** How fast the robot can speed up from rest in a straight line, in/s^2: the lesser of what the motors and the grip allow. */
@@ -217,7 +217,9 @@ export class DriveDynamics {
    * works against the robot's inertia, which is less than its mass would give).
    */
   planAccel(): number {
-    const f = this.stallForce();
+    // what the drive can count on across a move: its force at about half of top speed, not at stall
+    const d = this.profile.drivetrain;
+    const f = this.stallForce(0.5 * ((d.wheelRpm * Math.PI * d.wheelDiameter) / 60) * INCH);
     return Math.min((2 * f) / this.dyn.mass, 2 * f * this.k) / INCH;
   }
 }
