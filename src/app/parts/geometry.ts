@@ -216,15 +216,15 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
         break;
       }
       if (def.style === 'flex') {
-        // a flex wheel: a green rubber ring on thin spokes around a square-shaft hub
-        const green = plain('#2fa84f', 0, 0.75);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(r - 0.14, 0.14, 8, 32).rotateY(Math.PI / 2), green);
+        // a flex wheel: a white rubber ring on thin spokes around a square-shaft hub
+        const white = plain('#f1f1ec', 0, 0.8); // white: VEX flex wheels are white
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r - 0.14, 0.14, 8, 32).rotateY(Math.PI / 2), white);
         ring.scale.set(sx / 0.28, 1, 1);
         ring.position.set(sx / 2, r, r);
         g.add(ring);
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
-          const spoke = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.7, 0.08, r - 0.35), green);
+          const spoke = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.7, 0.08, r - 0.35), white);
           spoke.rotation.x = a;
           spoke.position.set(sx / 2, r + Math.sin(a) * (r - 0.2) * 0.5, r - Math.cos(a) * (r - 0.2) * 0.5);
           g.add(spoke);

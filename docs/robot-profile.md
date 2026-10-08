@@ -124,7 +124,10 @@ Without a model of its own, a robot is drawn from its profile with the VEX parts
 - **Drive base.** Drilled C-channel drive rails, joined by standoffs. Omni wheels sit on shafts at the robot's track width (a traction wheel in the middle of a 6-wheel drive), running through bearing flats, with spacers filling every gap and collars at the ends. Each drive motor is screwed to the rail on its wheel's axle; a one-motor side drives its other wheels by chain. Crossbars are bolted to the rails at every crossing.
 - **Electronics.** The brain sits on standoffs. The battery and (with pistons) the air tank are zip-tied down, and the solenoid sits in a crossbar's trough. Smart Cables run from every motor to the brain, and tubing from the tank. License plates are screwed to the end crossbars.
 - **Lifts.** Towers are gusseted to the rails and braced. Their motors drive the pivots through gear pairs matching the lift's ratio. 4-bars and 6-bars have parallel bars and couplers with screw joints. Chain bars have chain and sprockets; DR4Bs have a carriage and rubber bands. Cascades have nested stages on nylon slide blocks, with pulleys and string from a motor-driven spool.
-- **Claws.** Side and back plates, fingers on arms, a piston on standoffs (or upright rollers between plates), and shafts through bearings into the lift. A motor wrist drives the claw through a gear pair.
+- **Claws.** Every claw closes on what it holds, drawn from the held piece's real width at the grip height, so the jaws stop against it and open clear of it.
+  - *Piston and motor claws* are lobster claws: a curved finger with a rubber pad on each side, on a bell-crank that swings on a hinge screw. A piston (or a motor on a screw) between the two cranks' tails closes both fingers, following the real stroke. Side plates and a back wall hold it together, and shafts through bearings carry it on the lift.
+  - *Roller claws* have two swing arms, each with a roller of flex wheels and its own motor, that press on the stack from either side while it is held.
+  - A motor wrist drives the claw through a gear pair.
 - **Other mechanisms.** Intakes run on side arms with a chain drive. Toggle tools are mounted on posts bolted to the end crossbars.
 
 - **Build from VEX parts:** see below.
