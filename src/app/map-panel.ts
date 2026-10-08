@@ -7,7 +7,7 @@ import { maxSpeed, type RobotProfile } from '../sim/profile.ts';
 import { deletePlan, download, idb, listPlans, pickFile, safe, savePlan, type SavedPlan } from './storage.ts';
 import { MapLayer } from './map-layer.ts';
 import {
-  clampToField, cleanPoints, decodePlan, encodePlan, limitsAt, measure, nearestPoi, pointsOfInterest, routeTimes, segments, snap, validatePlan, type MapPlan, type MapPoint,
+  clampToField, cleanPoints, decodePlan, driveDist, encodePlan, limitsAt, measure, nearestPoi, pointsOfInterest, routeTimes, segments, snap, validatePlan, type MapPlan, type MapPoint,
   type Poi,
 } from './mapping.ts';
 import type { FieldViewer } from './viewer.ts';
@@ -443,10 +443,10 @@ export class MapPanel {
   private render(selects = true): void {
     this.layer.setPoints(this.points, this.selected);
     const m = this.from && this.to ? measure(this.from, this.to) : null;
-    this.layer.setMeasure(this.from, this.to, m ? `${f1(m.dist)}″ · ${f1(m.heading)}°` : '');
+    this.layer.setMeasure(this.from, this.to, m ? `${f1(driveDist(m.dist))}″ · ${f1(m.heading)}°` : '');
     $('map-result').innerHTML = this.from
       ? m
-        ? `<b>${f1(m.dist)} in</b> (${(m.dist / 12).toFixed(2)} ft) from ${esc(this.from.name)} to ${esc(this.to!.name)}<br>heading <b>${f1(m.heading)}°</b> · dx ${f1(m.dx)} · dy ${f1(m.dy)}`
+        ? `<b>${f1(driveDist(m.dist))} in</b> (${(driveDist(m.dist) / 12).toFixed(2)} ft) from ${esc(this.from.name)} to ${esc(this.to!.name)} <span class="muted">(${f1(m.dist)} in apart, less the 18 in robot)</span><br>heading <b>${f1(m.heading)}°</b> · dx ${f1(m.dx)} · dy ${f1(m.dy)}`
         : `From ${esc(this.from.name)}: click a second spot.`
       : 'Pick two spots (or click them on the field in Measure mode).';
     this.renderTable();
@@ -506,7 +506,7 @@ export class MapPanel {
           <td><input data-f="x" type="number" step="0.5" value="${f1(p.x)}" aria-label="Point ${i + 1} x (in)"></td>
           <td><input data-f="y" type="number" step="0.5" value="${f1(p.y)}" aria-label="Point ${i + 1} y (in)"></td>
           <td><input data-f="heading" type="number" step="5" value="${p.heading === undefined ? '' : f1(p.heading)}" placeholder="—" aria-label="Point ${i + 1} heading (°)"></td>
-          <td>${s ? f1(s.dist) : ''}</td>
+          <td>${s ? f1(s.drive) : ''}</td>
           <td>${s ? f1(s.heading) + '°' : ''}</td>
           <td>${s && s.turn !== null ? (s.turn >= 0 ? '+' : '') + f1(s.turn) + '°' : ''}</td>
           <td title="${times[i - 1] ? `turn ${times[i - 1].turn.toFixed(2)} s + drive ${times[i - 1].drive.toFixed(2)} s; ${times[i - 1].total.toFixed(2)} s so far` : ''}">${times[i - 1] ? (times[i - 1].turn + times[i - 1].drive).toFixed(2) + ' s' : ''}</td>

@@ -44,6 +44,7 @@ describe('measuring on the field', () => {
     expect(s[0]).toMatchObject({ dist: 10, turn: 0 });
     expect(s[0].heading).toBeCloseTo(90);
     expect(s[1].dist).toBeCloseTo(10);
+    expect(s[1].drive).toBe(0); // 10 in apart is less than the robot's own length
     expect(s[1].turn).toBeCloseTo(-90); // arrived facing 90, now 0: a left turn
     expect(segments([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 0, y: 5 }])[0].turn).toBeNull();
   });
@@ -153,7 +154,7 @@ describe('timing estimates at a chosen motor velocity', async () => {
     const l = limitsAt(100, 60, 120, 12);
     const t = routeTimes([{ id: 'a', x: 0, y: 0, heading: 0 }, { id: 'b', x: 0, y: 24 }, { id: 'c', x: 24, y: 24 }], l);
     expect(t[0].turn).toBe(0); // already facing it
-    expect(t[0].drive).toBeCloseTo(moveTime(24, 60, 120), 9);
+    expect(t[0].drive).toBeCloseTo(moveTime(6, 60, 120), 9); // 24 in apart, less the 18 in robot
     expect(t[1].turn).toBeCloseTo(turnTime(90, l), 9);
     expect(t[1].total).toBeCloseTo(t[0].drive + t[1].turn + t[1].drive, 9);
     // no heading at the first point: its turn is unknown, so not counted
