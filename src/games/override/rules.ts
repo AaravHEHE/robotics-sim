@@ -1,7 +1,7 @@
 // Rule monitors for the simulated robot (SG1–SG3, SG7, SG9). They report violations as
 // notes and feed the Autonomous Bonus / AWP; nothing is enforced on the robot.
 
-import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
+import { inPolygon, type Alliance, type FieldDef, type Vec2 } from '../../sim/field.ts';
 import { octagon, satMtv } from '../../sim/world.ts';
 
 export interface Violation {
@@ -9,6 +9,18 @@ export interface Violation {
   rule: string;
   message: string;
 }
+
+/** A part of the robot outside its frame (a claw, a held stack): its outline and its lowest point. */
+export interface RobotPart {
+  poly: Vec2[];
+  bottom: number;
+}
+
+/**
+ * Violations that cost the Autonomous Bonus and the AWP: those of the autonomous period.
+ * SG1 / SG2 come from the profile's size (an inspection matter) and stay notes.
+ */
+export const autonomousViolation = (v: Violation): boolean => v.rule !== 'SG1' && v.rule !== 'SG2';
 
 /** Autonomous Line: double tape 2.5″ wide on y = −x; red's side is x + y < 0. */
 const LINE_HALF_WIDTH = 1.25;
@@ -27,15 +39,17 @@ export function sideOf([x, y]: Vec2): Alliance | 'line' {
   return d < -LINE_HALF_WIDTH ? 'red' : d > LINE_HALF_WIDTH ? 'blue' : 'line';
 }
 
-export function touchingPerimeter(field: FieldDef, footprint: Vec2[]): boolean {
+/** The robot (its frame, or what it carries below the top of the wall) touches the perimeter. */
+export function touchingPerimeter(field: FieldDef, footprint: Vec2[], parts: RobotPart[] = []): boolean {
   const half = field.perimeter.inside / 2 - TOUCH;
-  return footprint.some(([x, y]) => Math.abs(x) >= half || Math.abs(y) >= half);
+  const low = parts.filter((p) => p.bottom < field.perimeter.wallHeight).flatMap((p) => p.poly);
+  return [...footprint, ...low].some(([x, y]) => Math.abs(x) >= half || Math.abs(y) >= half);
 }
 
-/** Any part of the robot inside the Midfield volume (SC6). */
-export function inMidfield(field: FieldDef, footprint: Vec2[]): boolean {
+/** Any part of the robot inside the Midfield volume (SC6), what it carries included. */
+export function inMidfield(field: FieldDef, footprint: Vec2[], parts: RobotPart[] = []): boolean {
   const mid = field.zones?.find((z) => z.kind === 'midfield');
-  return !!mid && satMtv(footprint, mid.polygon) !== null;
+  return !!mid && [footprint, ...parts.map((p) => p.poly)].some((poly) => satMtv(poly, mid.polygon) !== null);
 }
 
 export interface MonitorOptions {
@@ -47,7 +61,9 @@ export interface MonitorOptions {
 export class RuleMonitor {
   readonly violations: Violation[] = [];
   private readonly seen = new Set<string>();
-  private readonly opponentGoals: Array<{ id: string; poly: Vec2[] }>;
+  private readonly opponentGoals: Array<{ id: string; poly: Vec2[]; height: number }>;
+  /** The Autonomous Line is interrupted by the Midfield: crossing it there is no violation. */
+  private readonly midfield: Vec2[] | null;
 
   private readonly opts: MonitorOptions;
 
@@ -56,7 +72,8 @@ export class RuleMonitor {
     const opp = opts.alliance === 'red' ? 'blue' : 'red';
     this.opponentGoals = (field.goals ?? [])
       .filter((g) => g.color === opp)
-      .map((g) => ({ id: g.id, poly: octagon(g.x, g.y, g.baseWidth + 2 * TOUCH) }));
+      .map((g) => ({ id: g.id, poly: octagon(g.x, g.y, g.baseWidth + 2 * TOUCH), height: g.height }));
+    this.midfield = field.zones?.find((z) => z.kind === 'midfield')?.polygon ?? null;
     const { width, length, height } = opts.size;
     if (Math.max(width, length, height) > 18) {
       this.add(0, 'SG1', `The robot profile is ${width}×${length}×${height}″; robots must start within 18×18×18″.`);
@@ -73,14 +90,17 @@ export class RuleMonitor {
     this.violations.push({ t, rule, message });
   }
 
-  /** Check the robot at time t (ms of autonomous). */
-  check(t: number, footprint: Vec2[]): void {
+  /** Check the robot at time t (ms of autonomous): its frame and what it carries outside it. */
+  check(t: number, footprint: Vec2[], parts: RobotPart[] = []): void {
     if (this.opts.mode !== 'h2h') return; // Skills has no opponent
-    if (footprint.some((p) => pastAutonLine(this.opts.alliance, p) > 0)) {
+    const points = [...footprint, ...parts.flatMap((p) => p.poly)];
+    const across = (p: Vec2) => pastAutonLine(this.opts.alliance, p) > 0 && !(this.midfield && inPolygon(p, this.midfield));
+    if (points.some(across)) {
       this.add(t, 'SG7', 'The robot crossed the Autonomous Line onto the opposing side.');
     }
     for (const g of this.opponentGoals) {
-      if (satMtv(footprint, g.poly)) this.add(t, 'SG9', `The robot touched opponent Goal ${g.id}.`);
+      const touches = satMtv(footprint, g.poly) || parts.some((p) => p.bottom < g.height && satMtv(p.poly, g.poly));
+      if (touches) this.add(t, 'SG9', `The robot touched opponent Goal ${g.id}.`);
     }
   }
 }

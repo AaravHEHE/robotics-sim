@@ -92,9 +92,11 @@ function pieceMesh(p: Piece): THREE.Group {
  * All scoring objects of a game state. Returns the group and, for objects that can move
  * on the floor (stacks and lying pins), their nodes by id so a replay can move them.
  */
-export function piecesGroup(field: FieldDef, state: OverrideState): { group: THREE.Group; nodes: Map<string, THREE.Object3D> } {
+export function piecesGroup(field: FieldDef, state: OverrideState): { group: THREE.Group; nodes: Map<string, THREE.Object3D>; pieces: Map<string, THREE.Object3D> } {
   const group = new THREE.Group();
   const nodes = new Map<string, THREE.Object3D>();
+  /** Each standing piece (on a Goal or a floor stack) by id: one set down falls into place. */
+  const standing = new Map<string, THREE.Object3D>();
   const addStack = (pieces: Piece[], x: number, y: number, base: number, onGoal: boolean, id?: string) => {
     const holder = new THREE.Group();
     for (const slot of layoutStack(pieces, base, onGoal)) {
@@ -102,6 +104,7 @@ export function piecesGroup(field: FieldDef, state: OverrideState): { group: THR
       m.position.set(0, slot.bottom, 0);
       m.userData.pieceId = slot.piece.id;
       holder.add(m);
+      standing.set(slot.piece.id, m);
     }
     holder.position.set(x, 0, -y);
     group.add(holder);
@@ -133,7 +136,7 @@ export function piecesGroup(field: FieldDef, state: OverrideState): { group: THR
     group.add(holder);
     nodes.set(l.id, holder);
   }
-  return { group, nodes };
+  return { group, nodes, pieces: standing };
 }
 
 /** Pose a lying-pin or stack node from a track sample (field x, y, heading). */

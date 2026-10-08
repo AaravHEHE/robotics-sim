@@ -20,7 +20,7 @@ import { jsonEditor, ProjectEditor } from './editor.ts';
 import { SAMPLES, type SampleMeta } from './samples-meta.ts';
 import {
   deleteCustomRobot, download, loadAssembly, saveAssembly, fromBase64, idb, listCustomRobots, loadModel, loadProject, pickFile, projectFromZip,
-  projectToZip, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
+  projectToZip, pruneModels, robotFromZip, robotToZip, safe, saveCustomRobot, saveModel, saveProject, toBase64,
 } from './storage.ts';
 import { MapPanel } from './map-panel.ts';
 import { LayoutEditor } from './robot-editor/index.ts';
@@ -28,6 +28,8 @@ import { validateAssembly, type Assembly } from './parts/assembly.ts';
 import { CATALOG, PartsBuilder } from './parts/builder.ts';
 import { liveResult, renderHud, renderScorePanel } from './score-panel.ts';
 import { FieldViewer, type ViewMode } from './viewer.ts';
+import sampleHistory from './sample-history.json';
+import { isOlderCopy, type SampleHistory } from './sample-upgrade.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const fieldModules = import.meta.glob('../../data/fields/*.json', { eager: true, import: 'default' }) as Record<string, FieldDef>;
@@ -79,7 +81,6 @@ const state = {
   playing: false,
   speed: 1,
   running: false,
-  dirtySinceRun: true,
 };
 const robot = () => state.robots.find((r) => r.id === state.robotId) ?? PRESETS[0];
 const field = () => FIELDS.find((f) => f.id === state.fieldId) ?? FIELDS[0];
@@ -171,11 +172,16 @@ function renderRobotSelect() {
   }
 }
 
+/** Each robot change; one still loading its model when another starts gives up. */
+let robotApply = 0;
+
 async function applyRobot() {
   const r = robot();
+  const seq = ++robotApply;
   mapPanel?.robotChanged(); // its route timing uses this robot
   try {
     const glb = r.model ? await loadModel(r.model.assetId) : undefined;
+    if (seq !== robotApply) return; // a newer robot is being shown
     await viewer.setRobot(r, glb);
   } catch (e) {
     // a broken model or profile must not take the app down: show the plain box robot
@@ -230,6 +236,12 @@ function codeIsUnchangedSample(): boolean {
   const orig = editableFiles(sampleProject(state.projectName));
   const keys = Object.keys(orig);
   return keys.length === Object.keys(now).length && keys.every((k) => now[k] === orig[k]);
+}
+
+/** The sample a saved project is an unedited copy of an older version of (see isOlderCopy), or null. */
+function staleSample(name: string, files: Record<string, string>): SampleMeta | null {
+  const s = SAMPLES.find((x) => x.id === name);
+  return s && isOlderCopy(editableFiles(files), editableFiles(sampleProject(s.id)), (sampleHistory as SampleHistory)[s.id]) ? s : null;
 }
 
 async function openRobotSample(kind: 'auton' | 'test') {
@@ -293,7 +305,9 @@ function applyField() {
   viewer.setField(f);
   clearRecording();
   renderPresets();
-  void showFieldModel();
+  // the field model already on screen stays (re-reading it can take seconds, and one that
+  // couldn't be saved would be lost)
+  if (fieldModel.shown?.fieldId !== f.id) void showFieldModel();
   mapPanel?.fieldChanged();
 }
 
@@ -492,14 +506,8 @@ $<HTMLSelectElement>('auton-length').onchange = (e) => {
   persistSettings();
 };
 
-/** The code changed: the shown run no longer matches it. */
-function invalidateRun() {
-  state.dirtySinceRun = true;
-}
-
 /** A setting a run depends on changed: a run in progress is stale, so stop it. */
 function settingsChanged() {
-  state.dirtySinceRun = true;
   if (state.running) cancelRun();
 }
 
@@ -539,6 +547,11 @@ let reqId = 0;
 const pending = new Map<number, { resolve: (r: BuildResult) => void; reject: (e: Error) => void; timer: number }>();
 /** A build that sends nothing (no progress, no result) for this long is given up (ms). */
 const COMPILER_SILENCE_MS = 120_000;
+/**
+ * ... except while one file compiles or the program links: the worker can't send anything
+ * until clang returns, and a big EZ-Template file on a slow laptop can take minutes.
+ */
+const COMPILER_STEP_MS = 600_000;
 
 function compilerWorker(): Worker {
   if (compiler) return compiler;
@@ -548,7 +561,8 @@ function compilerWorker(): Worker {
     const p = pending.get(m.id);
     if (p) {
       clearTimeout(p.timer);
-      p.timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), COMPILER_SILENCE_MS);
+      const busy = m.type === 'progress' && /^(Compiling|Linking)/.test(m.message);
+      p.timer = window.setTimeout(() => restartCompiler('The compiler stopped responding.'), busy ? COMPILER_STEP_MS : COMPILER_SILENCE_MS);
     }
     if (m.type === 'progress') {
       setStatus(m.message, '', m.total ? { loaded: m.loaded ?? 0, total: m.total } : undefined);
@@ -709,7 +723,6 @@ async function run() {
         'ok',
       );
     }
-    state.dirtySinceRun = false;
     setPlaying(true);
   } catch (e) {
     if (e instanceof Cancelled) setStatus('Run cancelled: the robot, field or start changed. Press Run again.');
@@ -976,7 +989,6 @@ window.addEventListener('keydown', (e) => {
 
 let saveTimer = 0;
 editor.onChange = () => {
-  invalidateRun();
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(persistProject, 600);
 };
@@ -1008,14 +1020,19 @@ function loadFiles(name: string, files: Record<string, string>, binary: Record<s
   persistProject();
 }
 
+/** A file path typed by the user, if it is one the project keeps (in src/, include/ or static/). */
+function projectPath(name: string): string | null {
+  const p = name.trim().replace(/^\/+/, '');
+  if (/^(src|include|static)\/[\w./-]+$/.test(p) && !p.split('/').includes('..')) return p;
+  alert('Files must live in src/, include/ or static/, with names made of letters, digits, _ - . and /.');
+  return null;
+}
+
 $('btn-new-file').onclick = () => {
   const name = prompt('New file path (e.g. src/autons.cpp or include/robot.hpp):', 'src/autons.cpp');
   if (!name) return;
-  const p = name.trim().replace(/^\/+/, '');
-  if (!/^(src|include|static)\/[\w./-]+$/.test(p)) {
-    alert('Files must live in src/, include/ or static/.');
-    return;
-  }
+  const p = projectPath(name);
+  if (!p) return;
   editor.addFile(p, p.endsWith('.cpp') ? '#include "main.h"\n\n' : p.match(/\.(h|hpp)$/) ? '#pragma once\n#include "main.h"\n\n' : '');
 };
 $('btn-file-menu').onclick = () => {
@@ -1025,7 +1042,10 @@ $('btn-file-menu').onclick = () => {
   if (!action || action === p) return;
   if (action.trim().toLowerCase() === 'delete') {
     if (confirm(`Delete ${p}?`)) editor.deleteFile(p);
-  } else editor.renameFile(p, action.trim());
+  } else {
+    const to = projectPath(action);
+    if (to && to !== p) editor.renameFile(p, to);
+  }
 };
 
 $('btn-import').onclick = async () => {
@@ -1034,11 +1054,11 @@ $('btn-import').onclick = async () => {
   try {
     const { files, binary } = projectFromZip(new Uint8Array(await f.arrayBuffer()));
     const strip = commonRoot(Object.keys(files));
-    const rel = (p: string) => p.slice(strip.length);
     const tf: Record<string, string> = {};
     const bf: Record<string, Uint8Array> = {};
-    for (const [p, t] of Object.entries(files)) tf[rel(p)] = t;
-    for (const [p, b] of Object.entries(binary)) if (rel(p).startsWith('static/')) bf[rel(p)] = b;
+    // files outside the project folder (other folders zipped alongside it) are left out
+    for (const [p, t] of Object.entries(files)) if (p.startsWith(strip)) tf[p.slice(strip.length)] = t;
+    for (const [p, b] of Object.entries(binary)) if (p.startsWith(strip + 'static/')) bf[p.slice(strip.length)] = b;
     if (!Object.keys(tf).some((p) => p.startsWith('src/'))) throw new Error('No src/ folder found in the zip. Zip your whole PROS project folder.');
     loadFiles(f.name.replace(/\.zip$/i, ''), tf, bf);
     setStatus(`Imported ${f.name}. Library headers bundled in include/ are replaced by the simulator's.`, 'ok');
@@ -1047,10 +1067,16 @@ $('btn-import').onclick = async () => {
   }
 };
 
+/** The project folder in a zip: the shallowest folder with a src/ folder in it ('' = the top). */
 function commonRoot(paths: string[]): string {
-  const withSrc = paths.find((p) => /(^|\/)src\//.test(p));
-  if (!withSrc) return '';
-  return withSrc.slice(0, withSrc.search(/(^|\/)src\//) + (withSrc.match(/^src\//) ? 0 : 1));
+  let best: string | null = null;
+  for (const p of paths) {
+    const m = /^(.*?\/)?src\//.exec(p);
+    if (!m) continue;
+    const root = m[1] ?? '';
+    if (best === null || root.split('/').length < best.split('/').length) best = root;
+  }
+  return best ?? '';
 }
 
 $('btn-export').onclick = () => download(`${state.projectName || 'project'}.zip`, projectToZip(editor.files(), state.binary), 'application/zip');
@@ -1150,6 +1176,13 @@ function robotSummary(r: RobotProfile): string {
     <div>${r.model ? '3D model attached' : 'Box model (no GLB)'}</div>`;
 }
 
+/**
+ * Set while the layout editor writes its change into the robot JSON, so that edit doesn't
+ * redraw the layout it came from. Module-level: the layout editor (and its callback) is made
+ * once, but the editor is opened many times.
+ */
+let fromLayout = false;
+
 function openRobotEditor() {
   const r = robot();
   cadRobotId = r.id;
@@ -1159,7 +1192,6 @@ function openRobotEditor() {
   robotEditor?.dispose();
   robotEditor = jsonEditor(host, JSON.stringify(r, null, 2));
   // the layout editor writes into the JSON (where it is validated); a JSON edit redraws the layout
-  let fromLayout = false;
   layoutEditor ??= new LayoutEditor(
     {
       top: $('rl-top'),
@@ -1263,8 +1295,14 @@ function openRobotEditor() {
     }
     if (editingGlb) p.model = { ...(p.model ?? {}), assetId: editingGlb.assetId };
     else delete p.model;
-    await saveCustomRobot(p);
-    state.robots = [...PRESETS, ...(await listCustomRobots())];
+    try {
+      await saveCustomRobot(p);
+    } catch (e) {
+      return setStatus(`Couldn't save the robot in this browser: ${(e as Error).message}`, 'err');
+    }
+    await loadRobots();
+    if (!state.robots.some((x) => x.id === p.id)) return setStatus("Couldn't save the robot in this browser (its storage may be full or turned off).", 'err');
+    void pruneModels();
     state.robotId = p.id;
     renderRobotSelect();
     settingsChanged();
@@ -1301,7 +1339,11 @@ function openRobotEditor() {
     if (!f) return;
     const buf = await f.arrayBuffer();
     const assetId = 'glb-' + Date.now().toString(36);
-    await saveModel(assetId, buf);
+    try {
+      await saveModel(assetId, buf);
+    } catch (e) {
+      return setStatus(`Couldn't keep the model in this browser: ${(e as Error).message}`, 'err');
+    }
     editingGlb = { assetId };
     setStatus(`Attached ${f.name}. Save the robot to see and keep it.`);
   };
@@ -1321,6 +1363,8 @@ function openRobotEditor() {
     try {
       const bytes = new Uint8Array(await f.arrayBuffer());
       let profile: unknown;
+      // the imported robot brings its own model, or none: not the one being edited before
+      editingGlb = null;
       if (/\.zip$/i.test(f.name)) {
         const z = robotFromZip(bytes);
         profile = z.profile;
@@ -1340,7 +1384,8 @@ function openRobotEditor() {
   $('rb-delete').onclick = async () => {
     if (!confirm(`Delete “${r.name}” from this browser?`)) return;
     await deleteCustomRobot(r.id);
-    state.robots = [...PRESETS, ...(await listCustomRobots())];
+    await loadRobots();
+    void pruneModels();
     state.robotId = PRESETS[0].id;
     renderRobotSelect();
     settingsChanged();
@@ -1402,11 +1447,20 @@ async function boot() {
   await applyRobot();
 
   const saved = await safe(loadProject(), undefined);
-  if (saved && Object.keys(saved.files).length) {
+  const stale = saved ? staleSample(saved.name, saved.files) : null;
+  if (stale) {
+    // an unedited copy of an older version of a sample: its routine was written for older
+    // physics, so open the sample as it is now (with its robot, field and start)
+    await openSample(stale);
+    setStatus(`Updated “${stale.name}” to its current version: the simulator's physics changed since you opened it, and the old routine no longer works. Press Run.`, 'ok');
+  } else if (saved && Object.keys(saved.files).length) {
     const binary: Record<string, Uint8Array> = {};
     for (const [p, b] of Object.entries(saved.binary ?? {})) binary[p] = fromBase64(b);
     loadFiles(saved.name, saved.files, binary);
-    setStatus('Restored your last project. Press Run (Ctrl+Enter).');
+    const edited = SAMPLES.find((x) => x.id === saved.name && (sampleHistory as Record<string, unknown>)[x.id]);
+    if (edited && !codeIsUnchangedSample()) {
+      setStatus(`Restored your last project, your edited copy of “${edited.name}”. That sample has since been updated for the simulator's stricter physics: if your copy no longer scores, open the sample again from Samples and compare.`);
+    } else setStatus('Restored your last project. Press Run (Ctrl+Enter).');
   } else {
     // first visit: the plain PROS starter on the empty field
     await openSample(SAMPLES[0]);

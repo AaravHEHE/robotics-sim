@@ -168,14 +168,28 @@ export function validateField(f: unknown): string[] {
   const half = (d.perimeter?.inside ?? 0) / 2;
   const inField = (x: number, y: number) => Math.abs(x) <= half && Math.abs(y) <= half;
   const goalIds = new Set<string>();
+  const pos = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0;
   for (const g of d.goals ?? []) {
     if (!inField(g.x, g.y)) e.push(`goal ${g.id} is outside the field.`);
     if (!(g.height > 0)) e.push(`goal ${g.id} needs a positive height.`);
+    if (!pos(g.baseWidth) || !pos(g.topWidth) || !(g.bodyHeight >= 0)) e.push(`goal ${g.id} needs baseWidth, topWidth and bodyHeight in inches.`);
     goalIds.add(g.id);
+  }
+  for (const l of d.loaders ?? []) {
+    if (!pos(l.width) || !pos(l.depth) || !pos(l.height)) e.push(`loader ${l.id} needs width, depth and height in inches.`);
+  }
+  for (const o of Array.isArray(d.objects) ? d.objects : []) {
+    const sh = o?.shape;
+    const ok = sh && Number.isFinite(sh.x) && Number.isFinite(sh.y) && (sh.type === 'box' ? pos(sh.width) && pos(sh.length) : sh.type === 'circle' && pos(sh.radius));
+    if (!ok) e.push(`object ${o?.id} needs a box (width, length) or circle (radius) shape at x, y.`);
   }
   const zoneIds = new Set((d.zones ?? []).map((z) => z.id));
   for (const g of d.goals ?? []) if (zoneIds.size && !zoneIds.has(g.zone)) e.push(`goal ${g.id} refers to unknown zone ${g.zone}.`);
   for (const [id, layout] of Object.entries(d.layouts ?? {})) {
+    if (!Array.isArray(layout?.items)) {
+      e.push(`layout ${id}: items must be a list.`);
+      continue;
+    }
     for (const it of layout.items) {
       if (it.type === 'goal' && !goalIds.has(it.goal)) e.push(`layout ${id}: unknown goal ${it.goal}.`);
       if (it.type !== 'goal' && !inField(it.x, it.y)) e.push(`layout ${id}: object at (${it.x}, ${it.y}) is outside the field.`);

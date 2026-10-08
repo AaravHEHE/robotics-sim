@@ -8,7 +8,7 @@ import type { FieldDef } from '../../sim/field.ts';
 import { clawEffector } from '../../sim/lift.ts';
 import type { ClawSpec, DeviceSpec, IntakeSpec, StagingSpec } from '../../sim/profile.ts';
 import type { OpticalReading, SensorBeam, World } from '../../sim/world.ts';
-import { octagon, rayPolygon } from '../../sim/world.ts';
+import { crossSection, octagon, rayPolygon } from '../../sim/world.ts';
 import { CUP, layoutStack, PIN, type Piece } from './elements.ts';
 import type { OverrideState } from './state.ts';
 import { faceInside, overhang, wallFrame } from './toggle.ts';
@@ -88,6 +88,12 @@ export function installSensors(world: World, field: FieldDef, state: OverrideSta
         const d = (k / 2.5) * (PIN.length / 2);
         hits.push({ t: rayCircle(b, l.x + ux * d, l.y + uy * d, PIN.coneDiameter / 2), color: l.colors[k < 0 ? 0 : 1] });
       }
+      // the collar in the middle, the widest part: the half the beam meets first
+      const tc = rayCircle(b, l.x, l.y, PIN.collarDiameter / 2);
+      if (tc < Infinity) {
+        const along = (b.ox + b.dx * tc - l.x) * ux + (b.oy + b.dy * tc - l.y) * uy;
+        hits.push({ t: tc, color: l.colors[along < 0 ? 0 : 1] });
+      }
     }
     return hits;
   };
@@ -102,7 +108,10 @@ export function installSensors(world: World, field: FieldDef, state: OverrideSta
     // Goals: the body below its top, the stack above it
     for (const g of field.goals ?? []) {
       const color = b.z <= g.height ? (g.color === 'neutral' ? 'black' : g.color) : colorAt(state.goals[g.id] ?? [], g.height, true, b.z);
-      if (color) hits.push({ t: rayPolygon(b.ox, b.oy, b.dx, b.dy, octagon(g.x, g.y, g.baseWidth)), color });
+      // its outline at the beam's height: the tapered body, or the stack above the top
+      const ob = world.obstacles.find((o) => o.id === `goal ${g.id}`);
+      const cross = ob ? crossSection(ob, b.z, false, 0) : octagon(g.x, g.y, g.baseWidth);
+      if (color && cross) hits.push({ t: rayPolygon(b.ox, b.oy, b.dx, b.dy, cross), color });
     }
     // Toggles: the face toward the field, where the prism hangs over it
     for (const t of field.toggles ?? []) {
@@ -135,7 +144,8 @@ export function installSensors(world: World, field: FieldDef, state: OverrideSta
     const name = dev.watches!;
     const pieces = state.held[name] ?? [];
     if (!pieces.length) return NOTHING;
-    const mech = world.profile.mechanisms.find((x) => x.name === name) as ClawSpec | IntakeSpec | StagingSpec;
+    const mech = world.profile.mechanisms.find((x) => x.name === name) as ClawSpec | IntakeSpec | StagingSpec | undefined;
+    if (!mech) return NOTHING; // the mechanism it watched was removed from the robot
     let base = 0.5; // an intake carries pieces just off the floor
     if (mech.kind === 'staging') base = mech.at.z;
     if (mech.kind === 'claw') base = clawEffector(world.profile, mech, (x) => world.mechanismState(x)).z - (state.grip[name] ?? 0);

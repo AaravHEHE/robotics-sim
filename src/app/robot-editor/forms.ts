@@ -2,6 +2,7 @@
 // robot and its drivetrain, a mechanism, or a device), generated from its fields.
 
 import type { RobotProfile } from '../../sim/profile.ts';
+import { esc } from '../html.ts';
 
 /** Fields that pick from a fixed list. */
 const CHOICES: Record<string, string[]> = {
@@ -32,7 +33,6 @@ const HELP: Record<string, string> = {
 };
 const NOT_EDITABLE = new Set(['kind', 'type', 'schema', 'model']);
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /**
  * Fill `host` with a form for `obj` (a part of `profile`), for all its fields or `only` those.

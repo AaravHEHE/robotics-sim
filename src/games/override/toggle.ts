@@ -66,8 +66,8 @@ export interface ContactShape {
   spin?: number;
   /** A jammer: wedged against a Toggle, it stops it turning either way. */
   lock?: boolean;
-  /** How fast the robot is moving (in/s): a press at speed carries a Toggle two faces. */
-  speed?: number;
+  /** How fast the robot is moving (in/s, field frame): a press at speed carries a Toggle two faces. */
+  velocity?: Vec2;
 }
 
 /**
@@ -135,7 +135,10 @@ export class ToggleSim {
         if (shape.spin !== undefined) spin += shape.spin; // rollers roll it, never shove it
         else if (depth >= PRESS_DEPTH * overhang(def)) {
           pressing = true;
-          if ((shape.speed ?? 0) > FAST_PRESS) fast = true;
+          // only the speed into the wall counts: sliding along it at speed is no hard hit
+          const [vx, vy] = shape.velocity ?? [0, 0];
+          const { n } = wallFrame(def);
+          if (-(vx * n[0] + vy * n[1]) > FAST_PRESS) fast = true;
         }
       }
       if (locked) {

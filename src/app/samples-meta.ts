@@ -51,7 +51,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-flex',
     name: 'Override: Flex Hero Bot (PROS)',
-    description: 'Plain PROS with simple dead-reckoning. Drops the Preload into Goal R1 with the motor claw, picks a standing Cup + Pin off the floor and stacks it on, then presses the Red 1 Toggle twice with the chassis.',
+    description: 'Plain PROS with simple dead-reckoning. Lifts the Preload over Goal R1 and drops it in with the motor claw, then presses the Red 1 Toggle twice with the chassis. (Its tilting arm claw can\'t lift a Cup over a Placed Pin, so it doesn\'t stack.)',
     robot: 'override-flex',
     field: 'override',
     start: 'red1_s',
@@ -82,6 +82,7 @@ export const SAMPLES: SampleMeta[] = [
     robot: 'override-dr4b-intake',
     field: 'override',
     start: 'red1_s',
+    startAt: { x: -57.6, y: -37, theta: 90 }, // the Preload in the rear chamber must be inside the wall
     autonMs: 15000,
   },
   {
@@ -118,6 +119,7 @@ export const SAMPLES: SampleMeta[] = [
     robot: 'override-fourbar-claw',
     field: 'override',
     start: 'red1_s',
+    startAt: { x: -57.6, y: -37, theta: 90 }, // the Preload in the rear claw must be inside the wall
     autonMs: 15000,
   },
   {
@@ -137,15 +139,24 @@ export const SAMPLES: SampleMeta[] = [
     robot: 'override-dr4b-intake',
     field: 'override',
     start: 'red1_s',
+    startAt: { x: -57.6, y: -37, theta: 90 }, // the Preload in the rear chamber must be inside the wall
     autonMs: 60000,
   },
   test('test-flex', 'override-flex', 'Flex (Hero Bot)', 'moves the arm to three heights and drops and re-grabs the Preload with the claw'),
   test('test-banshee', 'override-banshee', 'Banshee', 'swings the arm to three angles with the wrist keeping the claw upright, rolls the Preload out and back in and spins the intake'),
-  test('test-dr4b-intake', 'override-dr4b-intake', 'DR4B + intake chamber', 'reads the GPS and chamber sensor, lifts the Preload to three heights, drops and re-grabs it and spins the intake'),
+  {
+    ...test('test-dr4b-intake', 'override-dr4b-intake', 'DR4B + intake chamber', 'reads the GPS and chamber sensor, lifts the Preload to three heights, drops and re-grabs it and spins the intake'),
+    // the Preload in the rear claw must be inside the wall: 3" north of the preset
+    startAt: { x: -37, y: -57.6, theta: 0 },
+  },
   test('test-claw-gate', 'override-claw-gate', 'Claw Gate', 'moves the cascade to three heights, swings the chain bar over the top, drops the Preload and picks it up off the floor, and spins the intake'),
   test('test-ace', 'override-ace', 'ACE', 'moves the cascade to three heights, swings the chain bar over the top, and drops the Preload and picks it up off the floor'),
   test('test-sixbar-wrist', 'override-sixbar-wrist', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),
-  test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the rear 4-bar to three heights and drops and re-grabs the Preload behind the robot'),
+  {
+    ...test('test-workhorse', 'override-fourbar-claw', '4-bar workhorse', 'moves the rear 4-bar to three heights and drops and re-grabs the Preload behind the robot'),
+    // the Preload in the rear claw must be inside the wall: 3" north of the preset
+    startAt: { x: -37, y: -57.6, theta: 0 },
+  },
   test('test-toggle-bot', 'override-toggle-bot', 'Toggle bot', 'spins the Toggle roller both ways, works the plate and the jammer and reads the optical sensor'),
   {
     ...test('test-midfield-pusher', 'override-midfield-pusher', 'Midfield pusher', 'compares how far it rolls on with coast and hold brake modes'),

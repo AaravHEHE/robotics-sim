@@ -205,6 +205,23 @@ export interface MapPlan {
 
 export const MAX_PLAN_POINTS = 200;
 
+/**
+ * Points as the planner keeps them: finite coordinates, a text label and heading only when
+ * valid, and fresh ids p1, p2… (never ids from a file, which end up in the page's HTML).
+ */
+export function cleanPoints(points: unknown): MapPoint[] {
+  if (!Array.isArray(points)) return [];
+  const out: MapPoint[] = [];
+  for (const q of points.slice(0, MAX_PLAN_POINTS) as Array<Partial<MapPoint> | null>) {
+    if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) continue;
+    const p: MapPoint = { id: `p${out.length + 1}`, x: q.x!, y: q.y! };
+    if (typeof q.label === 'string' && q.label) p.label = q.label.slice(0, 80);
+    if (Number.isFinite(q.heading)) p.heading = q.heading;
+    out.push(p);
+  }
+  return out;
+}
+
 /** Problems with a plan read from a file or a link (empty = fine). */
 export function validatePlan(p: unknown): string[] {
   const e: string[] = [];
@@ -218,6 +235,7 @@ export function validatePlan(p: unknown): string[] {
   plan.points.forEach((q, i) => {
     if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y) || Math.abs(q.x) > 200 || Math.abs(q.y) > 200) e.push(`Point ${i + 1} has no valid x and y.`);
     else if (q.heading !== undefined && !Number.isFinite(q.heading)) e.push(`Point ${i + 1} has an invalid heading.`);
+    else if (q.label !== undefined && typeof q.label !== 'string') e.push(`Point ${i + 1} has an invalid name.`);
   });
   if (plan.speedPct !== undefined && !(Number.isFinite(plan.speedPct) && plan.speedPct > 0 && plan.speedPct <= 100)) e.push('The speed must be 1-100%.');
   return e;

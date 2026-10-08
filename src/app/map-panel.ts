@@ -7,10 +7,11 @@ import { maxSpeed, type RobotProfile } from '../sim/profile.ts';
 import { deletePlan, download, idb, listPlans, pickFile, safe, savePlan, type SavedPlan } from './storage.ts';
 import { MapLayer } from './map-layer.ts';
 import {
-  clampToField, decodePlan, driveDist, encodePlan, limitsAt, measure, nearestPoi, pointsOfInterest, routeTimes, segments, snap, validatePlan, type MapPlan, type MapPoint,
+  clampToField, cleanPoints, decodePlan, driveDist, encodePlan, limitsAt, measure, nearestPoi, pointsOfInterest, routeTimes, segments, snap, validatePlan, type MapPlan, type MapPoint,
   type Poi,
 } from './mapping.ts';
 import type { FieldViewer } from './viewer.ts';
+import { esc } from './html.ts';
 
 export type MapMode = 'off' | 'plot' | 'measure';
 
@@ -50,7 +51,6 @@ const SNAP_IN = 2.5;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const f1 = (v: number) => (Math.abs(v) < 0.05 ? '0.0' : v.toFixed(1));
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 export class MapPanel {
   points: MapPoint[] = [];
@@ -229,7 +229,6 @@ export class MapPanel {
       const plan = JSON.parse(await f.text()) as MapPlan;
       const errs = validatePlan(plan);
       if (errs.length) throw new Error(errs.join(' '));
-      plan.points = plan.points.map((q, i) => ({ ...q, id: q.id || `p${i + 1}` }));
       this.open(plan, null);
       this.host.status(`Imported the plan “${plan.name}”. Press Save to keep it in this browser.`, 'ok');
       this.warnField(plan);
@@ -272,9 +271,10 @@ export class MapPanel {
   }
 
   setPoints(points: MapPoint[], keep = true): void {
-    this.points = points.map((p) => ({ ...p }));
-    this.nextId = Math.max(0, ...this.points.map((p) => Number(String(p.id ?? '').replace(/\D/g, '')) || 0)) + 1;
-    for (const p of this.points) if (!p.id) p.id = `p${this.nextId++}`;
+    // points can come from files, links and browser storage: keep only well-formed values,
+    // with ids of our own (they end up in the page's HTML)
+    this.points = cleanPoints(points);
+    this.nextId = this.points.length + 1;
     this.selected = null;
     this.from = this.to = null;
     this.render();
@@ -456,12 +456,12 @@ export class MapPanel {
 
   private renderSelects(): void {
     const opts = (sel: HTMLSelectElement, current: Spot | null) => {
-      const pts = this.points.map((q, i) => `<option value="pt:${q.id}">Point ${i + 1}${q.label ? ` (${esc(q.label)})` : ''}</option>`).join('');
+      const pts = this.points.map((q, i) => `<option value="pt:${esc(q.id)}">Point ${i + 1}${q.label ? ` (${esc(q.label)})` : ''}</option>`).join('');
       const groups = (['goal', 'toggle', 'loader', 'stack', 'pin', 'start'] as const)
         .map((k) => {
           const items = this.pois.filter((p) => p.kind === k);
           const name = { goal: 'Goals', toggle: 'Toggles', loader: 'Loaders', stack: 'Stacks', pin: 'Lying Pins', start: 'Start positions' }[k];
-          return items.length ? `<optgroup label="${name}">${items.map((p) => `<option value="poi:${p.id}">${esc(p.label)}</option>`).join('')}</optgroup>` : '';
+          return items.length ? `<optgroup label="${name}">${items.map((p) => `<option value="poi:${esc(p.id)}">${esc(p.label)}</option>`).join('')}</optgroup>` : '';
         })
         .join('');
       sel.innerHTML = `<option value="">—</option>${pts ? `<optgroup label="Points">${pts}</optgroup>` : ''}${groups}`;
@@ -500,7 +500,7 @@ export class MapPanel {
     body.innerHTML = this.points
       .map((p, i) => {
         const s = segs[i - 1];
-        return `<tr data-id="${p.id}" class="${p.id === this.selected ? 'sel' : ''}">
+        return `<tr data-id="${esc(p.id)}" class="${p.id === this.selected ? 'sel' : ''}">
           <td>${i + 1}</td>
           <td><input data-f="label" value="${esc(p.label ?? '')}" placeholder="name" aria-label="Point ${i + 1} name"></td>
           <td><input data-f="x" type="number" step="0.5" value="${f1(p.x)}" aria-label="Point ${i + 1} x (in)"></td>

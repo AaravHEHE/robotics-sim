@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { RobotProfile } from '../../sim/profile.ts';
 import { ManipulatorVisuals } from '../manipulator-meshes.ts';
 import { buildBoxRobot } from '../robot-meshes.ts';
+import { shared } from '../override-meshes.ts';
 
 export class RobotPreview {
   private readonly renderer: THREE.WebGLRenderer;
@@ -39,9 +40,10 @@ export class RobotPreview {
   show(p: RobotProfile): void {
     this.robot.traverse((o) => {
       const m = o as THREE.Mesh;
-      m.geometry?.dispose();
+      // cached parts' geometry and materials are shared (see parts/geometry.ts)
+      if (m.geometry && !shared.has(m.geometry)) m.geometry.dispose();
       const mats = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
-      for (const x of mats) x.dispose();
+      for (const x of mats) if (!shared.has(x)) x.dispose();
     });
     this.robot.clear();
     try {

@@ -38,6 +38,8 @@ export interface ToggleState {
 export interface Transit {
   /** Field position it started from, and the height of its bottom (in). */
   from: { x: number; y: number; z: number };
+  /** Where it ends up, when that is on a Goal or stack (its bottom there): it falls onto it. */
+  to?: { x: number; y: number; z: number };
   /** It started out lying, pointing this way (degrees): it is turned upright on the way. */
   lying?: number;
   t0: number;
@@ -64,17 +66,14 @@ export interface OverrideState {
   flipped: Record<string, boolean>;
 }
 
-let counter = 0;
-const nextId = (prefix: string) => `${prefix}${++counter}`;
-
-export function pieceFrom(p: LayoutPiece): Piece {
-  if (p.kind === 'pin') return { kind: 'pin', id: nextId('pin'), colors: p.colors as [PinColor, PinColor] } satisfies PinPiece;
-  return { kind: 'cup', id: nextId('cup'), up: p.up } satisfies CupPiece;
-}
-
-/** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call. */
+/** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call, and each call has its own. */
 export function initialState(field: FieldDef, layoutId: string): OverrideState {
-  counter = 0;
+  let counter = 0;
+  const nextId = (prefix: string) => `${prefix}${++counter}`;
+  const pieceFrom = (p: LayoutPiece): Piece =>
+    p.kind === 'pin'
+      ? ({ kind: 'pin', id: nextId('pin'), colors: p.colors as [PinColor, PinColor] } satisfies PinPiece)
+      : ({ kind: 'cup', id: nextId('cup'), up: p.up } satisfies CupPiece);
   const layout = field.layouts?.[layoutId];
   const state: OverrideState = {
     floor: [],

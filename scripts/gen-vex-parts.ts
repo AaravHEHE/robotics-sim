@@ -29,25 +29,40 @@ for (const [mat, label] of [['', 'aluminum'], ['steel', 'steel']] as const) {
 }
 add('Structure (aluminum)', { id: 'slide-rail', name: 'Linear slide rail', kind: 'channel', web: 1, flange: 1, lengths: [8, 12, 16, 24, 32], length: 24, finish: 'black' });
 add('Structure (aluminum)', { id: 'slide-truck', name: 'Linear slide truck', kind: 'box', size: [2, 1.3, 0.6], color: '#2a2d31' });
-add('Structure (aluminum)', { id: 'gusset-angle', name: 'Angle gusset', kind: 'plate', web: 3, lengths: [3], length: 3 });
+add('Structure (aluminum)', { id: 'gusset-angle', name: 'Angle gusset (bent 90°)', kind: 'gusset', web: 2, flange: 2, lengths: [3], length: 3 });
+add('Structure (aluminum)', { id: 'l-bracket', name: 'L-bracket', kind: 'gusset', web: 1, flange: 2, lengths: [2], length: 2 });
 add('Structure (aluminum)', { id: 'gusset-pivot', name: 'Pivot gusset', kind: 'plate', web: 2, lengths: [5], length: 5 });
 add('Structure (aluminum)', { id: 'gusset-3way', name: '3-way gusset', kind: 'plate', web: 3, lengths: [5], length: 5 });
 add('Structure (aluminum)', { id: 'turntable', name: 'Turntable bearing', kind: 'pulley', diameter: 6.6, width: 0.6, color: '#2a2d31' });
-add('Structure (aluminum)', { id: 'bearing-flat', name: 'Bearing flat', kind: 'plate', web: 1, lengths: [3], length: 3, color: '#2a2d31' });
+add('Structure (aluminum)', { id: 'bearing-flat', name: 'Bearing flat', kind: 'bearing', web: 1, lengths: [3], length: 3, color: '#2a2d31' });
 
 // ---------------- hardware ----------------
+// 8-32 hardware: a #8 screw is 0.164 in across its threads; VEX's star-drive button heads are
+// 0.32 in across and 0.09 in tall; keps and nylock nuts are 11/32 (0.344) in across the flats
 add('Hardware', { id: 'standoff', name: 'Standoff 8-32', kind: 'standoff', lengths: [1, 2, 3, 4, 5, 6, 8, 12], length: 4 });
 add('Hardware', { id: 'standoff-nylon', name: 'Nylon standoff', kind: 'standoff', lengths: [1, 2, 4], length: 2, color: '#e8e4d8' });
+add('Hardware', { id: 'standoff-coupler', name: 'Standoff coupler', kind: 'standoff', lengths: [1], length: 1 });
 for (const [len, label] of [[0.125, '⅛″'], [0.25, '¼″'], [0.375, '⅜″'], [0.5, '½″']] as const) {
-  add('Hardware', { id: `spacer-${len}`, name: `Nylon spacer ${label}`, kind: 'cylinder', diameter: 0.38, length: len, color: '#e8e4d8' });
+  add('Hardware', { id: `spacer-${len}`, name: `Nylon spacer ${label}`, kind: 'spacer', diameter: 0.38, width: len, color: '#e8e4d8' });
 }
-add('Hardware', { id: 'collar', name: 'Shaft collar', kind: 'cylinder', diameter: 0.6, length: 0.32, color: '#9aa0a6' });
-add('Hardware', { id: 'collar-rubber', name: 'Rubber shaft collar', kind: 'cylinder', diameter: 0.45, length: 0.3, color: '#1f2125' });
-add('Hardware', { id: 'screw', name: 'Screw 8-32 × ½″', kind: 'cylinder', diameter: 0.164, length: 0.5, color: '#2a2d31' });
-add('Hardware', { id: 'nut', name: 'Keps nut 8-32', kind: 'cylinder', diameter: 0.38, length: 0.15, color: '#9aa0a6' });
+for (const [len, label] of [[0.032, '0.032″'], [0.064, '0.064″']] as const) {
+  add('Hardware', { id: `spacer-thin-${String(len).replace('0.', '')}`, name: `Thin nylon spacer ${label}`, kind: 'spacer', diameter: 0.5, width: len, color: '#e8e4d8' });
+}
+add('Hardware', { id: 'spacer-8mm', name: 'Plastic spacer 8 mm', kind: 'spacer', diameter: 0.5, width: 0.315, color: '#3a3d42' });
+add('Hardware', { id: 'collar', name: 'Shaft collar (set screw)', kind: 'collar', diameter: 0.5, width: 0.3, color: '#9aa0a6' });
+add('Hardware', { id: 'collar-clamp', name: 'Clamping shaft collar', kind: 'collar', diameter: 0.75, width: 0.3, color: '#4b4f56', style: 'clamp' });
+add('Hardware', { id: 'collar-rubber', name: 'Rubber shaft collar', kind: 'collar', diameter: 0.45, width: 0.3, color: '#1f2125', style: 'rubber' });
+for (const [len, label] of [[0.25, '¼″'], [0.375, '⅜″'], [0.5, '½″'], [0.625, '⅝″'], [0.75, '¾″'], [1, '1″'], [1.25, '1¼″'], [1.5, '1½″'], [2, '2″']] as const) {
+  add('Hardware', { id: len === 0.5 ? 'screw' : `screw-${String(len).replace('.', '_')}`, name: `Screw 8-32 × ${label} (star drive)`, kind: 'screw', shank: len, diameter: 0.32, color: '#2a2d31' });
+}
+add('Hardware', { id: 'nut', name: 'Keps nut 8-32', kind: 'nut', diameter: 0.344, width: 0.14, color: '#9aa0a6', style: 'keps' });
+add('Hardware', { id: 'nut-nylock', name: 'Nylock nut 8-32', kind: 'nut', diameter: 0.344, width: 0.19, color: '#9aa0a6', style: 'nylock' });
+add('Hardware', { id: 'washer', name: 'Steel washer #8', kind: 'washer', diameter: 0.375, width: 0.032, color: '#b9bec5' });
+add('Hardware', { id: 'washer-teflon', name: 'Teflon washer', kind: 'washer', diameter: 0.5, width: 0.04, color: '#f2f2ee' });
 add('Hardware', { id: 'rubber-band', name: 'Rubber band #32', kind: 'band', diameter: 1.0 });
 add('Hardware', { id: 'rubber-band-64', name: 'Rubber band #64', kind: 'band', diameter: 1.6 });
 add('Hardware', { id: 'zip-tie', name: 'Zip tie', kind: 'box', size: [4, 0.15, 0.05], color: '#1f2125' });
+add('Hardware', { id: 'pillow-block', name: 'Pillow block bearing', kind: 'bearing', web: 1, lengths: [2], length: 2, color: '#2a2d31', style: 'block' });
 
 // ---------------- motion: shafts, gears, sprockets, pulleys ----------------
 add('Shafts & bearings', { id: 'shaft', name: 'Square shaft ⅛″', kind: 'shaft', lengths: [4, 6, 8, 12, 16, 24], length: 8 });

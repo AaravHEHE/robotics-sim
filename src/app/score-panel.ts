@@ -3,6 +3,7 @@
 
 import { scoreState, type OverrideRecording, type OverrideResult } from '../games/override/game.ts';
 import { stateAt } from '../games/override/replay.ts';
+import { autonomousViolation } from '../games/override/rules.ts';
 import type { FieldDef, Vec2 } from '../sim/field.ts';
 import type { Recording } from '../sim/recording.ts';
 
@@ -21,7 +22,7 @@ function footprintAt(rec: Recording, t: number, size: { width: number; length: n
 export function liveResult(field: FieldDef, rec: Recording, g: OverrideRecording, t: number, size: { width: number; length: number }): OverrideResult {
   // at the end of the run show exactly what the simulator scored
   if (g.result && t >= rec.stop - 1) return g.result;
-  const violated = g.violations.some((v) => v.t <= t);
+  const violated = g.violations.some((v) => v.t <= t && autonomousViolation(v));
   return scoreState(field, g.mode, g.alliance, stateAt(g, t), footprintAt(rec, t, size), violated, t);
 }
 

@@ -93,6 +93,25 @@ describe('every part in the catalog can be drawn', () => {
       // within its box (rollers and teeth may poke out a little)
       expect(size.x, d.id).toBeLessThanOrEqual(want[0] + 0.5);
       expect(Math.max(size.y, size.z), d.id).toBeLessThanOrEqual(Math.max(want[1], want[2]) + 0.6);
+      // small hardware is placed by its box, so it must fill exactly that box
+      if (['screw', 'nut', 'washer', 'collar', 'spacer', 'bearing', 'gusset', 'standoff'].includes(d.kind)) {
+        const b = new THREE.Box3().setFromObject(o);
+        for (let i = 0; i < 3; i++) {
+          expect(b.min.getComponent(i), `${d.id} min ${'xyz'[i]}`).toBeGreaterThanOrEqual(-0.03);
+          expect(b.max.getComponent(i), `${d.id} max ${'xyz'[i]}`).toBeLessThanOrEqual(want[i] + 0.03);
+          expect(b.max.getComponent(i) - b.min.getComponent(i), `${d.id} size ${'xyz'[i]}`).toBeGreaterThanOrEqual(want[i] * 0.85 - 0.03);
+        }
+      }
     }
+  });
+
+  it('has the hardware that holds a robot together', async () => {
+    const cat = await catalog();
+    for (const id of ['screw', 'screw-1', 'nut', 'nut-nylock', 'washer', 'washer-teflon', 'collar', 'collar-clamp', 'spacer-0.25', 'spacer-thin-032', 'bearing-flat', 'pillow-block', 'standoff-coupler', 'gusset-angle', 'l-bracket']) {
+      expect(cat.parts.some((d) => d.id === id), id).toBe(true);
+    }
+    // 8-32 hardware: the nut is 11/32 in across the flats, a screw's shank is its length
+    expect(partSize(cat.parts.find((d) => d.id === 'screw-1')!, {})[0]).toBeCloseTo(1.09, 6);
+    expect(partSize(cat.parts.find((d) => d.id === 'nut')!, {})[1]).toBeCloseTo(0.344 / Math.cos(Math.PI / 6), 6);
   });
 });

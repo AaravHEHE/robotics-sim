@@ -275,7 +275,7 @@ export function validateProfile(p: unknown): string[] {
         e.push(`drivetrain.${side} must be a non-empty list of ports 1-21 (negative = reversed).`);
       }
     }
-    if (!(d.cartridge in CARTRIDGE_RPM)) e.push('drivetrain.cartridge must be red, green or blue.');
+    if (!isCartridge(d.cartridge)) e.push('drivetrain.cartridge must be red, green or blue.');
     if (!isNum(d.wheelDiameter, 1, 10)) e.push('drivetrain.wheelDiameter must be 1-10 inches.');
     if (!isNum(d.wheelRpm, 1, 1200)) e.push('drivetrain.wheelRpm must be 1-1200.');
     if (!isNum(d.trackWidth, 2, 30)) e.push('drivetrain.trackWidth must be 2-30 inches.');
@@ -284,6 +284,18 @@ export function validateProfile(p: unknown): string[] {
   }
   if (!Array.isArray(r.devices)) e.push('devices must be a list.');
   if (!Array.isArray(r.mechanisms)) e.push('mechanisms must be a list.');
+  if (e.length) return e;
+  // shape checks first: everything below (and the app, which shows these values) relies on them
+  r.devices.forEach((dev, i) => {
+    if (!dev || typeof dev !== 'object') e.push(`devices[${i}] must be an object.`);
+    else if (!DEVICE_TYPES.includes(dev.type)) e.push(`devices[${i}]: unknown type "${String(dev.type)}".`);
+    else if (dev.name !== undefined && typeof dev.name !== 'string') e.push(`devices[${i}]: name must be text.`);
+  });
+  r.mechanisms.forEach((m, i) => {
+    if (!m || typeof m !== 'object') e.push(`mechanisms[${i}] must be an object.`);
+    else if (typeof m.name !== 'string') e.push(`mechanisms[${i}]: name must be text.`);
+    else if (m.motors !== undefined && !Array.isArray(m.motors)) e.push(`Mechanism ${m.name}: motors must be a list of ports.`);
+  });
   if (e.length) return e;
 
   const used = new Map<string, string>();
@@ -308,7 +320,7 @@ export function validateProfile(p: unknown): string[] {
     }
   };
   for (const dev of r.devices) {
-    if (dev.type === 'motor' && !(dev.cartridge in CARTRIDGE_RPM)) e.push(`Motor on port ${dev.port}: cartridge must be red, green or blue.`);
+    if (dev.type === 'motor' && !isCartridge(dev.cartridge)) e.push(`Motor on port ${dev.port}: cartridge must be red, green or blue.`);
     if (dev.type === 'distance') mount(dev, dev.mount, true);
     if (dev.type === 'optical' && dev.mount !== undefined) mount(dev, dev.mount, true);
     if (dev.type === 'gps' && dev.mount !== undefined) mount(dev, dev.mount, false);
@@ -341,6 +353,10 @@ export function validateProfile(p: unknown): string[] {
   }
   return e;
 }
+
+const DEVICE_TYPES: string[] = ['motor', 'imu', 'rotation', 'distance', 'optical', 'gps', 'vision', 'ai_vision', 'adi_digital_out', 'adi_digital_in'];
+/** A real cartridge name (not an inherited key such as "toString"). */
+const isCartridge = (c: unknown): c is Cartridge => typeof c === 'string' && Object.hasOwn(CARTRIDGE_RPM, c);
 
 const KINDS = ['roller', 'arm', 'flywheel', 'piston', 'lift', 'claw', 'intake', 'staging', 'wrist', 'toggleTool'];
 const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'piston', 'chainbar'];

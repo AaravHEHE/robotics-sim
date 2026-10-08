@@ -62,6 +62,29 @@ export function clawTilt(profile: RobotProfile, claw: ClawSpec, valueOf: (m: Mec
   return Math.min(a, 180 - a);
 }
 
+/**
+ * A claw's pitch (degrees, signed: positive tips its jaws forward), the way it really points:
+ * a single-pivot arm turns it with the arm, a motor wrist turns it too (less 180° once the
+ * held stack has been flipped over). A held stack hangs along it, below the grip point.
+ */
+export function clawPitch(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, flipped = false): number {
+  const lift = claw.lift ? profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === claw.lift) : undefined;
+  let pitch = lift?.lift === 'arm' ? valueOf(lift) * (lift.facing === 'rear' ? -1 : 1) : 0;
+  const wrist = profile.mechanisms.find((m) => m.kind === 'wrist' && m.claw === claw.name);
+  if (wrist && !wrist.adi) pitch += valueOf(wrist) - (flipped ? 180 : 0);
+  return pitch;
+}
+
+/**
+ * Where a held stack's bottom is (robot frame) when it is gripped `grip` in above its bottom:
+ * along the claw's pitch below the grip point.
+ */
+export function heldBottom(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, grip: number, flipped = false): Point3 {
+  const e = clawEffector(profile, claw, valueOf);
+  const p = clawPitch(profile, claw, valueOf, flipped);
+  return { x: e.x, y: e.y + grip * dsinDeg(p), z: e.z - grip * dcosDeg(p) };
+}
+
 const pt = (p: RobotPoint): Point3 => ({ x: p.x ?? 0, y: p.y, z: p.z });
 
 const liftNamed = (profile: RobotProfile, name: string | undefined) =>
