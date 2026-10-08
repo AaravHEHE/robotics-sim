@@ -14,7 +14,7 @@ import { ManipulatorVisuals } from './manipulator-meshes.ts';
 import { partSize } from './parts/assembly.ts';
 import { mergeRigid } from './parts/batch.ts';
 import { partDef } from './parts/catalog.ts';
-import { chassisLayout, holes, wheelPart } from './chassis-layout.ts';
+import { chassisLayout, chassisRelief, holes, wheelPart } from './chassis-layout.ts';
 import { Kit, WALL } from './parts/fasteners.ts';
 
 /** A mechanism's moving part, and its pose at rest (it is animated from there). */
@@ -70,7 +70,7 @@ export function buildBoxRobot(p: RobotProfile, opts: { merge?: boolean } = {}): 
       // a 6-wheel drive's middle wheel is a traction wheel (it keeps the robot from being pushed sideways)
       const wheel = n === 3 && i === 1 ? traction : omni;
       kit.part(wheel.id, V(sx(half), y, r), X, Y);
-      const powered = motors >= n || i === 0;
+      const powered = (motors >= n || i === 0) && !lay.moved.some((m) => m.wheel === i);
       // inside: the motor on the rail's web (the shaft in its cartridge), or a bearing and collar
       let a0: number;
       if (powered) {
@@ -99,17 +99,34 @@ export function buildBoxRobot(p: RobotProfile, opts: { merge?: boolean } = {}): 
       }
       kit.shaft(V(sx(a0), y, r), V(sx(a1), y, r));
     }
-    // one motor a side turns the other wheels by chain: 12-tooth sprockets beside the rail
+    // chain drive: sprockets beside the rail, a loop between each pair that turns the next one
+    // (one motor a side turns the other wheels; or a motor moved off its wheel turns it)
+    const sp = innerWeb + WALL + 0.07;
+    const pd = 0.25 / Math.sin(Math.PI / 12);
+    const sprockets = new Set<number>();
+    const loops = new Map<string, [number, number]>();
+    const loop = (a: number, b: number) => loops.set(`${a}|${b}`, [a, b]);
     if (motors < n) {
-      const sp = innerWeb + WALL + 0.07;
-      const pd = 0.25 / Math.sin(Math.PI / 12);
-      for (const y of lay.wheelY) kit.part('sprocket-12', V(sx(sp), y, r), X, Y);
-      for (let i = 0; i + 1 < n; i++) {
-        const y0 = lay.wheelY[i];
-        const y1 = lay.wheelY[i + 1];
-        const links = Math.round((y1 - y0) / 0.25);
-        for (const dz of [-pd / 2, pd / 2]) kit.part('chain-25', V(sx(sp), (y0 + y1) / 2, r + dz), Y, X, { length: links });
-      }
+      lay.wheelY.forEach((y) => sprockets.add(y));
+      for (let i = 0; i + 1 < n; i++) loop(lay.wheelY[i], lay.wheelY[i + 1]);
+    }
+    for (const mv of lay.moved) {
+      // the moved motor: on the rail's web like the others, its shaft through to a sprocket beside it
+      const [ml] = kit.size('v5-motor');
+      kit.part('v5-motor', V(sx(innerWeb - ml / 2), mv.y, r), out, Y, { cartridge: d.cartridge });
+      ports.push(V(sx(innerWeb - ml), mv.y, r));
+      for (const dy of [-0.5, 0.5]) kit.screw(V(sx(innerWeb + WALL), mv.y + dy, r + 0.5), out.clone().negate(), WALL, null, 0.2);
+      kit.shaft(V(sx(innerWeb - 0.35), mv.y, r), V(sx(sp + 0.4), mv.y, r));
+      const wy = lay.wheelY[mv.wheel];
+      const ys = [mv.y, ...lay.wheelY.filter((y) => y > Math.min(mv.y, wy) - 1e-6 && y < Math.max(mv.y, wy) + 1e-6), wy].sort((a, b) => a - b);
+      const run = [...new Set(ys)];
+      run.forEach((y) => sprockets.add(y));
+      for (let i = 0; i + 1 < run.length; i++) loop(run[i], run[i + 1]);
+    }
+    for (const y of sprockets) kit.part('sprocket-12', V(sx(sp), y, r), X, Y);
+    for (const [y0, y1] of loops.values()) {
+      const links = Math.round((y1 - y0) / 0.25);
+      for (const dz of [-pd / 2, pd / 2]) kit.part('chain-25', V(sx(sp), (y0 + y1) / 2, r + dz), Y, X, { length: links });
     }
     // the outer rail held to the inner one by standoffs between the wheels
     if (outer !== null) {
@@ -121,39 +138,60 @@ export function buildBoxRobot(p: RobotProfile, opts: { merge?: boolean } = {}): 
   }
 
   // ---- crossbars on top of the inner rails, flanges up, bolted at every crossing ----
+  // (where the intake carries a stack through, they are cut to leave it room, and what sits on
+  // them moves aside)
   const cb = lay.crossbars;
+  const relief = chassisRelief(p);
+  const blocks = (halfX: number, y0: number, y1: number, z0: number, z1: number) => {
+    const rel = relief(y0, y1, z0, z1);
+    return !!rel && rel.lo < halfX && rel.hi > -halfX;
+  };
   const crossYs = [cb.rear, cb.mid, cb.front2, cb.front, ...(cb.tank !== null ? [cb.tank] : [])];
   for (const y of crossYs) {
-    kit.part('c-channel-1x2x1', V(0, y, railTop + 0.25), X, Y, { length: holes(2 * crossHalf) });
-    for (const s of [-1, 1]) kit.screw(V(s * inner, y + 0.25, deck), Z.clone().negate(), 2 * WALL);
+    const rel = relief(y - 1, y + 1, railTop - 0.1, railTop + 0.6);
+    // a bar cut in two leaves a gap; a half too short to hold a bolt is left out
+    const spans: Array<[number, number]> = rel ? [[-crossHalf, Math.max(-crossHalf, rel.lo)], [Math.min(crossHalf, rel.hi), crossHalf]] : [[-crossHalf, crossHalf]];
+    for (const [i, [x0, x1]] of spans.entries()) {
+      const n = rel ? Math.floor((x1 - x0) / 0.5) : holes(2 * crossHalf);
+      if (n < 2) continue;
+      const len = n * 0.5;
+      const xc = !rel ? 0 : i === 0 ? x0 + len / 2 : x1 - len / 2;
+      kit.part('c-channel-1x2x1', V(xc, y, railTop + 0.25), X, Y, { length: n });
+      kit.screw(V(i === 0 ? -inner : inner, y + 0.25, deck), Z.clone().negate(), 2 * WALL);
+    }
   }
 
   // ---- electronics and air ----
   if (lay.brain) {
-    const { y: by, z: bz, size } = lay.brain;
-    kit.part('v5-brain', V(0, by, bz), X, Y);
+    const { x: brx, y: by, z: bz, size } = lay.brain;
+    kit.part('v5-brain', V(brx, by, bz), X, Y);
     // on four 1/2 in standoffs in the rear crossbars' troughs, screwed from below and above
     for (const y of [cb.rear, cb.mid]) {
       for (const s of [-1, 1]) {
-        const x = s * 2.25;
+        const x = brx + s * 2.25;
         kit.part('standoff', V(x, y, deck + 0.25), X, Y, { length: 1 });
         kit.screw(V(x, y, railTop), Z, WALL, null, 0.2);
         kit.screw(V(x, y, bz + size[2] / 2), Z.clone().negate(), size[2], null, 0.2);
       }
     }
-    // the battery across the front crossbars, zip-tied to each
-    const [bw, bd, bh] = partSize(partDef('v5-battery'), {});
-    const batY = (cb.front2 + cb.front) / 2;
-    kit.part('v5-battery', V(0, batY, deckTop + bh / 2), X, Y);
-    for (const y of [cb.front2, cb.front]) kit.strap(V(0, y, (railTop + deckTop + bh) / 2), X, bw / 2 + 0.02, Z, (deckTop + bh - railTop) / 2);
-    void bd;
-    // its power cable to the brain
-    kit.cable([V(-bw / 2, batY, deckTop + bh / 2), V(-bw / 2 - 0.4, batY - 1, deckTop + 0.9), V(-lay.brain.size[0] / 2 - 0.3, by + 1, bz), V(-lay.brain.size[0] / 2, by + 0.6, bz)]);
+    // the battery zip-tied across two crossbars
+    const { x: bx, y: batY, turned, bars, size: [bw, bd, bh] } = lay.battery;
+    if (turned) kit.part('v5-battery', V(bx, batY, deckTop + bh / 2), Y, X);
+    else kit.part('v5-battery', V(bx, batY, deckTop + bh / 2), X, Y);
+    for (const y of bars) {
+      if (turned) kit.strap(V(bx, y, (railTop + deckTop + bh) / 2), X, bd / 2 + 0.02, Z, (deckTop + bh - railTop) / 2);
+      else kit.strap(V(bx, y, (railTop + deckTop + bh) / 2), X, bw / 2 + 0.02, Z, (deckTop + bh - railTop) / 2);
+    }
+    // its power cable to the brain (on whichever side of the brain it is)
+    const toward = bx >= brx ? 1 : -1;
+    const bside = bx - toward * (turned ? bd : bw) / 2;
+    const brSide = brx + toward * size[0] / 2;
+    kit.cable([V(bside, batY, deckTop + bh / 2), V(bside - toward * 0.4, batY - (batY > by + 0.5 ? 1 : -1), deckTop + 0.9), V(brSide + toward * 0.3, by + 1, bz), V(brSide, by + 0.6, bz)]);
     // a Smart Cable from each drive motor up over the deck to the brain
     for (const port of ports) {
       const s = Math.sign(port.x);
-      const side = V(s * (size[0] / 2), by + Math.max(-1.6, Math.min(1.6, (port.y - by) * 0.3)), bz);
-      kit.cable([port, port.clone().add(V(-s * 0.4, 0, 0.3)), V(s * (size[0] / 2 + 0.6), (port.y + by) / 2, deckTop + 0.4), side]);
+      const side = V(brx + s * (size[0] / 2), by + Math.max(-1.6, Math.min(1.6, (port.y - by) * 0.3)), bz);
+      kit.cable([port, port.clone().add(V(-s * 0.4, 0, 0.3)), V(brx + s * (size[0] / 2 + 0.6), (port.y + by) / 2, deckTop + 0.4), side]);
     }
   }
   if (pneumatic && W >= 9 && cb.tank !== null) {
@@ -190,13 +228,20 @@ export function buildBoxRobot(p: RobotProfile, opts: { merge?: boolean } = {}): 
 
   // ---- license plates on the front and back crossbars' outer flanges ----
   for (const s of [-1, 1]) {
-    const pw = Math.min(8, W * 0.55);
+    let pw = Math.min(8, W * 0.55);
     const face = s * (L / 2 - 0.25);
+    // (beside the route, if a stack passes through the end the plate is on)
+    let px = 0;
+    if (blocks(pw / 2, face - 0.1, face + 0.1, railTop - 0.55, railTop + 1.05)) {
+      const rel = relief(face - 0.1, face + 0.1, railTop - 0.55, railTop + 1.05)!;
+      pw = Math.min(pw, inner + 0.4 - rel.hi - 0.1);
+      px = rel.hi + 0.05 + pw / 2;
+    }
     const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.08, 1.6), licenseMat(s > 0 ? 0xd8343a : 0xb2272c));
-    plate.position.set(0, face + s * 0.04, railTop + 0.25);
+    plate.position.set(px, face + s * 0.04, railTop + 0.25);
     plate.userData.part = 'license-plate';
     frame.add(plate);
-    for (const x of [-pw / 2 + 0.75, pw / 2 - 0.75]) kit.screw(V(x, face + s * 0.08, railTop + 0.25), Y.clone().multiplyScalar(-s), 0.08 + WALL);
+    for (const x of pw > 2.5 ? [px - pw / 2 + 0.75, px + pw / 2 - 0.75] : [px]) kit.screw(V(x, face + s * 0.08, railTop + 0.25), Y.clone().multiplyScalar(-s), 0.08 + WALL);
   }
 
   // ---- generic mechanisms (game manipulators are drawn by ManipulatorVisuals) ----

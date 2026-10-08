@@ -224,6 +224,9 @@ const ROLLER: JawDef = {
   maxClose: 0.6,
 };
 
+/** Where a roller's motor sits (the right jaw's frame, open): behind the frame's corner, beyond the stack. */
+const MOTOR: V2 = [1.5, -3.3];
+
 function rollerClaw(spec: ClawSpec, face: THREE.Group, k: Kit, movers: Mover[]): void {
   const J = ROLLER;
   const arms = [-1, 1].map((side) => {
@@ -251,9 +254,25 @@ function rollerClaw(spec: ClawSpec, face: THREE.Group, k: Kit, movers: Mover[]):
     sk.spacers(R(0, 0, -0.2), RZ, 0.4);
     sk.spacers(R(0, 0, 0.8), RZ, 0.12);
     for (const z of [-1, 1]) sk.collar(R(0, 0, z * 0.985), R(0, 0, z));
-    // its motor on top, output down into the shaft
-    jk.part('v5-motor', R(c[0], c[1], 1.5 + 1.25), R(0, 0, -1), RX, { cartridge: 'green' });
-    for (const dx of [-0.5, 0.5]) jk.screw(R(c[0] + dx, c[1] - 0.5, 0.98), RZ, 0.6, null, 0.4);
+    // its motor behind it, over the frame's back corner (clear of what the rollers hold, however
+    // high up it they grip), output down to a sprocket; chain to the roller's
+    const m = rel(MOTOR);
+    flatBar(jk, [0, 0], m, 0.95, 'plate-2');
+    for (const dx of [-0.5, 0.5]) jk.standoff(R(m[0] + dx, m[1], 0.95), R(m[0] + dx, m[1], 1.5), false);
+    jk.part('v5-motor', R(m[0], m[1], 1.5 + 1.25), R(0, 0, -1), RX, { cartridge: 'green' });
+    for (const dx of [-0.5, 0.5]) jk.screw(R(m[0] + dx, m[1] - 0.5, 0.98), RZ, 0.6, null, 0.4);
+    jk.part('sprocket-12', R(m[0], m[1], 1.25), RZ, RX);
+    sk.part('sprocket-12', R(0, 0, 1.25), RZ, RX);
+    sk.collar(R(0, 0, 1.5), R(0, 0, 1));
+    const pd = 0.25 / Math.sin(Math.PI / 12);
+    const dir = R(c[0] - m[0], c[1] - m[1], 0);
+    const span = dir.length();
+    dir.normalize();
+    const across = R(-dir.y, dir.x, 0);
+    for (const sgn of [-1, 1]) {
+      const mid = R((c[0] + m[0]) / 2, (c[1] + m[1]) / 2, 1.25).add(across.clone().multiplyScalar((sgn * pd) / 2));
+      jk.part('chain-25', mid, dir, RZ, { length: Math.round(span / 0.25) });
+    }
     return { side, g, spin };
   });
   movers.push((v, held, grip) => {

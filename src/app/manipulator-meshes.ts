@@ -17,7 +17,7 @@ import { cupMesh, pinMesh } from './override-meshes.ts';
 import { mergeRigid } from './parts/batch.ts';
 import { Kit, WALL } from './parts/fasteners.ts';
 import { buildClaw, CLAW_HALF, type ClawBuild } from './claw-meshes.ts';
-import { chassisLayout, holes, liftPivot, type ChassisLayout } from './chassis-layout.ts';
+import { chassisLayout, chassisRelief, clawZone, holes, intakeRoute, liftPivot, STACK_RADIUS, type ChassisLayout } from './chassis-layout.ts';
 
 const local = (p: Point3) => new THREE.Vector3(p.x, p.z, -p.y);
 const DEG = Math.PI / 180;
@@ -308,8 +308,8 @@ export class ManipulatorVisuals {
     const b = this.lay.brain;
     if (!b) return;
     const s = Math.sign(port.x) || 1;
-    const side = R(s * (b.size[0] / 2), b.y + Math.max(-1.6, Math.min(1.6, (port.y - b.y) * 0.3)), b.z);
-    const mid = R(s * (b.size[0] / 2 + 0.7), (port.y + b.y) / 2, Math.max(this.lay.deckTop + 0.4, (port.z + b.z) / 2));
+    const side = R(b.x + s * (b.size[0] / 2), b.y + Math.max(-1.6, Math.min(1.6, (port.y - b.y) * 0.3)), b.z);
+    const mid = R(b.x + s * (b.size[0] / 2 + 0.7), (port.y + b.y) / 2, Math.max(this.lay.deckTop + 0.4, (port.z + b.z) / 2));
     this.fixed.cable([port, port.clone().add(R(-s * 0.3, 0, 0.2)), mid, side]);
   }
 
@@ -384,7 +384,19 @@ export class ManipulatorVisuals {
       const upper = four ? sides.map((s) => makeLink(root, s, L)) : [];
       const ends = four ? sides.map((s) => this.coupler(root, s, bx)) : [];
       // an arm's two bars are joined at the end by a crossbar under the claw
-      const cross = !four ? this.armCross(root, bx) : null;
+      // the crossbar joining an arm's bars sits back along them, clear of the stack and of the claw's room
+      const a0 = ((m.startAngle ?? 0) * Math.PI) / 180;
+      const claw = this.profile.mechanisms.find((c): c is ClawSpec => c.kind === 'claw' && c.lift === m.name);
+      const zone = claw ? clawZone(this.profile, claw) : null;
+      const tip = liftEffector(m, 0);
+      let back = 1.25;
+      for (; back < L - 1.5; back += 0.25) {
+        const y = tip.y - out * back * Math.cos(a0);
+        const z = tip.z - back * Math.sin(a0);
+        const outsideZone = !zone || y < zone.y0 - 0.7 || y > zone.y1 + 0.7 || z < zone.z0 - 0.7 || z > zone.z1 + 0.7;
+        if (outsideZone && back * Math.abs(Math.cos(a0)) >= STACK_RADIUS + 0.75) break;
+      }
+      const cross = !four ? this.armCross(root, bx, back) : null;
       this.updates.push((v) => {
         const base = baseOffset(this.profile, m, v);
         const e = liftPosition(this.profile, m, v);
@@ -444,8 +456,11 @@ export class ManipulatorVisuals {
     return g;
   }
 
-  /** A crossbar joining an arm's two bars at their ends (it turns with them). */
-  private armCross(root: THREE.Object3D, bx: number): THREE.Group {
+  /**
+   * A crossbar joining an arm's two bars, `back` in behind their ends (it turns with them). The
+   * claw's stack stands between the bars at the end, so it is set back far enough to clear it.
+   */
+  private armCross(root: THREE.Object3D, bx: number, back: number): THREE.Group {
     const g = new THREE.Group();
     g.userData.moving = true;
     g.userData.rigid = true;
@@ -453,8 +468,8 @@ export class ManipulatorVisuals {
     // in the bars' own frame (x along them, y across, z sideways out of the robot = +x three for
     // the right bar): a channel across, behind the joint, screwed to both bars
     const k = new Kit(g);
-    k.part('c-channel-1x2x1', R(-1.25, 0, 0), RZ, RY, { length: holes(2 * bx) });
-    for (const s of [-1, 1]) k.screw(R(-1.25, 0.25, s * (bx + WALL)), RZ.clone().multiplyScalar(-s), 2 * WALL);
+    k.part('c-channel-1x2x1', R(-back, 0, 0), RZ, RY, { length: holes(2 * bx) });
+    for (const s of [-1, 1]) k.screw(R(-back, 0.25, s * (bx + WALL)), RZ.clone().multiplyScalar(-s), 2 * WALL);
     return g;
   }
 
@@ -473,6 +488,7 @@ export class ManipulatorVisuals {
     const carriage = new THREE.Group();
     carriage.userData.moving = true;
     carriage.userData.rigid = true;
+    carriage.userData.straight = m.base ?? ''; // it rides its base lift (a cascade): straight up and down with it
     root.add(carriage);
     const k = new Kit(robotFrame(carriage));
     for (const s of [-1, 1]) {
@@ -553,6 +569,7 @@ export class ManipulatorVisuals {
     const carriage = new THREE.Group();
     carriage.userData.moving = true;
     carriage.userData.rigid = true;
+    carriage.userData.straight = m.name; // the carriage only goes up and down (tested)
     root.add(carriage);
     const k = new Kit(robotFrame(carriage));
     const reach = m.home.y - p0.y; // from the carriage out to the claw
@@ -601,6 +618,7 @@ export class ManipulatorVisuals {
       const g = new THREE.Group();
       g.userData.moving = true;
       g.userData.rigid = true;
+      g.userData.straight = m.name; // a cascade stage only goes up and down (tested)
       root.add(g);
       const kit = new Kit(robotFrame(g));
       for (const s of sides) {
@@ -643,6 +661,7 @@ export class ManipulatorVisuals {
         const g = new THREE.Group();
         g.userData.moving = true;
         g.userData.rigid = true;
+        g.userData.straight = m.name;
         root.add(g);
         const kit = new Kit(robotFrame(g));
         kit.part('pulley-1', R(s * x, -0.75, 0), RY, RX);
@@ -798,7 +817,7 @@ export class ManipulatorVisuals {
       this.fixed.part('chain-25', p.clone().add(q).multiplyScalar(0.5), q.clone().sub(p).normalize(), RX, { length: Math.round(p.distanceTo(q) / 0.25) });
     }
     const spinners = [front];
-    if (dest) {
+    if (dest && intakeRoute(this.profile, m, dest).length === 2) {
       // the roller that carries pieces over the deck, just above the path's high point
       const top = rollerGroup(w * 0.8, 0.8);
       top.userData.intake = true;
@@ -873,12 +892,21 @@ export class ManipulatorVisuals {
       // a drilled plate across the posts' flanges, on standoffs inside them, a rubber strip in front
       box.position.copy(local({ x: 0, y: 0, z: 0 }));
       const py = fy + end * (0.5 + WALL / 2);
-      k.part('plate-5', R(bx, py, zc), RX, RZ, { length: holes(m.box.width) });
+      // (in two halves where a stack is carried up past it)
+      const rel = chassisRelief(this.profile)(py - 0.2, py + 0.2, zc - 1.3, zc + 1.3);
+      const w2 = m.box.width / 2;
+      const spans: Array<[number, number]> = rel ? [[bx - w2, Math.max(bx - w2, rel.lo)], [Math.min(bx + w2, rel.hi), bx + w2]] : [[bx - w2, bx + w2]];
+      for (const [x0, x1] of spans) {
+        const n = rel ? Math.floor((x1 - x0) / 0.5) : holes(m.box.width);
+        if (n < 2) continue;
+        const xc = !rel ? bx : x0 === bx - w2 ? x0 + (n * 0.5) / 2 : x1 - (n * 0.5) / 2;
+        k.part('plate-5', R(xc, py, zc), RX, RZ, { length: n });
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(n * 0.5, Math.min(h, 1), 0.25), new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.95 }));
+        pad.position.copy(local({ x: xc, y: py + end * (WALL / 2 + 0.125), z: zc }));
+        pad.userData.part = 'bumper pad';
+        box.add(pad);
+      }
       for (const s of [-1, 1]) this.fixed.standoff(R(s * p.x, fy + end * WALL, zc), R(s * p.x, fy + end * 0.5, zc));
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(m.box.width, Math.min(h, 1), 0.25), new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.95 }));
-      pad.position.copy(local({ x: bx, y: py + end * (WALL / 2 + 0.125), z: zc }));
-      pad.userData.part = 'bumper pad';
-      box.add(pad);
       box.userData.moving = false;
       return;
     }
@@ -922,20 +950,10 @@ export class ManipulatorVisuals {
    * hands them over.
    */
   private pathOf(spec: IntakeSpec, dest: ClawSpec | StagingSpec | null, v: ValueOf): THREE.Curve<THREE.Vector3> {
-    const mouth = local({ x: spec.zone.x, y: spec.zone.y, z: 0 });
-    const end = this.endOf(spec, dest, v);
-    if (mouth.distanceTo(end) < 4) return new THREE.LineCurve3(mouth, end);
-    const over = mouth.clone().lerp(end, 0.5);
-    over.y = Math.max(end.y, this.profile.drivetrain.wheelDiameter / 2 + 3);
-    return new THREE.CatmullRomCurve3([mouth, over, end], false, 'centripetal');
-  }
-
-  /** Where an intake's path ends: its destination's receiving point, or behind the zone. */
-  private endOf(spec: IntakeSpec, dest: ClawSpec | StagingSpec | null, v: ValueOf): THREE.Vector3 {
-    if (spec.handoff) return local({ x: spec.handoff.x ?? 0, y: spec.handoff.y, z: spec.handoff.z });
-    if (dest?.kind === 'staging') return local({ x: dest.at.x ?? 0, y: dest.at.y, z: dest.at.z });
-    if (dest?.kind === 'claw') return local(clawEffector(this.profile, dest, v));
-    return local({ x: spec.zone.x, y: spec.zone.y - spec.zone.length / 2 - 2, z: 0.5 });
+    const pts = intakeRoute(this.profile, spec, dest, v).map((q) => local(q));
+    const path = new THREE.CurvePath<THREE.Vector3>();
+    for (let i = 0; i + 1 < pts.length; i++) path.add(new THREE.LineCurve3(pts[i], pts[i + 1]));
+    return path;
   }
 
   /** Show what each holder has (from a game state snapshot). */

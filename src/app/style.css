@@ -404,3 +404,10 @@ body[data-mode='map'] .map-side { max-width: none; }
   .cad-page .robot-grid { grid-template-columns: 1fr; }
   .cad-page .robot-side { position: static; }
 }
+
+.build-id {
+  margin-left: 0.5rem;
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.55;
+  user-select: all;
+}
