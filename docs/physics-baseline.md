@@ -20,3 +20,7 @@ Top speed within 1% after 900 ms, turn overshoot under 1° on every preset, `mov
 ## Model today (see `docs/sim-vs-real.md`)
 
 Two side speeds; acceleration `min(maxAccel, 3·maxAccel·(1 − v/vmax))`; no mass, slip, battery or heat; collisions move the robot out of overlaps without impulses; one robot.
+
+## After the dynamics work
+
+All ten golden scores are unchanged. The toggle-bot's turn/drive settle delays (100 ms to 40 ms) and the Banshee's last approach (10.7 in to 10.65 in) were retuned for the new drive. World-test thresholds moved: top speed within 3% (was 1%) after 900 ms, the rest-to-rest bound uses the drive's real stall acceleration, and a chained move's exit speed uses the planning top speed (85% of free speed). `tests/override-field.test.ts` checks the Goal stop to 0.05 in (was 0.005): the last bounce settles under that.
