@@ -7,6 +7,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { FieldDef } from '../sim/field.ts';
 import { isPneumatic, type RobotProfile } from '../sim/profile.ts';
+import { PhysicsOverlay, readoutText } from './physics-overlay.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
 import { sampleAt } from '../games/override/replay.ts';
@@ -62,6 +63,12 @@ export class FieldViewer {
   private readonly robotGroup = new THREE.Group();
   private readonly ghost = new THREE.Group();
   private readonly overlay = new THREE.Group();
+  /** Forces, impacts and motor readouts over the field (off until asked for). */
+  readonly physics = new PhysicsOverlay();
+  /** Robots no program drives (from the recording), one box each. */
+  private readonly othersGroup = new THREE.Group();
+  private otherBoxes: THREE.Group[] = [];
+  private physicsHud: HTMLElement | null = null;
   /** Scoring objects of a game field. */
   private readonly gameGroup = new THREE.Group();
   /** Toggle id -> group to rotate for its roll angle. */
@@ -124,7 +131,7 @@ export class FieldViewer {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.02;
     this.scene.add(sun);
-    this.scene.add(this.fieldGroup, this.fieldModel, this.gameGroup, this.overlay, this.ghost, this.robotGroup);
+    this.scene.add(this.fieldGroup, this.fieldModel, this.gameGroup, this.overlay, this.ghost, this.robotGroup, this.physics.group, this.othersGroup);
     this.applyTheme();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
 
@@ -533,6 +540,21 @@ export class FieldViewer {
     clearGroup(this.overlay);
     this.trail = this.futureTrail = null;
     this.ghost.visible = false;
+    this.physics.setRecording(rec, this.profile);
+    clearGroup(this.othersGroup);
+    this.otherBoxes = [];
+    for (const o of rec?.others ?? []) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(o.width, o.height, o.length), new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.7 }));
+      body.position.y = o.height / 2;
+      // a stripe on the front so its heading shows
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(o.width * 0.9, 1, 0.4), new THREE.MeshStandardMaterial({ color: 0xffb020 }));
+      nose.position.set(0, o.height * 0.75, -o.length / 2 - 0.2);
+      g.add(body, nose);
+      g.userData.id = o.id;
+      this.othersGroup.add(g);
+      this.otherBoxes.push(g);
+    }
     if (!rec) return;
     const n = rec.frames.length / rec.stride;
     const pts: THREE.Vector3[] = [];
@@ -602,6 +624,20 @@ export class FieldViewer {
       t,
       { x: lerp(1), y: lerp(2), theta: lerp(3) },
     );
+    if (rec.otherFrames && this.otherBoxes.length) {
+      const k = this.otherBoxes.length * 3;
+      this.otherBoxes.forEach((g, j) => {
+        const v = (i: number, c: number) => rec.otherFrames![i * k + j * 3 + c];
+        const lerpO = (c: number) => v(i0, c) * (1 - a) + v(i1, c) * a;
+        g.position.copy(toThree(lerpO(0), lerpO(1)));
+        g.rotation.set(0, -lerpO(2) * DEG, 0);
+      });
+    }
+    const readout = this.physics.update(f, t);
+    if (this.physicsHud) {
+      this.physicsHud.hidden = !readout;
+      if (readout) this.physicsHud.textContent = readoutText(readout);
+    }
     const count = Math.max(2, i0 + 1);
     this.trail?.geometry.setDrawRange(0, count);
     this.frame = i0;
@@ -652,6 +688,15 @@ export class FieldViewer {
       const s = Math.max(0, (t - tr.t0) / 1000);
       node.position.y = t < tr.t1 ? Math.max(0, tr.from.z - 0.5 * GRAVITY_IN * s * s) : 0;
     }
+  }
+
+  /** Turn the physics overlay on or off; `hud` is where its readout goes. */
+  setPhysics(on: boolean, hud: HTMLElement | null) {
+    this.physics.visible = on;
+    this.physicsHud = hud;
+    if (hud) hud.hidden = !on;
+    if (this.rec) this.showTime(this.frame * (this.rec.frameEveryMs));
+    this.needsRender = true;
   }
 
   get currentFrame() {

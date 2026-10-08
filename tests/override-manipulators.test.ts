@@ -126,6 +126,29 @@ describe('Override claws', () => {
     expect(Math.hypot(d.x - R1.x, d.y - R1.y)).toBeGreaterThan(2.8); // dropped beside it, not Placed
   });
 
+  it('a stack let go while the robot is driving lands further on, by the speed it keeps while falling', async () => {
+    const r = await testRobot([LIFT, claw]);
+    const land = async (drive: number) => {
+      // the claw (about 11.4" ahead, lifted 20°) is over Goal R1 as the robot arrives
+      const a = await setup(r, { x: R1.x - 11.73 - (drive ? 3 : 0), y: R1.y, theta: 90 }, 'h2h', (w) => w.adiOut.set('B', true));
+      a.lift(20);
+      a.run(250);
+      if (drive) {
+        a.drive(40);
+        a.run(80);
+      }
+      a.world.adiOut.set('B', false);
+      a.run(300);
+      return a.game.state;
+    };
+    const still = await land(0);
+    expect(still.goals.R1.map((p) => p.id)).toEqual(['preload']);
+    const moving = await land(40);
+    // at 40 in/s the stack keeps ~2.8" of travel over the 3.6" fall: past the 1" it may be off by, so it misses
+    expect(moving.goals.R1).toEqual([]);
+    expect(moving.lying.some((l) => l.id !== 'preload') || moving.floor.length > 0).toBe(true);
+  });
+
   it('closes on a floor stack, carries it, and stacks it on a Goal', async () => {
     const r = await testRobot([LIFT, { ...claw, preload: undefined }]);
     // the clear-up Cup holding a yellow Pin at (-23.548, -23.548), approached from the south
@@ -263,7 +286,7 @@ describe('Override Toggle tools', () => {
     run(1000);
     expect(game.state.toggles.find((x) => x.id === 'T_red1')!.angle).toBe(0);
     world.adiOut.set('C', true);
-    run(500);
+    run(900); // a face takes about half a second to roll and settle
     expect(game.state.toggles.find((x) => x.id === 'T_red1')!.angle).toBe(120);
   });
 });

@@ -4,6 +4,10 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
 import type { FieldDef, GoalDef, Vec2 } from './field.ts';
+import { DriveDynamics, type SideState } from './drive-dynamics.ts';
+import { OtherRobot } from './other-robot.ts';
+import { G_SI, resolveDynamics } from './dynamics-spec.ts';
+import type { ContactRecord } from './recording.ts';
 import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile, type SensorMount } from './profile.ts';
 
 export interface Pose {
@@ -32,6 +36,14 @@ const LIFT_CREEP = 0.02;
 /** Unpowered, coasting: rolling friction plus back-driving the gearboxes (in/s^2); a robot
  * coasting from full speed rolls on for about a foot. */
 const COAST_DECEL = 150;
+/** Bounce of the chassis off walls and field elements (rubber bumper against plastic). */
+const RESTITUTION = 0.15;
+/** How long a hit lasts (s), for judging whether it tips the robot. */
+const IMPACT_TIME = 0.03;
+/** The most impacts one run keeps (a robot pressed against something for minutes would log millions). */
+const MAX_CONTACTS = 5000;
+/** Share of free speed motions plan with under the drive dynamics. */
+const CRUISE_FRACTION = 0.85;
 /** Friction that brings a braking robot to a final stop (in/s^2). */
 const FRICTION_DECEL = 40;
 
@@ -64,6 +76,8 @@ export class MotorState {
   /** Drivetrain motors are driven by the drivetrain model, not their own ramp. */
   driveSide: 'left' | 'right' | null = null;
   driveMount = 1;
+  /** What the drive's dynamics say this motor is doing (drive motors, when the profile uses them). */
+  telemetry: { currentMa: number; tempC: number; torqueNm: number } | null = null;
   voltageLimit = 0;
   currentLimit = 2500;
   /**
@@ -230,6 +244,13 @@ export class World {
   vR = 0;
   /** Forward acceleration of the robot center, in/s^2 (for the IMU accelerometer). */
   accelForward = 0;
+
+  /** One recorded row of dynamics (the columns of `DYN_COLUMNS`). Current, heat and battery are not modelled yet. */
+  dynSample(): number[] {
+    const w = ((this.vL - this.vR) / this.profile.drivetrain.trackWidth) * (180 / Math.PI);
+    const dr = this.drive;
+    return dr ? [this.accelForward, w, dr.current[0], dr.current[1], dr.temp[0], dr.temp[1], dr.battery] : [this.accelForward, w, 0, 0, 25, 25, 12.8];
+  }
   readonly motors = new Map<number, MotorState>();
   readonly imus = new Map<number, ImuState>();
   readonly rotations = new Map<number, RotationState>();
@@ -240,6 +261,14 @@ export class World {
   /** Drive controller of the active idealized motion, if any. */
   controller: DriveController | null = null;
   readonly collisions: Collision[] = [];
+  /** Robots no program drives (from the field's objects): pushed by this one, they push back. */
+  readonly others: OtherRobot[];
+  /** Chassis contacts of this step (field frame; the normal points at the robot), for the impulse model. */
+  private impacts: Array<{ x: number; y: number; nx: number; ny: number; what: string; other?: OtherRobot }> = [];
+  /** Every impact the impulse model applied: when, where, with what, and how hard. */
+  readonly contacts: ContactRecord[] = [];
+  /** Hits hard enough to tip the robot (its overturning moment beat what its weight resists). */
+  readonly tips: Array<{ t: number; what: string; ratio: number }> = [];
   private lastCollisionWall = '';
   private lastObstacle = '';
   private readonly lastContact = new Map<string, number>();
@@ -249,6 +278,8 @@ export class World {
   readonly obstacles: Obstacle[];
   /** Movable objects that currently can't move out of the robot's way (set by a game). */
   pinnedObstacles: Obstacle[] = [];
+  /** Force (N) the pieces the robot is pushing along the floor resist with (set by the game). */
+  pushLoad = 0;
   /** Claws and what they hold, outside the robot's frame (set by a game): they can't pass through things either. */
   attachments: Attachment[] = [];
   /**
@@ -275,13 +306,17 @@ export class World {
   time = 0;
   /** Total distance driven by each side, in (for tracking/drive encoders). */
   private readonly maxV: number;
+  /** The drivetrain's motor, battery, grip and body model, when the profile asks for it. */
+  readonly drive: DriveDynamics | null;
 
   constructor(profile: RobotProfile, field: FieldDef, start: Pose) {
     this.profile = profile;
     this.field = field;
     this.pose = { ...start };
     this.maxV = maxSpeed(profile);
+    this.drive = profile.dynamics?.model === 'idealized' ? null : new DriveDynamics(profile);
     this.obstacles = fieldObstacles(field);
+    this.others = field.objects.filter((o) => o.robot).map((o) => new OtherRobot(o));
     const dt = profile.drivetrain;
     for (const [side, ports] of [['left', dt.left], ['right', dt.right]] as const) {
       for (const p of ports) {
@@ -315,12 +350,17 @@ export class World {
     }
   }
 
+  /**
+   * Full speed as motions plan with it. With the drive dynamics it is the speed a drivetrain can
+   * still push toward (its motors' torque has fallen to a sixth of stall by then), so the planned
+   * wheel speeds are ones the drive keeps up with.
+   */
   get maxSpeed(): number {
-    return this.maxV;
+    return this.drive ? this.maxV * CRUISE_FRACTION : this.maxV;
   }
 
   get accel(): number {
-    return this.profile.drivetrain.maxAccel;
+    return this.drive ? this.drive.planAccel() : this.profile.drivetrain.maxAccel;
   }
 
   get trackWidth(): number {
@@ -378,6 +418,29 @@ export class World {
    * - Unpowered, by brake mode: coast rolls on against friction; brake shorts the windings
    *   (back-EMF braking, strong at speed, weak when slow); hold stops at full strength.
    */
+  /** One side as the dynamics model sees it. */
+  private sideState(ports: number[], v: number, target: number): SideState {
+    const unpowered = !this.controller && this.sideUnpowered(ports);
+    const motors = ports.map((p) => this.motors.get(Math.abs(p))!);
+    const brake = Math.min(...motors.map((m) => (m.noPower ? 0 : m.brakeMode)));
+    const share = motors.reduce((n, m) => n + m.torqueShare, 0) / motors.length;
+    return { v, target, powered: !unpowered, brake, motors: ports.length, currentLimit: 2.5 * share };
+  }
+
+  /** What the PROS API reports about each drive motor, from the dynamics model. */
+  private recordDriveTelemetry(): void {
+    const dr = this.drive!;
+    for (const m of this.motors.values()) {
+      if (!m.driveSide) continue;
+      const i = m.driveSide === 'left' ? 0 : 1;
+      m.telemetry = { currentMa: Math.round(dr.current[i] * 1000), tempC: dr.temp[i], torqueNm: dr.torque[i] };
+    }
+  }
+
+  get batteryVoltage(): number {
+    return this.drive ? this.drive.battery : 12.8;
+  }
+
   private sideAccel(v: number, target: number, ports: number[], dt: number): number {
     const traction = this.accel;
     const vmax = this.maxV;
@@ -405,16 +468,26 @@ export class World {
     tL = Math.max(-vmax, Math.min(vmax, tL));
     tR = Math.max(-vmax, Math.min(vmax, tR));
     const vPrev = (this.vL + this.vR) / 2;
-    let dL = this.sideAccel(this.vL, tL, d.left, dt);
-    let dR = this.sideAccel(this.vR, tR, d.right, dt);
+    let dL: number;
+    let dR: number;
     const eL = tL - this.vL;
     const eR = tR - this.vR;
+    if (this.drive) {
+      // motors, battery, grip and the body's mass and inertia decide how each side speeds up
+      const a = this.drive.step(this.sideState(d.left, this.vL, tL), this.sideState(d.right, this.vR, tR), dt, this.pushLoad);
+      dL = a.aL * dt;
+      dR = a.aR * dt;
+      this.recordDriveTelemetry();
+    } else {
+      dL = this.sideAccel(this.vL, tL, d.left, dt);
+      dR = this.sideAccel(this.vR, tR, d.right, dt);
+    }
     // Each side's motors follow their own command. A side that can reach its target this step
     // does; when both sides are flat out, their torques follow their voltages, so each speeds
     // up in proportion to how far it has to go. A difference between the sides' commands then
     // always turns the robot (a leftover spin dies out instead of persisting while both sides
     // accelerate), and a swing's locked side stays locked.
-    if ((this.controller || (!this.sideUnpowered(d.left) && !this.sideUnpowered(d.right))) && Math.abs(dL) < Math.abs(eL) && Math.abs(dR) < Math.abs(eR)) {
+    if (!this.drive && (this.controller || (!this.sideUnpowered(d.left) && !this.sideUnpowered(d.right))) && Math.abs(dL) < Math.abs(eL) && Math.abs(dR) < Math.abs(eR)) {
       const f = Math.min(dL / eL, dR / eR);
       dL = f * eL;
       dR = f * eR;
@@ -434,16 +507,22 @@ export class World {
     this.pose.theta += (w * dt) / RAD;
     const bx = this.pose.x;
     const by = this.pose.y;
+    for (const o of this.others) o.step(dt, this.field.perimeter.inside / 2);
     this.resolveObstacles();
     this.resolveWalls();
+    const shift = this.collideOthers();
     this.squareToWalls(v, dt);
     // Blocked by a wall or field element: the wheels stall instead of spinning on at the
     // commanded speed, so the forward speed drops to what the robot actually achieved.
-    const pushed = (this.pose.x - bx) * dsinDeg(this.pose.theta) + (this.pose.y - by) * dcosDeg(this.pose.theta);
-    if (pushed * v < 0) {
-      const achieved = Math.sign(v) * Math.max(0, Math.abs(v) - Math.abs(pushed) / dt);
-      this.vL += achieved - v;
-      this.vR += achieved - v;
+    // (what pushing another robot moved us is its impulse's business, not a wall's stall)
+    const pushed = (this.pose.x - bx - shift[0]) * dsinDeg(this.pose.theta) + (this.pose.y - by - shift[1]) * dcosDeg(this.pose.theta);
+    this.applyImpacts(dt);
+    const vNow = (this.vL + this.vR) / 2;
+    if (pushed * vNow < 0 || (pushed * v < 0 && !this.drive)) {
+      const base = this.drive ? vNow : v;
+      const achieved = Math.sign(base) * Math.max(0, Math.abs(base) - Math.abs(pushed) / dt);
+      this.vL += achieved - base;
+      this.vR += achieved - base;
     }
     // after the stall: hitting something shows up on the IMU's accelerometer
     this.accelForward = ((this.vL + this.vR) / 2 - vPrev) / dt;
@@ -667,8 +746,10 @@ export class World {
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       for (const ob of obstacles) {
-        const mtv = satMtv(this.footprint(), ob.poly);
+        const fp = this.footprint();
+        const mtv = satMtv(fp, ob.poly);
         if (!mtv) continue;
+        this.noteImpact(fp, mtv, ob.id);
         this.pose.x += mtv[0];
         this.pose.y += mtv[1];
         hit = ob.id;
@@ -711,6 +792,117 @@ export class World {
     this.lastObstacle = hit;
   }
 
+  /**
+   * Run into another robot: both are pushed out of the overlap (the lighter one further), and an
+   * impulse at the corner that touched is shared out by their masses (see `applyImpacts`).
+   */
+  private collideOthers(): [number, number] {
+    const shift: [number, number] = [0, 0];
+    if (!this.others.length) return shift;
+    const m1 = (this.drive?.dyn ?? resolveDynamics(this.profile)).mass;
+    for (const o of this.others) {
+      const fp = this.footprint();
+      const mtv = satMtv(fp, o.footprint());
+      if (!mtv) continue;
+      const d = dhypot(mtv[0], mtv[1]);
+      if (d < 1e-12) continue;
+      const mine = o.mass / (m1 + o.mass);
+      this.pose.x += mtv[0] * mine;
+      this.pose.y += mtv[1] * mine;
+      shift[0] += mtv[0] * mine;
+      shift[1] += mtv[1] * mine;
+      o.x -= mtv[0] * (1 - mine);
+      o.y -= mtv[1] * (1 - mine);
+      const nx = mtv[0] / d;
+      const ny = mtv[1] / d;
+      let bd = Infinity;
+      for (const p of fp) bd = Math.min(bd, p[0] * nx + p[1] * ny);
+      for (const p of fp) if (p[0] * nx + p[1] * ny <= bd + 0.02) this.impacts.push({ x: p[0], y: p[1], nx, ny, what: o.id, other: o });
+    }
+    return shift;
+  }
+
+  /** Remember where the chassis touched something, and which way it pushes back (`mtv` moves the robot out). */
+  private noteImpact(fp: Vec2[], mtv: [number, number], what: string): void {
+    const d = dhypot(mtv[0], mtv[1]);
+    if (d < 1e-12) return;
+    const nx = mtv[0] / d;
+    const ny = mtv[1] / d;
+    // the corner(s) furthest into the thing (a flat face lands on two corners together)
+    let bd = Infinity;
+    for (const p of fp) bd = Math.min(bd, p[0] * nx + p[1] * ny);
+    for (const p of fp) if (p[0] * nx + p[1] * ny <= bd + 0.02) this.impacts.push({ x: p[0], y: p[1], nx, ny, what });
+  }
+
+  /**
+   * What hitting something does to the robot's motion: an impulse at the corner that touched, along
+   * the normal, with a little bounce. It changes the robot's speed and its spin (a hit away from the
+   * center of mass turns the robot) and is limited by its mass and moment of inertia. Returns the
+   * change made to forward speed (in/s) so the caller can see it.
+   */
+  private applyImpacts(dt: number): void {
+    const impacts = this.impacts;
+    this.impacts = [];
+    if (!this.drive || !impacts.length) return;
+    const dyn = this.drive.dyn;
+    const IN = 0.0254;
+    const th = this.pose.theta * RAD;
+    const sx = dsin(th);
+    const cy = dcos(th);
+    // centre of mass in the field frame
+    const comX = this.pose.x + (dyn.com.x / IN) * cy + (dyn.com.y / IN) * sx;
+    const comY = this.pose.y - (dyn.com.x / IN) * sx + (dyn.com.y / IN) * cy;
+    // a few passes, so contacts that touch together (a face lands on two corners) share the impulse
+    for (const im of [...impacts, ...impacts, ...impacts]) {
+      const vf = (this.vL + this.vR) / 2;
+      const w = -((this.vL - this.vR) / this.trackWidth); // rad/s, counterclockwise positive
+      const rx = (im.x - comX) * IN;
+      const ry = (im.y - comY) * IN;
+      // velocity of the touching corner, m/s
+      let vx = vf * sx * IN - w * ry;
+      let vy = vf * cy * IN + w * rx;
+      const o = im.other;
+      // the other robot's velocity and lever arm at the same point
+      let r2xn = 0;
+      let invM2 = 0;
+      let invI2 = 0;
+      if (o) {
+        const [ovx, ovy] = o.velocityAt(im.x, im.y);
+        vx -= ovx * IN;
+        vy -= ovy * IN;
+        r2xn = (im.x - o.x) * IN * im.ny - (im.y - o.y) * IN * im.nx;
+        invM2 = 1 / o.mass;
+        invI2 = (r2xn * r2xn) / o.inertia;
+      }
+      const vn = vx * im.nx + vy * im.ny; // negative: moving into it
+      if (vn > -0.0076) continue; // under 0.3 in/s: resting against it (handled by the stall)
+      const rxn = rx * im.ny - ry * im.nx;
+      // slow touches don't bounce (a robot pressed against a wall rests; it doesn't chatter)
+      const e = RESTITUTION * Math.max(0, Math.min(1, (-vn - 0.1) / 0.2));
+      const J = (-(1 + e) * vn) / (1 / dyn.mass + (rxn * rxn) / dyn.inertia + invM2 + invI2);
+      // change of the centre of mass' velocity and of the spin
+      const dvx = (J * im.nx) / dyn.mass;
+      const dvy = (J * im.ny) / dyn.mass;
+      const dw = (J * rxn) / dyn.inertia;
+      const dvf = (dvx * sx + dvy * cy) / IN;
+      const dwCw = -dw; // clockwise positive
+      this.vL += dvf + (dwCw * this.trackWidth) / 2;
+      this.vR += dvf - (dwCw * this.trackWidth) / 2;
+      if (o) {
+        // the other robot takes the opposite impulse
+        o.vx -= (J * im.nx) / o.mass / IN;
+        o.vy -= (J * im.ny) / o.mass / IN;
+        o.omega += (J * r2xn) / o.inertia / RAD;
+      }
+      if (this.contacts.length < MAX_CONTACTS && !(this.contacts.length && this.contacts[this.contacts.length - 1].t === this.time && this.contacts[this.contacts.length - 1].what === im.what)) this.contacts.push({ t: this.time, what: im.what, x: im.x, y: im.y, nx: im.nx, ny: im.ny, impulse: J });
+      // tipping: the impulse's moment about the wheel contact line against the weight's over the contact's duration
+      const support = Math.max(0.5 * this.profile.size.length - this.profile.drivetrain.wheelDiameter / 2, 1) * IN;
+      const ratio = (J * dyn.com.z) / (dyn.mass * G_SI * support * IMPACT_TIME);
+      if (ratio > 1) this.tips.push({ t: this.time, what: im.what, ratio });
+    }
+    void dt;
+  }
+
   /** Keep the robot footprint inside the perimeter (position correction only). */
   private resolveWalls(): void {
     const half = this.field.perimeter.inside / 2;
@@ -738,10 +930,11 @@ export class World {
       maxY = Math.max(maxY, cy + a.r);
     }
     let wall = '';
-    if (minX < -half) { this.pose.x += -half - minX; wall = 'left'; }
-    if (maxX > half) { this.pose.x -= maxX - half; wall = 'right'; }
-    if (minY < -half) { this.pose.y += -half - minY; wall = 'near'; }
-    if (maxY > half) { this.pose.y -= maxY - half; wall = 'far'; }
+    const fpw = this.footprint();
+    if (minX < -half) { this.noteImpact(fpw, [-half - minX, 0], 'left'); this.pose.x += -half - minX; wall = 'left'; }
+    if (maxX > half) { this.noteImpact(fpw, [-(maxX - half), 0], 'right'); this.pose.x -= maxX - half; wall = 'right'; }
+    if (minY < -half) { this.noteImpact(fpw, [0, -half - minY], 'near'); this.pose.y += -half - minY; wall = 'near'; }
+    if (maxY > half) { this.noteImpact(fpw, [0, -(maxY - half)], 'far'); this.pose.y -= maxY - half; wall = 'far'; }
     // pressing on a wall reports it once, not on every step the contact flickers
     if (wall && wall !== this.lastCollisionWall && !(this.time - (this.lastContact.get(wall) ?? -Infinity) < 500)) this.collisions.push({ t: this.time, wall });
     if (wall) this.lastContact.set(wall, this.time);
@@ -980,7 +1173,7 @@ export function fieldObstacles(field: FieldDef): Obstacle[] {
     out.push({ id: `loader ${l.id}`, poly: box(-inward * half + (inward * l.depth) / 2, l.y, l.depth, l.width), top: l.height });
   }
   for (const o of field.objects) {
-    if (o.movable) continue;
+    if (o.movable || o.robot) continue;
     if (o.shape.type === 'box') out.push({ id: o.id, poly: box(o.shape.x, o.shape.y, o.shape.width, o.shape.length, o.shape.heading) });
     else out.push({ id: o.id, poly: octagon(o.shape.x, o.shape.y, o.shape.radius * 2 * COS_22_5) });
   }

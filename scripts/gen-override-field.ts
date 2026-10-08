@@ -207,3 +207,15 @@ const field: FieldDef = {
 
 await writeFile(path.join(repoRoot, 'data/fields/override.json'), JSON.stringify(field, null, 1) + '\n');
 console.log(`wrote data/fields/override.json: ${goals.length} goals, ${items.length} layout items (+${neutralGoalPins.length} goal pins)`);
+
+// The same field with a passive second robot on the Red side (15 x 15 in, 14 lb, no program):
+// the robot you simulate can push it around, and it pushes back. Edit its `objects` entry to move
+// it, change its weight or give it a path to drive (see docs/field-schema or schemas/field.schema.json).
+const withPartner = {
+  ...field,
+  id: 'override-partner',
+  name: 'V5RC Override + a second robot (passive)',
+  objects: [{ id: 'partner', shape: { type: 'box', x: 30, y: -30, width: 15, length: 15, heading: 0 }, height: 14, color: '#8b949e', robot: { mass: 14 } }],
+};
+await writeFile(path.join(repoRoot, 'data/fields/override-partner.json'), JSON.stringify(withPartner, null, 1) + '\n');
+console.log('wrote data/fields/override-partner.json');

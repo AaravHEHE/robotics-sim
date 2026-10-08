@@ -34,7 +34,18 @@
           "shape": { "type": "object" },
           "height": { "type": "number" },
           "color": { "type": "string" },
-          "movable": { "type": "boolean" }
+          "movable": { "type": "boolean" },
+          "robot": {
+            "type": "object",
+            "description": "Makes this object a second robot no program drives; its box shape is its footprint and start pose",
+            "additionalProperties": false,
+            "properties": {
+              "mass": { "type": "number", "minimum": 1, "maximum": 60, "description": "Pounds (default 12)" },
+              "path": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }, "description": "Waypoints [x, y] it drives through, in inches" },
+              "speed": { "type": "number", "exclusiveMinimum": 0, "maximum": 150, "description": "Speed along the path, in/s (default 30)" },
+              "delay": { "type": "number", "minimum": 0, "description": "Seconds before it starts moving" }
+            }
+          }
         }
       }
     },

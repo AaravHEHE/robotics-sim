@@ -22,6 +22,7 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | --- | --- |
 | `schema` | Always `1`. |
 | `id`, `name`, `description` | Identification. |
+| `mass` | Pounds (default 12). `dynamics` (optional) gives `model` (`"full"`, the default, or `"idealized"`), the center of mass `{x, y, z}` in inches (z above the tiles; default 0.3 of the height), the moment of inertia in lb·in² (default a uniform box), `wheelFriction` (default 0.9), `wheelsPerSide` and `batteryResistance` (ohms, default 0.15). Defaults and the V5 motor figures are in `src/sim/dynamics-spec.ts`; the motor numbers are estimates from VEX's published ratings. |
 | `size.width / length / height` | Overall footprint and height. Width and length are the collision box against the field walls. |
 | `drivetrain.type` | `"tank"`. Other drivetrains are not supported yet. |
 | `drivetrain.left`, `drivetrain.right` | Smart ports of each side's motors, **signed the way your code must declare them to drive forward**. For example, if your code says `pros::MotorGroup left({-1, -2, -3})`, use `[-1, -2, -3]`. If the code's reversal doesn't match, the robot spins or drives backwards, just like the real one. |
@@ -29,7 +30,7 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | `drivetrain.wheelDiameter` | Inches: 2.75, 3.25, 4 (new omnis), 4.125 (old 4" omnis), and so on. |
 | `drivetrain.wheelRpm` | Wheel rpm at full motor speed, after gearing. For example, blue motors geared 36:48 give 600 × 36/48 = 450. |
 | `drivetrain.trackWidth` | Distance between the centers of the left and right wheels. |
-| `drivetrain.maxAccel` | Linear acceleration and braking limit, in in/s². Typical V5 drivetrains are 120–250. Lower it for heavy robots or slippery wheels. |
+| `drivetrain.maxAccel` | Linear acceleration and braking limit, in in/s², used when `dynamics.model` is `"idealized"`. Otherwise (the default) acceleration comes from the motors, the robot's `mass`, its `dynamics.wheelFriction` and its inertia, and this number is not used. Typical V5 drivetrains are 120–250. |
 | `drivetrain.speedScale` | Optional, 0.1–1. The fraction of free speed reached under load (default 1). Set it around 0.9 if your robot is slower than theory. |
 | `devices` | Everything else plugged into the brain (see below). |
 | `mechanisms` | Moving parts shown in the viewer (see below). |
@@ -126,8 +127,9 @@ Without a model of its own, a robot is drawn from its profile with the VEX parts
 - **Lifts.** Towers are gusseted to the rails and braced. Their motors drive the pivots through gear pairs matching the lift's ratio. 4-bars and 6-bars have parallel bars and couplers with screw joints. Chain bars have chain and sprockets; DR4Bs have a carriage and rubber bands. Cascades have nested stages on nylon slide blocks, with pulleys and string from a motor-driven spool.
 - **Claws.** Every claw closes on what it holds, drawn from the held piece's real width at the grip height, so the jaws stop against it and open clear of it.
   - *Piston and motor claws* are lobster claws: a curved finger with a rubber pad on each side, on a bell-crank that swings on a hinge screw. A piston (or a motor on a screw) between the two cranks' tails closes both fingers, following the real stroke. Side plates and a back wall hold it together, and shafts through bearings carry it on the lift.
-  - *Roller claws* have two swing arms, each with a roller of flex wheels and its own motor, that press on the stack from either side while it is held.
+  - *Roller claws* have two swing arms, each with a roller of flex wheels, turned by its own motor (behind the frame, by chain, so nothing stands over the piece), that press on the stack from either side while it is held.
   - A motor wrist drives the claw through a gear pair.
+- **Room for claws and intakes.** What a robot's own parts must keep clear is worked out from its profile (`chassisRelief` in `src/app/chassis-layout.ts`): where an intake carries a stack (straight for a short hop to its `handoff`; for a long one, up at the mouth, over the electronics and down at the end), the room each claw takes up at rest and at the bottom of its lifts, and where the stack it holds swings as the lifts move. Crossbars are cut around these, the front license plate and the toggle bumper plate are split or moved beside them, the battery lies along the robot beside the route (or goes beside the brain when a claw fills the front), a drive motor a claw's frame would cut through moves along the rail and turns its wheel by chain, and an arm's crossbar sits back along its bars. A test (`tests/intake-clearance.test.ts`) carries a Pin and a Cup over a Pin along each intake's route, holds them in each claw at its hand-off, and moves every lift through its range, and fails if any part of the robot cuts into them (screws, shafts and the like, which pass through what they hold, are not counted).
 - **Other mechanisms.** Intakes run on side arms with a chain drive. Toggle tools are mounted on posts bolted to the end crossbars.
 
 - **Build from VEX parts:** see below.
@@ -143,3 +145,16 @@ Attach a `.glb` (Onshape: right-click the assembly, then **Export → GLTF/GLB**
 model is scaled to fit the profile's footprint unless you set `model.scale`. Rotate it
 with `model.rotationDeg` if its front doesn't face forward, and shift it with
 `model.offset`. The model never changes the physics.
+
+## A second robot on the field
+
+A field's `objects` list may hold a robot nobody programs: give an object a box `shape` (its footprint and start pose: `x`, `y`, `width`, `length`, `heading`) and a `robot` entry. It is not a wall: it has mass, slides to a stop on the tiles, spins when hit off-center, stays inside the walls, and the robot you run pushes it and is held back by it.
+
+| `robot` field | |
+|---|---|
+| `mass` | Pounds, 1-60 (default 12). |
+| `path` | Waypoints `[x, y]` (inches) it drives through in order. Without one it sits still until pushed. |
+| `speed` | Speed along the path, in/s, up to 150 (default 30). A hard push slows it or knocks it off its line. |
+| `delay` | Seconds before it starts moving. |
+
+`data/fields/override-partner.json` is the Override field with one passive robot (generated by `scripts/gen-override-field.ts`). It does not touch scoring objects: pieces pass under it.

@@ -32,6 +32,14 @@ import sampleHistory from './sample-history.json';
 import { isOlderCopy, type SampleHistory } from './sample-upgrade.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+{
+  // which version is this? (a page that was cached from before an update shows an old one)
+  const tag = document.getElementById('build-id');
+  if (tag) {
+    tag.textContent = __BUILD_ID__;
+    tag.title = `Built ${__BUILD_TIME__} from commit ${__BUILD_ID__}. If this isn't the latest commit, hard-reload (Ctrl+Shift+R).`;
+  }
+}
 const fieldModules = import.meta.glob('../../data/fields/*.json', { eager: true, import: 'default' }) as Record<string, FieldDef>;
 const FIELDS: FieldDef[] = Object.values(fieldModules).sort((a, b) => (a.game ? -1 : 1) - (b.game ? -1 : 1) || a.name.localeCompare(b.name));
 
@@ -153,6 +161,16 @@ document.querySelectorAll<HTMLButtonElement>('.view-buttons button').forEach((b)
     viewer.setView(b.dataset.view as ViewMode);
   };
 });
+
+// physics overlay
+{
+  const btn = $<HTMLButtonElement>('btn-physics');
+  btn.onclick = () => {
+    const on = btn.getAttribute('aria-pressed') !== 'true';
+    btn.setAttribute('aria-pressed', String(on));
+    viewer.setPhysics(on, $<HTMLElement>('physics-hud'));
+  };
+}
 
 // ---------------- robots ----------------
 

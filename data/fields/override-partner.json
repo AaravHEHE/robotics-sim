@@ -1,0 +1,2674 @@
+{
+ "schema": 1,
+ "id": "override-partner",
+ "name": "V5RC Override + a second robot (passive)",
+ "perimeter": {
+  "inside": 140.409,
+  "wallHeight": 11.535,
+  "wallThickness": 2
+ },
+ "tiles": {
+  "count": 6,
+  "color": "#5b5e63",
+  "lineColor": "#e8e8e8"
+ },
+ "objects": [
+  {
+   "id": "partner",
+   "shape": {
+    "type": "box",
+    "x": 30,
+    "y": -30,
+    "width": 15,
+    "length": 15,
+    "heading": 0
+   },
+   "height": 14,
+   "color": "#8b949e",
+   "robot": {
+    "mass": 14
+   }
+  }
+ ],
+ "goals": [
+  {
+   "id": "C",
+   "kind": "center",
+   "color": "neutral",
+   "x": 0,
+   "y": 0,
+   "height": 8.768,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 5.52,
+   "socket": 2.366,
+   "zone": "midfield",
+   "aprilTag": 0
+  },
+  {
+   "id": "R1",
+   "kind": "alliance",
+   "color": "red",
+   "x": -47.091,
+   "y": -23.547,
+   "height": 3.248,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 0.394,
+   "socket": 2.366,
+   "zone": "red1",
+   "aprilTag": 2
+  },
+  {
+   "id": "N_R1",
+   "kind": "neutral",
+   "color": "neutral",
+   "x": -47.091,
+   "y": 23.547,
+   "height": 5.768,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 2.52,
+   "socket": 2.366,
+   "zone": "red1",
+   "aprilTag": 1
+  },
+  {
+   "id": "R2",
+   "kind": "alliance",
+   "color": "red",
+   "x": -23.547,
+   "y": -47.091,
+   "height": 3.248,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 0.394,
+   "socket": 2.366,
+   "zone": "red2",
+   "aprilTag": 3
+  },
+  {
+   "id": "N_R2",
+   "kind": "neutral",
+   "color": "neutral",
+   "x": 23.547,
+   "y": -47.091,
+   "height": 5.768,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 2.52,
+   "socket": 2.366,
+   "zone": "red2",
+   "aprilTag": 4
+  },
+  {
+   "id": "B1",
+   "kind": "alliance",
+   "color": "blue",
+   "x": 47.091,
+   "y": 23.547,
+   "height": 3.248,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 0.394,
+   "socket": 2.366,
+   "zone": "blue1",
+   "aprilTag": 2
+  },
+  {
+   "id": "N_B1",
+   "kind": "neutral",
+   "color": "neutral",
+   "x": 47.091,
+   "y": -23.547,
+   "height": 5.768,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 2.52,
+   "socket": 2.366,
+   "zone": "blue1",
+   "aprilTag": 1
+  },
+  {
+   "id": "B2",
+   "kind": "alliance",
+   "color": "blue",
+   "x": 23.547,
+   "y": 47.091,
+   "height": 3.248,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 0.394,
+   "socket": 2.366,
+   "zone": "blue2",
+   "aprilTag": 3
+  },
+  {
+   "id": "N_B2",
+   "kind": "neutral",
+   "color": "neutral",
+   "x": -23.547,
+   "y": 47.091,
+   "height": 5.768,
+   "baseWidth": 5.61,
+   "topWidth": 3.496,
+   "bodyHeight": 2.52,
+   "socket": 2.366,
+   "zone": "blue2",
+   "aprilTag": 4
+  }
+ ],
+ "toggles": [
+  {
+   "id": "T_red1",
+   "wall": "left",
+   "x": -70.205,
+   "y": 0,
+   "length": 25.992,
+   "sectionHeight": 2.031,
+   "topHeight": 13.201,
+   "zone": "red1",
+   "start": {
+    "in": "yellow",
+    "out": "red",
+    "down": "blue"
+   }
+  },
+  {
+   "id": "T_red2",
+   "wall": "bottom",
+   "x": 0,
+   "y": -70.205,
+   "length": 25.992,
+   "sectionHeight": 2.031,
+   "topHeight": 13.201,
+   "zone": "red2",
+   "start": {
+    "in": "yellow",
+    "out": "red",
+    "down": "blue"
+   }
+  },
+  {
+   "id": "T_blue1",
+   "wall": "right",
+   "x": 70.205,
+   "y": 0,
+   "length": 25.992,
+   "sectionHeight": 2.031,
+   "topHeight": 13.201,
+   "zone": "blue1",
+   "start": {
+    "in": "yellow",
+    "out": "blue",
+    "down": "red"
+   }
+  },
+  {
+   "id": "T_blue2",
+   "wall": "top",
+   "x": 0,
+   "y": 70.205,
+   "length": 25.992,
+   "sectionHeight": 2.031,
+   "topHeight": 13.201,
+   "zone": "blue2",
+   "start": {
+    "in": "yellow",
+    "out": "blue",
+    "down": "red"
+   }
+  }
+ ],
+ "loaders": [
+  {
+   "id": "L_red_n",
+   "alliance": "red",
+   "wall": "left",
+   "x": -70.205,
+   "y": 58.764,
+   "width": 4.02,
+   "depth": 3.74,
+   "height": 14.37,
+   "opening": 3.248
+  },
+  {
+   "id": "L_red_s",
+   "alliance": "red",
+   "wall": "left",
+   "x": -70.205,
+   "y": -58.764,
+   "width": 4.02,
+   "depth": 3.74,
+   "height": 14.37,
+   "opening": 3.248
+  },
+  {
+   "id": "L_blue_n",
+   "alliance": "blue",
+   "wall": "right",
+   "x": 70.205,
+   "y": 58.764,
+   "width": 4.02,
+   "depth": 3.74,
+   "height": 14.37,
+   "opening": 3.248
+  },
+  {
+   "id": "L_blue_s",
+   "alliance": "blue",
+   "wall": "right",
+   "x": 70.205,
+   "y": -58.764,
+   "width": 4.02,
+   "depth": 3.74,
+   "height": 14.37,
+   "opening": 3.248
+  }
+ ],
+ "zones": [
+  {
+   "id": "red1",
+   "kind": "quadrant",
+   "name": "Red 1",
+   "color": "red",
+   "polygon": [
+    [
+     -70.205,
+     70.205
+    ],
+    [
+     -70.205,
+     -70.205
+    ],
+    [
+     -11.774,
+     -11.774
+    ],
+    [
+     -23.547,
+     0
+    ],
+    [
+     -11.774,
+     11.774
+    ]
+   ]
+  },
+  {
+   "id": "red2",
+   "kind": "quadrant",
+   "name": "Red 2",
+   "color": "red",
+   "polygon": [
+    [
+     -70.205,
+     -70.205
+    ],
+    [
+     70.205,
+     -70.205
+    ],
+    [
+     11.774,
+     -11.774
+    ],
+    [
+     0,
+     -23.547
+    ],
+    [
+     -11.774,
+     -11.774
+    ]
+   ]
+  },
+  {
+   "id": "blue1",
+   "kind": "quadrant",
+   "name": "Blue 1",
+   "color": "blue",
+   "polygon": [
+    [
+     70.205,
+     -70.205
+    ],
+    [
+     70.205,
+     70.205
+    ],
+    [
+     11.774,
+     11.774
+    ],
+    [
+     23.547,
+     0
+    ],
+    [
+     11.774,
+     -11.774
+    ]
+   ]
+  },
+  {
+   "id": "blue2",
+   "kind": "quadrant",
+   "name": "Blue 2",
+   "color": "blue",
+   "polygon": [
+    [
+     70.205,
+     70.205
+    ],
+    [
+     -70.205,
+     70.205
+    ],
+    [
+     -11.774,
+     11.774
+    ],
+    [
+     0,
+     23.547
+    ],
+    [
+     11.774,
+     11.774
+    ]
+   ]
+  },
+  {
+   "id": "midfield",
+   "kind": "midfield",
+   "name": "Midfield",
+   "color": "neutral",
+   "polygon": [
+    [
+     22.84,
+     0
+    ],
+    [
+     0,
+     22.84
+    ],
+    [
+     -22.84,
+     0
+    ],
+    [
+     0,
+     -22.84
+    ]
+   ]
+  },
+  {
+   "id": "load_red_n",
+   "kind": "loadZone",
+   "name": "red Load Zone",
+   "color": "red",
+   "polygon": [
+    [
+     -70.205,
+     46.657
+    ],
+    [
+     -58.431,
+     46.657
+    ],
+    [
+     -58.431,
+     70.205
+    ],
+    [
+     -70.205,
+     70.205
+    ]
+   ]
+  },
+  {
+   "id": "load_red_s",
+   "kind": "loadZone",
+   "name": "red Load Zone",
+   "color": "red",
+   "polygon": [
+    [
+     -70.205,
+     -46.657
+    ],
+    [
+     -58.431,
+     -46.657
+    ],
+    [
+     -58.431,
+     -70.205
+    ],
+    [
+     -70.205,
+     -70.205
+    ]
+   ]
+  },
+  {
+   "id": "load_blue_n",
+   "kind": "loadZone",
+   "name": "blue Load Zone",
+   "color": "blue",
+   "polygon": [
+    [
+     70.205,
+     46.657
+    ],
+    [
+     58.431,
+     46.657
+    ],
+    [
+     58.431,
+     70.205
+    ],
+    [
+     70.205,
+     70.205
+    ]
+   ]
+  },
+  {
+   "id": "load_blue_s",
+   "kind": "loadZone",
+   "name": "blue Load Zone",
+   "color": "blue",
+   "polygon": [
+    [
+     70.205,
+     -46.657
+    ],
+    [
+     58.431,
+     -46.657
+    ],
+    [
+     58.431,
+     -70.205
+    ],
+    [
+     70.205,
+     -70.205
+    ]
+   ]
+  }
+ ],
+ "tape": [
+  {
+   "from": [
+    -69.674,
+    70.735
+   ],
+   "to": [
+    -11.243,
+    12.304
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    12.304,
+    -11.243
+   ],
+   "to": [
+    70.735,
+    -69.674
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    -70.735,
+    69.674
+   ],
+   "to": [
+    -12.304,
+    11.243
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    11.243,
+    -12.304
+   ],
+   "to": [
+    69.674,
+    -70.735
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    -70.205,
+    -70.205
+   ],
+   "to": [
+    -11.774,
+    -11.774
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    11.774,
+    11.774
+   ],
+   "to": [
+    70.205,
+    70.205
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    23.547,
+    0
+   ],
+   "to": [
+    0,
+    23.547
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    0,
+    23.547
+   ],
+   "to": [
+    -23.547,
+    0
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    -23.547,
+    0
+   ],
+   "to": [
+    0,
+    -23.547
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    0,
+    -23.547
+   ],
+   "to": [
+    23.547,
+    0
+   ],
+   "width": 1,
+   "color": "#f2f2f2"
+  },
+  {
+   "from": [
+    -70.205,
+    46.657
+   ],
+   "to": [
+    -58.431,
+    46.657
+   ],
+   "width": 1,
+   "color": "#d8343a"
+  },
+  {
+   "from": [
+    -58.431,
+    46.657
+   ],
+   "to": [
+    -58.431,
+    70.205
+   ],
+   "width": 1,
+   "color": "#d8343a"
+  },
+  {
+   "from": [
+    -70.205,
+    -46.657
+   ],
+   "to": [
+    -58.431,
+    -46.657
+   ],
+   "width": 1,
+   "color": "#d8343a"
+  },
+  {
+   "from": [
+    -58.431,
+    -46.657
+   ],
+   "to": [
+    -58.431,
+    -70.205
+   ],
+   "width": 1,
+   "color": "#d8343a"
+  },
+  {
+   "from": [
+    70.205,
+    46.657
+   ],
+   "to": [
+    58.431,
+    46.657
+   ],
+   "width": 1,
+   "color": "#2f6fde"
+  },
+  {
+   "from": [
+    58.431,
+    46.657
+   ],
+   "to": [
+    58.431,
+    70.205
+   ],
+   "width": 1,
+   "color": "#2f6fde"
+  },
+  {
+   "from": [
+    70.205,
+    -46.657
+   ],
+   "to": [
+    58.431,
+    -46.657
+   ],
+   "width": 1,
+   "color": "#2f6fde"
+  },
+  {
+   "from": [
+    58.431,
+    -46.657
+   ],
+   "to": [
+    58.431,
+    -70.205
+   ],
+   "width": 1,
+   "color": "#2f6fde"
+  }
+ ],
+ "layouts": {
+  "h2h": {
+   "name": "Head-to-Head",
+   "items": [
+    {
+     "type": "stack",
+     "x": -26.705,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -20.39,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 20.39,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 26.705,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -26.705,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -20.39,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 20.39,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 26.705,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -47.091,
+     "y": 47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -51.996,
+     "y": 47.091,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -47.091,
+     "y": 42.185,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -47.091,
+     "y": 51.996,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -42.185,
+     "y": 47.091,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -28.453,
+     "y": 23.547,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -23.547,
+     "y": 18.642,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -23.547,
+     "y": 28.453,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -18.642,
+     "y": 23.547,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 18.642,
+     "y": -23.547,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 23.547,
+     "y": -28.453,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 23.547,
+     "y": -18.642,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 28.453,
+     "y": -23.547,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 47.091,
+     "y": -47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 42.185,
+     "y": -47.091,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 47.091,
+     "y": -51.996,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 47.091,
+     "y": -42.185,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 51.996,
+     "y": -47.091,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 0,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "blue",
+        "red"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 0,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "blue",
+        "red"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 0,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "red",
+        "blue"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 0,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "red",
+        "blue"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -47.091,
+     "y": -47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 47.091,
+     "y": 47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "goal",
+     "goal": "C",
+     "pieces": [
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "goal",
+     "goal": "N_R1",
+     "pieces": [
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "goal",
+     "goal": "N_R2",
+     "pieces": [
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "goal",
+     "goal": "N_B1",
+     "pieces": [
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "goal",
+     "goal": "N_B2",
+     "pieces": [
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    }
+   ],
+   "preload": {
+    "red": {
+     "kind": "pin",
+     "colors": [
+      "red",
+      "yellow"
+     ]
+    },
+    "blue": {
+     "kind": "pin",
+     "colors": [
+      "blue",
+      "yellow"
+     ]
+    }
+   },
+   "matchLoads": {
+    "red": [
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "yellow",
+       "yellow"
+      ]
+     }
+    ],
+    "blue": [
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "yellow",
+       "yellow"
+      ]
+     }
+    ]
+   }
+  },
+  "skills": {
+   "name": "Robot Skills",
+   "items": [
+    {
+     "type": "stack",
+     "x": -26.705,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -20.39,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 20.39,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 26.705,
+     "y": 68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -26.705,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -20.39,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 20.39,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 26.705,
+     "y": -68.626,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": 26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -68.626,
+     "y": -20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": 26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -26.705,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 68.626,
+     "y": -20.39,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "gray"
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -47.091,
+     "y": 47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -51.996,
+     "y": 47.091,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -47.091,
+     "y": 42.185,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -47.091,
+     "y": 51.996,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -42.185,
+     "y": 47.091,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -28.453,
+     "y": 23.547,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -23.547,
+     "y": 18.642,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -23.547,
+     "y": 28.453,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": -18.642,
+     "y": 23.547,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 18.642,
+     "y": -23.547,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 23.547,
+     "y": -28.453,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 23.547,
+     "y": -18.642,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 28.453,
+     "y": -23.547,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 47.091,
+     "y": -47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      }
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 42.185,
+     "y": -47.091,
+     "heading": 270,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 47.091,
+     "y": -51.996,
+     "heading": 180,
+     "colors": [
+      "yellow",
+      "red"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 47.091,
+     "y": -42.185,
+     "heading": 0,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "lying",
+     "x": 51.996,
+     "y": -47.091,
+     "heading": 90,
+     "colors": [
+      "yellow",
+      "blue"
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": 0,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "blue",
+        "red"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 0,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "blue",
+        "red"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 0,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "red",
+        "blue"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 0,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "red",
+        "blue"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -47.091,
+     "y": -47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": -23.547,
+     "y": -23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 23.547,
+     "y": 23.547,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    },
+    {
+     "type": "stack",
+     "x": 47.091,
+     "y": 47.091,
+     "pieces": [
+      {
+       "kind": "cup",
+       "up": "clear"
+      },
+      {
+       "kind": "pin",
+       "colors": [
+        "yellow",
+        "yellow"
+       ]
+      }
+     ]
+    }
+   ],
+   "preload": {
+    "red": {
+     "kind": "pin",
+     "colors": [
+      "red",
+      "yellow"
+     ]
+    }
+   },
+   "matchLoads": {
+    "red": [
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "red",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "pin",
+      "colors": [
+       "blue",
+       "yellow"
+      ]
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     },
+     {
+      "kind": "cup",
+      "up": "clear"
+     }
+    ]
+   }
+  }
+ },
+ "startPositions": [
+  {
+   "id": "red1_n",
+   "name": "Red 1 (left wall, north)",
+   "alliance": "red",
+   "zone": "red1",
+   "x": -60.705,
+   "y": 37,
+   "theta": 90,
+   "layouts": [
+    "h2h",
+    "skills"
+   ]
+  },
+  {
+   "id": "red1_s",
+   "name": "Red 1 (left wall, south)",
+   "alliance": "red",
+   "zone": "red1",
+   "x": -60.705,
+   "y": -37,
+   "theta": 90,
+   "layouts": [
+    "h2h",
+    "skills"
+   ]
+  },
+  {
+   "id": "red2_w",
+   "name": "Red 2 (bottom wall, west)",
+   "alliance": "red",
+   "zone": "red2",
+   "x": -37,
+   "y": -60.705,
+   "theta": 0,
+   "layouts": [
+    "h2h"
+   ]
+  },
+  {
+   "id": "red2_e",
+   "name": "Red 2 (bottom wall, east)",
+   "alliance": "red",
+   "zone": "red2",
+   "x": 37,
+   "y": -60.705,
+   "theta": 0,
+   "layouts": [
+    "h2h"
+   ]
+  },
+  {
+   "id": "blue1_n",
+   "name": "Blue 1 (right wall, north)",
+   "alliance": "blue",
+   "zone": "blue1",
+   "x": 60.705,
+   "y": 37,
+   "theta": 270,
+   "layouts": [
+    "h2h"
+   ]
+  },
+  {
+   "id": "blue1_s",
+   "name": "Blue 1 (right wall, south)",
+   "alliance": "blue",
+   "zone": "blue1",
+   "x": 60.705,
+   "y": -37,
+   "theta": 270,
+   "layouts": [
+    "h2h"
+   ]
+  },
+  {
+   "id": "blue2_w",
+   "name": "Blue 2 (top wall, west)",
+   "alliance": "blue",
+   "zone": "blue2",
+   "x": -37,
+   "y": 60.705,
+   "theta": 180,
+   "layouts": [
+    "h2h"
+   ]
+  },
+  {
+   "id": "blue2_e",
+   "name": "Blue 2 (top wall, east)",
+   "alliance": "blue",
+   "zone": "blue2",
+   "x": 37,
+   "y": 60.705,
+   "theta": 180,
+   "layouts": [
+    "h2h"
+   ]
+  }
+ ],
+ "game": {
+  "id": "override"
+ },
+ "cadLook": [
+  {
+   "match": "^Tape.*Red",
+   "color": "#d0312d",
+   "roughness": 0.6
+  },
+  {
+   "match": "^Tape.*Blue",
+   "color": "#2c6fd6",
+   "roughness": 0.6
+  },
+  {
+   "match": "^Tape",
+   "color": "#f2f2f0",
+   "roughness": 0.6
+  },
+  {
+   "match": "Alliance Stations.*199c",
+   "color": "#c8102e",
+   "roughness": 0.8
+  },
+  {
+   "match": "Alliance Stations.*299c",
+   "color": "#0072ce",
+   "roughness": 0.8
+  },
+  {
+   "match": "276-6904-001",
+   "color": "#6d7175",
+   "roughness": 1
+  },
+  {
+   "match": "276-7596-01[45]",
+   "color": "#e6eef4",
+   "opacity": 0.2,
+   "roughness": 0.05
+  },
+  {
+   "match": "Red \\d/276-9250-003",
+   "color": "#c8282e",
+   "roughness": 0.55
+  },
+  {
+   "match": "Blue \\d/276-9250-003",
+   "color": "#2a66d0",
+   "roughness": 0.55
+  },
+  {
+   "match": "276-9250-003",
+   "color": "#202226",
+   "roughness": 0.55
+  },
+  {
+   "match": "276-4847-011",
+   "color": "#3a3d42",
+   "roughness": 0.5,
+   "metalness": 0.3
+  },
+  {
+   "match": "Red Loader",
+   "color": "#d8343a",
+   "roughness": 0.55
+  },
+  {
+   "match": "Blue Loader",
+   "color": "#2f6fde",
+   "roughness": 0.55
+  },
+  {
+   "match": "276-9250-03[2-6]",
+   "color": "#eef4f8",
+   "opacity": 0.3,
+   "roughness": 0.05
+  },
+  {
+   "match": "^276-7596-000",
+   "color": "#c9cdd2",
+   "roughness": 0.35,
+   "metalness": 0.8
+  },
+  {
+   "match": "",
+   "color": "#2a2d31",
+   "roughness": 0.7
+  }
+ ],
+ "sources": [
+  "VEX V5RC Override Game Manual v2.0 (2026-09-03), Appendix A drawings A5-A16, rules SC1-SC8, SG1-SG13, RSC1-RSC4",
+  "https://content.vexrobotics.com/docs/2026-2027/override/files/override-2.0.pdf",
+  "Derivations: docs/override-field-spec.md"
+ ]
+}

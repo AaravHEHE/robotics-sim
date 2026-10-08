@@ -580,7 +580,18 @@ export class Manipulators {
   private release(c: ClawRuntime, count = Infinity): void {
     const { state, field } = this.ops;
     const held = state.held[c.spec.name];
-    const b = this.heldAt(c);
+    const b0 = this.heldAt(c);
+    // let go while the robot moves and the stack keeps its speed as it falls: it lands that far on
+    const v = this.world.speed;
+    const th = this.world.pose.theta * RAD;
+    const vx = v * dsin(th);
+    const vy = v * dcos(th);
+    const b = b0;
+    /** Where something let go at the claw lands once it has fallen `h` in: carried on by the robot's speed. */
+    const drifted = (h: number): { x: number; y: number } => {
+      const t = h > 0.3 ? Math.sqrt((2 * h) / GRAVITY) : 0;
+      return { x: b.x + vx * t, y: b.y + vy * t };
+    };
     const first = held[0];
     const slots = layoutStack(held, 0, false);
     const upright = this.tilt(c.spec) <= MAX_TILT;
@@ -604,7 +615,8 @@ export class Manipulators {
       const rest = nestRest(existing, base, onGoal, first.kind);
       if (rest === null) return `a ${what} can't sit on a ${what}`;
       const top = Math.max(base, stackTop(existing, base, onGoal));
-      const off = dhypot(b.x - x, b.y - y);
+      const land = drifted(b.z - rest);
+      const off = dhypot(land.x - x, land.y - y);
       if (b.z < rest - PLACE_SLOP) return `its bottom was ${inches(rest - b.z)} below where it would sit (it can't have got there: carry it over the top first)`;
       if (b.z > top + DROP_MAX) return `it was let go ${inches(b.z - top)} above the top (at most ${inches(DROP_MAX)} lands on it)`;
       // below the top only centred (the lift lowered it on); from above, close enough to fall on
@@ -653,7 +665,8 @@ export class Manipulators {
     }
     // say why it fell instead of landing on the Goal it was let go at: autons can be fixed from it
     if (missed) this.ops.note(missed);
-    this.dropAt(pieces, b.x, b.y, b.z);
+    const ground = drifted(b.z);
+    this.dropAt(pieces, ground.x, ground.y, b.z);
     this.ops.changed();
   }
 

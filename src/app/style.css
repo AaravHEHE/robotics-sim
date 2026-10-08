@@ -404,3 +404,14 @@ body[data-mode='map'] .map-side { max-width: none; }
   .cad-page .robot-grid { grid-template-columns: 1fr; }
   .cad-page .robot-side { position: static; }
 }
+
+.build-id {
+  margin-left: 0.5rem;
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.55;
+  user-select: all;
+}
+
+.physics-toggle { position: absolute; top: 12px; right: 190px; border: none; background: rgba(15, 18, 22, 0.6); color: #dfe3e8; padding: 7px 10px; border-radius: var(--radius); }
+.physics-toggle[aria-pressed="true"] { background: rgba(88, 166, 255, 0.35); color: #fff; }
+.physics-hud { position: absolute; left: 12px; bottom: 12px; margin: 0; padding: 6px 9px; background: rgba(15, 18, 22, 0.72); color: #dfe3e8; border-radius: var(--radius); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }

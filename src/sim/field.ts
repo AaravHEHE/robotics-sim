@@ -13,6 +13,19 @@ export interface FieldObject {
   height: number;
   color?: string;
   movable?: boolean;
+  /** Makes it a second robot no program drives (box shape = its footprint and start pose): see other-robot.ts. */
+  robot?: OtherRobotDef;
+}
+
+export interface OtherRobotDef {
+  /** Pounds (default 12). */
+  mass?: number;
+  /** Waypoints it drives through in order (field frame, inches), from where it starts. */
+  path?: Vec2[];
+  /** Its speed along the path, in/s (default 30). */
+  speed?: number;
+  /** Seconds after the program starts before it moves. */
+  delay?: number;
 }
 
 /** A goal post that scoring objects stack on (Override: octagonal Goals). */
@@ -182,6 +195,13 @@ export function validateField(f: unknown): string[] {
     const sh = o?.shape;
     const ok = sh && Number.isFinite(sh.x) && Number.isFinite(sh.y) && (sh.type === 'box' ? pos(sh.width) && pos(sh.length) : sh.type === 'circle' && pos(sh.radius));
     if (!ok) e.push(`object ${o?.id} needs a box (width, length) or circle (radius) shape at x, y.`);
+    if (o?.robot !== undefined) {
+      const r = o.robot;
+      if (sh?.type !== 'box') e.push(`object ${o.id}: a robot needs a box shape.`);
+      if (r.mass !== undefined && !(r.mass >= 1 && r.mass <= 60)) e.push(`object ${o.id}: robot mass must be 1-60 pounds.`);
+      if (r.speed !== undefined && !(r.speed > 0 && r.speed <= 150)) e.push(`object ${o.id}: robot speed must be 0-150 in/s.`);
+      if (r.path !== undefined && !(Array.isArray(r.path) && r.path.every((q) => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1])))) e.push(`object ${o.id}: robot path must be a list of [x, y] points.`);
+    }
   }
   const zoneIds = new Set((d.zones ?? []).map((z) => z.id));
   for (const g of d.goals ?? []) if (zoneIds.size && !zoneIds.has(g.zone)) e.push(`goal ${g.id} refers to unknown zone ${g.zone}.`);

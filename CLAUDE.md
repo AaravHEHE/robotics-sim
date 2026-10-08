@@ -8,7 +8,9 @@ using real PROS C++ code and real field/robot measurements.
 - Static hosting only (free). No backend. User code compiles in the browser.
 - Autonomous only for now. Driver control is a later feature.
 - No PID simulation. PID constants are accepted and ignored. Motion is
-  idealized and limited by real motor/gear/wheel speed and acceleration.
+  limited by real motor/gear/wheel speed and a physical drive model (V5 motor
+  torque, battery, grip, mass and inertia; src/sim/drive-dynamics.ts). Profiles
+  can set `dynamics.model: "idealized"` for the old fixed-acceleration limit.
 - Real measurements for field and robots (inches).
 - Scoring is out of scope until a specific game is added.
 

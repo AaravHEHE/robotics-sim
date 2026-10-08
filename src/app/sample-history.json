@@ -6,7 +6,8 @@
  },
  "override-banshee": {
   "src/main.cpp": [
-   "12h0iam20sh"
+   "12h0iam20sh",
+   "12uy0975f2g"
   ]
  },
  "override-claw-gate": {
@@ -56,6 +57,7 @@
    "14df9kajx5c",
    "1bqv8oxn2tz",
    "28ln3datrzg",
+   "6i2nmrns4e",
    "r4awk2h09o"
   ]
  },

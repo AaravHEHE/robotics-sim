@@ -78,7 +78,7 @@ export class FloorPhysics {
   /** Body handle -> piece id. */
   private readonly pieceOf = new Map<number, string>();
   /** Held stacks the robot carries: kinematic discs that push pieces they are level with. */
-  private readonly carried = new Map<string, { body: RAPIER.RigidBody; c: Carried }>();
+  private readonly carried = new Map<string, { body: RAPIER.RigidBody; c: Carried; speed: number }>();
   private readonly carriedOf = new Map<number, Carried>();
   /** Carried id + piece id pairs that overlap without pushing (see Carried / RobotShape.passes). */
   private readonly passing = new Set<string>();
@@ -251,10 +251,12 @@ export class FloorPhysics {
       if (!h) {
         const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(c.x * M, c.y * M));
         this.world.createCollider(RAPIER.ColliderDesc.ball(c.r * M).setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS), body);
-        h = { body, c };
+        h = { body, c, speed: 0 };
         this.carried.set(c.id, h);
         this.carriedOf.set(body.handle, c);
       }
+      // how fast it is moving (in/s), from where it was a step ago
+      h.speed = dhypot(c.x - h.c.x, c.y - h.c.y) / (PHYSICS_DT_MS / 1000);
       h.c.x = c.x;
       h.c.y = c.y;
       h.c.bottom = c.bottom;
@@ -391,6 +393,40 @@ export class FloorPhysics {
     }
     return touching;
   }
+
+  /** The carried stack touching this piece right now (and how fast it is moving, in/s), if any. */
+  hitByCarried(id: string): { carried: Carried; speed: number } | null {
+    const b = this.bodies.get(id);
+    if (!b) return null;
+    for (const h of this.carried.values()) {
+      let touching = false;
+      for (let i = 0; i < b.numColliders() && !touching; i++) {
+        for (let j = 0; j < h.body.numColliders() && !touching; j++) {
+          this.world.contactPair(b.collider(i), h.body.collider(j), (m) => {
+            for (let k = 0; k < m.numContacts(); k++) if (m.contactDist(k) <= 0.002) touching = true;
+          });
+        }
+      }
+      if (touching) return { carried: h.c, speed: h.speed };
+    }
+    return null;
+  }
+
+  /**
+   * Mass (kg) of the free pieces the robot is pushing right now: the ones touching it that are
+   * not wedged against something (those stop the chassis instead, see `pinnedObstacles`).
+   */
+  pushedMass(): number {
+    let kg = 0;
+    for (const [id, b] of this.bodies) {
+      if (this.pinned.has(id) || !this.touchingRobot(id)) continue;
+      kg += b.mass();
+    }
+    return kg;
+  }
+
+  /** Floor friction on a sliding piece (Coulomb coefficient; the colliders' own value). */
+  static readonly FLOOR_FRICTION = 0.4;
 
   free(): void {
     this.events.free();

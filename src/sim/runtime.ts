@@ -433,7 +433,11 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   const mechs = opts.profile.mechanisms;
   const stride = 6 + mechs.length;
   const frames: number[] = [];
+  const dyn: number[] = [];
+  const otherFrames: number[] = [];
   const pushFrame = () => {
+    dyn.push(...world.dynSample());
+    for (const o of world.others) otherFrames.push(o.x, o.y, o.theta);
     frames.push(sched.now, world.pose.x, world.pose.y, world.pose.theta, world.vL, world.vR);
     for (const m of mechs) frames.push(world.mechanismState(m));
     game?.recordFrame(sched.now);
@@ -481,6 +485,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     }
     events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : /^piece /.test(c.wall) ? `Robot pushed a Scoring Object (${c.wall.slice(6)}) that couldn't move out of the way.` : /^(near|far|left|right)$/.test(c.wall) ? `Robot hit the ${c.wall} wall.` : `Robot hit ${c.wall}.` });
   }
+  for (const tip of world.tips) events.push({ t: tip.t, level: 'warning', message: `Hitting ${tip.what} that hard (${tip.ratio.toFixed(1)}× what its weight resists) would tip a real robot over.` });
   let gameRec: OverrideRecording | null = null;
   try {
     gameRec = game?.finish() ?? null;
@@ -497,6 +502,9 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     frameEveryMs: frameEvery,
     stride,
     frames: Float64Array.from(frames),
+    dyn: Float64Array.from(dyn),
+    contacts: world.contacts,
+    ...(world.others.length ? { others: world.others.map((o) => ({ id: o.id, width: o.width, length: o.length, height: o.height, color: o.color })), otherFrames: Float64Array.from(otherFrames) } : {}),
     mechanisms: mechs.map((m) => m.name),
     autonStart,
     autonEnd,

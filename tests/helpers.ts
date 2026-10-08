@@ -29,7 +29,10 @@ export async function fixture(name: string, edits: Record<string, (text: string)
 }
 
 export async function robot(id: string): Promise<RobotProfile> {
-  return JSON.parse(await readFile(path.join(repoRoot, 'data/robots', id + '.json'), 'utf8'));
+  const p: RobotProfile = JSON.parse(await readFile(path.join(repoRoot, 'data/robots', id + '.json'), 'utf8'));
+  // PHYS_MODEL=idealized runs a whole suite with the old fixed-acceleration drive, to compare
+  if (process.env.PHYS_MODEL === 'idealized') p.dynamics = { ...p.dynamics, model: 'idealized' };
+  return p;
 }
 
 export async function field(): Promise<FieldDef> {

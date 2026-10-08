@@ -26,6 +26,8 @@ export interface ToggleState {
   id: string;
   /** Roll angle in degrees: 0 = starting orientation; +120 = one roll with the top moving outward. */
   angle: number;
+  /** Angular velocity, deg/s (absent in older recordings: at rest). */
+  omega?: number;
   /** A robot is touching the toggle right now. */
   touched: boolean;
 }

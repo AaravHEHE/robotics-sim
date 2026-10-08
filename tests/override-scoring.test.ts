@@ -181,7 +181,7 @@ describe('Override Toggles', () => {
     expect(tg.angle).toBeGreaterThan(30);
     expect(tg.touched).toBe(true);
     expect(setColor(def, tg.angle, tg.touched)).toBe('yellow');
-    release(500); // let go before the face turned over: falls back
+    release(900); // let go before the face turned over: falls back (and rings down)
     expect(tg.angle).toBe(0);
     press(1000); // held: one face only
     expect(tg.angle).toBe(120);
