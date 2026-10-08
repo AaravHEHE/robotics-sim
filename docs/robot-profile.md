@@ -22,7 +22,7 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | --- | --- |
 | `schema` | Always `1`. |
 | `id`, `name`, `description` | Identification. |
-| `mass` | Pounds (default 12). `dynamics` (optional) gives the center of mass `{x, y, z}` in inches (z above the tiles; default 0.3 of the height), the moment of inertia in lb·in² (default a uniform box), `wheelFriction` (default 0.9), `wheelsPerSide` and `batteryResistance` (ohms, default 0.15). Defaults and the V5 motor figures are in `src/sim/dynamics-spec.ts`; the motor numbers are estimates from VEX's published ratings. |
+| `mass` | Pounds (default 12). `dynamics` (optional) gives `model` (`"full"`, the default, or `"idealized"`), the center of mass `{x, y, z}` in inches (z above the tiles; default 0.3 of the height), the moment of inertia in lb·in² (default a uniform box), `wheelFriction` (default 0.9), `wheelsPerSide` and `batteryResistance` (ohms, default 0.15). Defaults and the V5 motor figures are in `src/sim/dynamics-spec.ts`; the motor numbers are estimates from VEX's published ratings. |
 | `size.width / length / height` | Overall footprint and height. Width and length are the collision box against the field walls. |
 | `drivetrain.type` | `"tank"`. Other drivetrains are not supported yet. |
 | `drivetrain.left`, `drivetrain.right` | Smart ports of each side's motors, **signed the way your code must declare them to drive forward**. For example, if your code says `pros::MotorGroup left({-1, -2, -3})`, use `[-1, -2, -3]`. If the code's reversal doesn't match, the robot spins or drives backwards, just like the real one. |
@@ -30,7 +30,7 @@ JSON schema: [`schemas/robot.schema.json`](../schemas/robot.schema.json).
 | `drivetrain.wheelDiameter` | Inches: 2.75, 3.25, 4 (new omnis), 4.125 (old 4" omnis), and so on. |
 | `drivetrain.wheelRpm` | Wheel rpm at full motor speed, after gearing. For example, blue motors geared 36:48 give 600 × 36/48 = 450. |
 | `drivetrain.trackWidth` | Distance between the centers of the left and right wheels. |
-| `drivetrain.maxAccel` | Linear acceleration and braking limit, in in/s². Typical V5 drivetrains are 120–250. Lower it for heavy robots or slippery wheels. |
+| `drivetrain.maxAccel` | Linear acceleration and braking limit, in in/s², used when `dynamics.model` is `"idealized"`. Otherwise (the default) acceleration comes from the motors, the robot's `mass`, its `dynamics.wheelFriction` and its inertia, and this number is not used. Typical V5 drivetrains are 120–250. |
 | `drivetrain.speedScale` | Optional, 0.1–1. The fraction of free speed reached under load (default 1). Set it around 0.9 if your robot is slower than theory. |
 | `devices` | Everything else plugged into the brain (see below). |
 | `mechanisms` | Moving parts shown in the viewer (see below). |
