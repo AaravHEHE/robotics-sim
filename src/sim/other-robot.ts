@@ -4,8 +4,7 @@
 // shoved off it by a hard enough push). Defined in a field's `objects` list with a `robot`
 // entry. It does not touch scoring objects: pieces pass under it.
 
-import { RAD } from './dmath.ts';
-import { dcosDeg, dhypot, dsinDeg, datan2, wrap180 } from './dmath.ts';
+import { dcosDeg, dhypot, dsinDeg, datan2, RAD, wrap180 } from './dmath.ts';
 import type { FieldObject, Vec2 } from './field.ts';
 
 const LB = 0.45359237;
@@ -17,16 +16,6 @@ const SLIDE_FRICTION = 0.6;
 const PATH_ACCEL = 0.4 * SLIDE_FRICTION * G_IN;
 const DEFAULT_TURN_RATE = 120; // deg/s
 
-export interface OtherRobotDef {
-  /** Pounds (default 12). */
-  mass?: number;
-  /** Waypoints it drives through in order (field frame, inches), from where it starts. */
-  path?: Vec2[];
-  /** Its speed along the path, in/s (default 30). */
-  speed?: number;
-  /** Seconds after the program starts before it moves. */
-  delay?: number;
-}
 
 export class OtherRobot {
   readonly id: string;

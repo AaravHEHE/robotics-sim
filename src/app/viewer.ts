@@ -65,6 +65,9 @@ export class FieldViewer {
   private readonly overlay = new THREE.Group();
   /** Forces, impacts and motor readouts over the field (off until asked for). */
   readonly physics = new PhysicsOverlay();
+  /** Robots no program drives (from the recording), one box each. */
+  private readonly othersGroup = new THREE.Group();
+  private otherBoxes: THREE.Group[] = [];
   private physicsHud: HTMLElement | null = null;
   /** Scoring objects of a game field. */
   private readonly gameGroup = new THREE.Group();
@@ -128,7 +131,7 @@ export class FieldViewer {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.02;
     this.scene.add(sun);
-    this.scene.add(this.fieldGroup, this.fieldModel, this.gameGroup, this.overlay, this.ghost, this.robotGroup, this.physics.group);
+    this.scene.add(this.fieldGroup, this.fieldModel, this.gameGroup, this.overlay, this.ghost, this.robotGroup, this.physics.group, this.othersGroup);
     this.applyTheme();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
 
@@ -538,6 +541,20 @@ export class FieldViewer {
     this.trail = this.futureTrail = null;
     this.ghost.visible = false;
     this.physics.setRecording(rec, this.profile);
+    clearGroup(this.othersGroup);
+    this.otherBoxes = [];
+    for (const o of rec?.others ?? []) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(o.width, o.height, o.length), new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.7 }));
+      body.position.y = o.height / 2;
+      // a stripe on the front so its heading shows
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(o.width * 0.9, 1, 0.4), new THREE.MeshStandardMaterial({ color: 0xffb020 }));
+      nose.position.set(0, o.height * 0.75, -o.length / 2 - 0.2);
+      g.add(body, nose);
+      g.userData.id = o.id;
+      this.othersGroup.add(g);
+      this.otherBoxes.push(g);
+    }
     if (!rec) return;
     const n = rec.frames.length / rec.stride;
     const pts: THREE.Vector3[] = [];
@@ -607,6 +624,15 @@ export class FieldViewer {
       t,
       { x: lerp(1), y: lerp(2), theta: lerp(3) },
     );
+    if (rec.otherFrames && this.otherBoxes.length) {
+      const k = this.otherBoxes.length * 3;
+      this.otherBoxes.forEach((g, j) => {
+        const v = (i: number, c: number) => rec.otherFrames![i * k + j * 3 + c];
+        const lerpO = (c: number) => v(i0, c) * (1 - a) + v(i1, c) * a;
+        g.position.copy(toThree(lerpO(0), lerpO(1)));
+        g.rotation.set(0, -lerpO(2) * DEG, 0);
+      });
+    }
     const readout = this.physics.update(f, t);
     if (this.physicsHud) {
       this.physicsHud.hidden = !readout;

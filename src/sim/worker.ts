@@ -18,7 +18,7 @@ self.onmessage = async (ev: MessageEvent<SimRequest>) => {
   try {
     const module = await WebAssembly.compile(ev.data.wasm);
     const recording = await runProgram(module, ev.data.options);
-    self.postMessage({ type: 'result', recording } satisfies SimResponse, [recording.frames.buffer, ...(recording.dyn ? [recording.dyn.buffer] : [])]);
+    self.postMessage({ type: 'result', recording } satisfies SimResponse, [recording.frames.buffer, ...(recording.dyn ? [recording.dyn.buffer] : []), ...(recording.otherFrames ? [recording.otherFrames.buffer] : [])]);
   } catch (e) {
     self.postMessage({ type: 'error', message: String((e as Error)?.message ?? e) } satisfies SimResponse);
   }

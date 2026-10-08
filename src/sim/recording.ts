@@ -51,6 +51,9 @@ export interface Recording {
   /** One row of `DYN_COLUMNS` per frame, kept apart from `frames` so its layout never moves. Absent in older recordings. */
   dyn?: Float64Array;
   contacts?: ContactRecord[];
+  /** Robots no program drives: their size, and per frame (the same frames) x, y, heading for each. */
+  others?: Array<{ id: string; width: number; length: number; height: number; color: string }>;
+  otherFrames?: Float64Array;
   /** Simulated time (ms since program start) when autonomous() began. */
   autonStart: number | null;
   /** When autonomous() returned, if it did before the stop time. */
