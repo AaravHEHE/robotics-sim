@@ -136,7 +136,7 @@
           <p id="map-help" class="muted map-help"></p>
           <div class="map-body">
             <table class="map-table">
-              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance from the previous point">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th title="Estimated time for this leg at the chosen velocity: the turn to face it, then the drive (from rest to rest)">Time</th><th></th></tr></thead>
+              <thead><tr><th>#</th><th>Name</th><th>x (in)</th><th>y (in)</th><th title="Heading the robot should face at this point (optional)">Face °</th><th title="Distance to drive from the previous point: the distance between them minus the 18 in robot length (never below 0)">Dist</th><th title="Heading to drive from the previous point">Heading</th><th title="Turn at the previous point (+ = right)">Turn</th><th title="Estimated time for this leg at the chosen velocity: the turn to face it, then the drive (from rest to rest)">Time</th><th></th></tr></thead>
               <tbody id="map-points-body"></tbody>
               <tfoot><tr><td colspan="10" id="map-total" class="map-total"></td></tr></tfoot>
             </table>

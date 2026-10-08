@@ -26,7 +26,7 @@ with **Plot points** ready. It treats the field as a 12 × 12 ft coordinate plan
 
 Each row of the table gives:
 
-- the distance from the previous point;
+- the distance to drive from the previous point: the distance between them minus 18 in (a typical robot's length; never below 0). The same 18 in comes off the Measure result and the timing;
 - the heading to drive from it;
 - the turn at the previous point (+ is a right turn).
 

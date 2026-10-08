@@ -34,6 +34,18 @@ export interface Measure {
 
 const DEG = 180 / Math.PI;
 
+/**
+ * A typical robot is about 18 in long, so the distance it drives between two spots is the
+ * distance between them minus this (the robot's own length covers the rest). Used for every
+ * distance the planner shows and for its timing.
+ */
+export const ROBOT_ALLOWANCE = 18;
+
+/** The distance a robot drives to cover `dist` inches between two spots (never below 0). */
+export function driveDist(dist: number): number {
+  return Math.max(0, dist - ROBOT_ALLOWANCE);
+}
+
 /** Distance and heading from a to b. */
 export function measure(a: { x: number; y: number }, b: { x: number; y: number }): Measure {
   const dx = b.x - a.x;
@@ -114,15 +126,15 @@ export function nearestPoi(p: { x: number; y: number }, pois: Poi[], maxDist: nu
   return best;
 }
 
-/** Per segment of a route: distance, heading to drive, and the turn from the previous one. */
-export function segments(points: MapPoint[]): Array<Measure & { turn: number | null }> {
-  const out: Array<Measure & { turn: number | null }> = [];
+/** Per segment of a route: distance, the drive distance (less the robot's length), heading, and the turn from the previous one. */
+export function segments(points: MapPoint[]): Array<Measure & { turn: number | null; drive: number }> {
+  const out: Array<Measure & { turn: number | null; drive: number }> = [];
   for (let i = 1; i < points.length; i++) {
     const m = measure(points[i - 1], points[i]);
     const prev = out[out.length - 1];
     // turning at the previous point: from the way the robot arrived (or the heading set there)
     const facing = points[i - 1].heading ?? prev?.heading;
-    out.push({ ...m, turn: facing === undefined ? null : turnBetween(facing, m.heading) });
+    out.push({ ...m, drive: driveDist(m.dist), turn: facing === undefined ? null : turnBetween(facing, m.heading) });
   }
   return out;
 }
@@ -170,7 +182,7 @@ export function routeTimes(points: MapPoint[], limits: DriveLimits): Array<{ tur
   let total = 0;
   return segments(points).map((s) => {
     const turn = s.turn === null ? 0 : turnTime(s.turn, limits);
-    const drive = moveTime(s.dist, limits.speed, limits.accel);
+    const drive = moveTime(s.drive, limits.speed, limits.accel);
     total += turn + drive;
     return { turn, drive, total };
   });
