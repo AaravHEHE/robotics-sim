@@ -9,13 +9,14 @@
 
 import * as THREE from 'three';
 import { layoutStack, type Piece } from '../games/override/elements.ts';
-import { clawClosed } from '../games/override/manipulators.ts';
+
 import type { OverrideState, Transit } from '../games/override/state.ts';
 import { baseOffset, clawEffector, clawPitch, liftEffector, liftPosition, toRobot, type Point3 } from '../sim/lift.ts';
 import { isMotorized, type ClawSpec, type IntakeSpec, type LiftSpec, type MechanismSpec, type RobotProfile, type StagingSpec, type ToggleToolSpec, type WristSpec } from '../sim/profile.ts';
 import { cupMesh, pinMesh } from './override-meshes.ts';
 import { mergeRigid } from './parts/batch.ts';
 import { Kit, WALL } from './parts/fasteners.ts';
+import { buildClaw, CLAW_HALF, type ClawBuild } from './claw-meshes.ts';
 import { chassisLayout, holes, liftPivot, type ChassisLayout } from './chassis-layout.ts';
 
 const local = (p: Point3) => new THREE.Vector3(p.x, p.z, -p.y);
@@ -119,8 +120,6 @@ const R = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const RX = R(1, 0, 0);
 const RY = R(0, 1, 0);
 const RZ = R(0, 0, 1);
-/** The claw's half width: its side plates (in); the fingers open to 2.8 in either side. */
-const CLAW_HALF = 3.3;
 /** Fourbar and six-bar bars: the second, parallel bar is this far above the first (in). */
 const PARALLEL = 2;
 
@@ -176,6 +175,8 @@ interface ClawVis {
   pivot: THREE.Group;
   /** The held stack, its bottom `grip` below the grip point. */
   stack: THREE.Group;
+  /** The jaws (box robots), posed for the claw's actuator and what it holds. */
+  build?: ClawBuild;
 }
 
 interface IntakeVis {
@@ -221,8 +222,9 @@ export class ManipulatorVisuals {
         stack.userData.moving = true; // (kept out of merging: what the claw holds goes in here)
         pivot.add(stack);
         root.add(pivot);
-        this.claws.push({ spec: m, pivot, stack });
-        if (boxes) this.claw(m, pivot, root);
+        const vis: ClawVis = { spec: m, pivot, stack };
+        this.claws.push(vis);
+        if (boxes) this.claw(vis, m, pivot, root);
       }
       if (m.kind === 'intake') {
         const riding = new THREE.Group();
@@ -681,69 +683,12 @@ export class ManipulatorVisuals {
    * piston (or motor) on standoffs behind it, or two upright rollers between plates; and a
    * shaft out of each side plate through a bearing into the lift's bars.
    */
-  private claw(m: ClawSpec, pivot: THREE.Group, root: THREE.Group): void {
-    const lift = m.lift ? this.profile.mechanisms.find((x): x is LiftSpec => x.kind === 'lift' && x.name === m.lift) : undefined;
-    // toward the robot: behind the claw
-    const b = (lift ? lift.home.y : (m.at?.y ?? 1)) >= 0 ? -1 : 1;
-    const k = new Kit(robotFrame(pivot));
-    const roller = m.grip === 'roller';
-    const sideLen = roller ? 9 : 5;
-    const sideZ = roller ? 1.2 : 0;
-    for (const s of [-1, 1]) {
-      k.part('plate-5', R(s * (CLAW_HALF - WALL / 2), b * 1.0, sideZ), RZ, RY, { length: sideLen });
-    }
-    k.part('plate-5', R(0, b * (2.25 + WALL / 2), sideZ), RX, RZ, { length: holes(2 * CLAW_HALF) });
-    if (roller) {
-      // two upright rollers either side of the mouth, spinning opposite ways, between plates
-      const rollers = [-1, 1].map((side) => {
-        const r = rollerGroup(3.5, 0.7, true);
-        r.position.set(side * 2.4, 1.2, 0);
-        pivot.add(r);
-        return { r, side };
-      });
-      this.updates.push((v) => rollers.forEach(({ r, side }) => (r.rotation.y = side * v(m) * DEG * VISUAL_SPIN)));
-      for (const z of [-0.85, 3.25]) {
-        k.part('plate-5', R(0, b * 0.95, z), RX, RY, { length: holes(2 * CLAW_HALF) });
-        for (const x of [-2.4, 2.4]) k.bearing(R(x, 0, z + (z > 0 ? WALL / 2 : -WALL / 2)), RZ.clone().multiplyScalar(z > 0 ? 1 : -1), RY);
-      }
-      // the motor on the top plate driving one roller, a chain to the other
-      const [ml] = k.size('v5-motor');
-      k.part('v5-motor', R(-2.4, 0, 3.25 + WALL / 2 + 0.153 + ml / 2), RZ.clone().negate(), RY);
-      const pd = 0.25 / Math.sin(Math.PI / 12);
-      for (const x of [-2.4, 2.4]) k.part('sprocket-12', R(x, 0, 3.05), RZ, RX);
-      for (const y of [-pd / 2, pd / 2]) k.part('chain-25', R(0, y, 3.05), RX, RY, { length: Math.round(4.8 / 0.25) });
-    } else {
-      // the fingers, each on an arm reaching back to slide along the back plate
-      const fingers = [-1, 1].map((side) => {
-        const g = new THREE.Group();
-        g.userData.moving = true;
-        g.userData.rigid = true;
-        pivot.add(g);
-        const fk = new Kit(robotFrame(g));
-        fk.part('angle-1x1', R(0, 0, 0), RZ, RY.clone().multiplyScalar(-b), { length: 5 });
-        for (const z of [-0.75, 0.75]) {
-          fk.part('bar', R(-side * 0.1, b * 1.15, z), RY, RX, { length: 5 });
-          fk.screw(R(-side * 0.1, b * 0.2, z + WALL / 2 + 0.03), RZ.clone().negate(), 2 * WALL, 'nut-nylock');
-        }
-        return { g, side };
-      });
-      this.updates.push((v) => {
-        const gap = clawClosed(m, v(m)) ? 1.9 : 2.8;
-        fingers.forEach(({ g, side }) => g.position.set(side * gap, 0, 0));
-      });
-      // what closes them, on two standoffs behind the back plate
-      const by = b * (2.25 + WALL);
-      if (m.grip === 'piston') {
-        const [, pd] = k.size('piston');
-        for (const x of [-1, 1]) k.standoff(R(x, by, 0.6), R(x, by + b * 0.5, 0.6));
-        k.part('piston', R(0, by + b * (0.5 + pd / 2), 0.6), RX, RY);
-      } else {
-        const [ml, , mh] = k.size('exp-motor');
-        for (const x of [-0.6, 0.6]) k.screw(R(x, by - b * WALL, 0.5), RY.clone().multiplyScalar(b), WALL, null, 0.2);
-        k.part('exp-motor', R(0, by + b * (ml / 2), 0), RY.clone().multiplyScalar(-b), RZ);
-        void mh;
-      }
-    }
+  private claw(c: ClawVis, m: ClawSpec, pivot: THREE.Group, root: THREE.Group): void {
+    const lift = m.lift ? this.profile.mechanisms.find((x) => x.kind === 'lift' && x.name === m.lift) : undefined;
+    // a claw on a lift (or at a point) ahead of the robot's center faces forward
+    const front = (lift && lift.kind === 'lift' ? lift.home.y : (m.at?.y ?? 1)) >= 0;
+    const { build, kit: k } = buildClaw(m, pivot, front);
+    c.build = build;
     // the shafts out to the lift's bars (or the carriage's arms), through bearings
     const bx = lift ? (this.barX.get(lift.name) ?? null) : null;
     if (bx !== null) {
@@ -824,6 +769,7 @@ export class ManipulatorVisuals {
     const pd = 0.25 / Math.sin(Math.PI / 12);
     // the roller at the mouth: flex wheels on a shaft, sprocket at its right end
     const front = rollerGroup(w, 1);
+    front.userData.intake = true;
     front.position.copy(local({ x: m.zone.x, y: ry, z: rz }));
     root.add(front);
     new Kit(robotFrame(front)).part('sprocket-12', R(ax - 0.25, 0, 0), RX, RY);
@@ -855,6 +801,7 @@ export class ManipulatorVisuals {
     if (dest) {
       // the roller that carries pieces over the deck, just above the path's high point
       const top = rollerGroup(w * 0.8, 0.8);
+      top.userData.intake = true;
       top.position.copy(this.pathOf(m, dest, () => 0).getPoint(0.5)).add(new THREE.Vector3(0, CUP_HEIGHT + 1, 0));
       root.add(top);
       spinners.push(top);
@@ -1034,6 +981,7 @@ export class ManipulatorVisuals {
     // a claw on a single-pivot arm pitches with the arm; a motor wrist turns it (as the simulator has it)
     const pitch = clawPitch(this.profile, c.spec, v, !!state?.flipped?.[c.spec.name]);
     c.pivot.rotation.set(pitch * DEG, 0, 0);
+    c.build?.update(v(c.spec), state?.held[c.spec.name] ?? [], state?.grip[c.spec.name] ?? 0);
     c.stack.position.set(0, -(state?.grip[c.spec.name] ?? 0), 0);
     c.stack.quaternion.identity();
     // drawing in what it just closed on
