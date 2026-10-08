@@ -83,15 +83,18 @@ export function chassisLayout(p: RobotProfile): ChassisLayout {
   // (where a claw takes up the front) beside the brain at the back
   const relief = chassisRelief(p);
   const [bw, bd, bh] = batSize;
-  const free = (x: number, hx: number, y: number, hy: number) => {
-    const rel = relief(y - hy, y + hy, deckTop, deckTop + bh);
-    return Math.abs(x) + hx <= crossHalf + 0.01 && !(rel && x + hx > rel.lo && x - hx < rel.hi);
+  const blocked = (x: number, hx: number, y0: number, y1: number, z0: number, z1: number) => {
+    const rel = relief(y0, y1, z0, z1);
+    return !!rel && x + hx > rel.lo && x - hx < rel.hi;
   };
+  // (free of the route and rooms, and the crossbars it is strapped to still there under it)
+  const free = (x: number, hx: number, y: number, hy: number, bars: number[]) =>
+    Math.abs(x) + hx <= crossHalf + 0.01 && !blocked(x, hx, y - hy, y + hy, deckTop, deckTop + bh) && !bars.some((b) => blocked(x, hx, b - 1, b + 1, railTop - 0.1, railTop + 0.6));
   const frontY = (front2 + front) / 2;
   let battery: ChassisLayout['battery'] = { x: 0, y: frontY, turned: false, bars: [front2, front], size: batSize };
-  if (!free(0, bw / 2, frontY, bd / 2)) {
+  if (!free(0, bw / 2, frontY, bd / 2, [front2, front])) {
     const rel = relief(frontY - bw / 2, frontY + bw / 2, deckTop, deckTop + bh);
-    const beside = rel ? [rel.hi + 0.05 + bd / 2, rel.lo - 0.05 - bd / 2].find((x) => free(x, bd / 2, frontY, bw / 2)) : undefined;
+    const beside = rel ? [rel.hi + 0.05 + bd / 2, rel.lo - 0.05 - bd / 2].find((x) => free(x, bd / 2, frontY, bw / 2, [front2, front])) : undefined;
     if (beside !== undefined) battery = { x: beside, y: frontY, turned: true, bars: [front2, front], size: batSize };
     else if (brain) {
       const total = brainSize[0] + 0.15 + bd;
