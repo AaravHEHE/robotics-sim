@@ -111,7 +111,7 @@ void autonomous() {
   armTo(ON_TWO);
   // the chassis can't get much closer than 10.6" (the corners of the Goal's base): the claw
   // stops 1" short of the Goal's center, close enough for the Cup to drop over the Pin
-  approach(R1_X, R1_Y, 10.7);
+  approach(R1_X, R1_Y, 10.65);
   rollOut(500);
 
   // 4. Up the field to the Red 1 Toggle and hit it at full speed: two faces, to red.
