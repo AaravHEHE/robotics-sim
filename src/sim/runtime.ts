@@ -483,6 +483,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     }
     events.push({ t: c.t, level: 'info', message: /^(goal|loader) /.test(c.wall) ? `Robot hit ${c.wall}.` : /^piece /.test(c.wall) ? `Robot pushed a Scoring Object (${c.wall.slice(6)}) that couldn't move out of the way.` : /^(near|far|left|right)$/.test(c.wall) ? `Robot hit the ${c.wall} wall.` : `Robot hit ${c.wall}.` });
   }
+  for (const tip of world.tips) events.push({ t: tip.t, level: 'warning', message: `Hitting ${tip.what} that hard (${tip.ratio.toFixed(1)}× what its weight resists) would tip a real robot over.` });
   let gameRec: OverrideRecording | null = null;
   try {
     gameRec = game?.finish() ?? null;
@@ -500,7 +501,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
     stride,
     frames: Float64Array.from(frames),
     dyn: Float64Array.from(dyn),
-    contacts: world.collisions.map((c) => ({ t: c.t, what: c.wall })),
+    contacts: world.contacts,
     mechanisms: mechs.map((m) => m.name),
     autonStart,
     autonEnd,
