@@ -24,3 +24,7 @@ Two side speeds; acceleration `min(maxAccel, 3·maxAccel·(1 − v/vmax))`; no m
 ## After the dynamics work
 
 All ten golden scores are unchanged. The toggle-bot's turn/drive settle delays (100 ms to 40 ms) and the Banshee's last approach (10.7 in to 10.65 in) were retuned for the new drive. World-test thresholds moved: top speed within 3% (was 1%) after 900 ms, the rest-to-rest bound uses the drive's real stall acceleration, and a chained move's exit speed uses the planning top speed (85% of free speed). `tests/override-field.test.ts` checks the Goal stop to 0.05 in (was 0.005): the last bounce settles under that.
+
+## Toggles, drops, a second robot, toppling
+
+Toggle rotational dynamics, drift on release, the second robot and stack toppling each left all ten golden scores unchanged. Two tests wait longer for a Toggle to settle (a face takes about half a second: `override-manipulators.test.ts` plate test 500 to 900 ms, `override-scoring.test.ts` release 500 to 900 ms). The suite is 319 tests on Node 24.
