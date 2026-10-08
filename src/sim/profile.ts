@@ -214,6 +214,11 @@ export const isMotorized = (m: MechanismSpec): boolean => Array.isArray(m.motors
 
 /** Optional physical details of the robot (inches, pounds). Defaults are in `dynamics-spec.ts`. */
 export interface DynamicsSpec {
+  /**
+   * 'full': motor, battery, grip and body dynamics (src/sim/drive-dynamics.ts). 'idealized': a
+   * fixed acceleration limit (`drivetrain.maxAccel`). Default 'full'.
+   */
+  model?: 'idealized' | 'full';
   /** Center of mass: x right, y forward from the footprint's center, z above the tiles. */
   centerOfMass?: { x?: number; y?: number; z?: number };
   /** Moment of inertia about the vertical axis through the center of mass, lb·in² (default: a uniform box). */
@@ -291,6 +296,7 @@ export function validateProfile(p: unknown): string[] {
       if (c !== undefined && (!c || typeof c !== 'object' || !(['x', 'y'] as const).every((k) => c[k] === undefined || isNum(c[k], -20, 20)) || (c.z !== undefined && !isNum(c.z, 0, 36)))) {
         e.push('dynamics.centerOfMass x / y must be -20 to 20 and z 0 to 36 inches.');
       }
+      if (dy.model !== undefined && dy.model !== 'idealized' && dy.model !== 'full') e.push('dynamics.model must be "idealized" or "full".');
       if (dy.inertia !== undefined && !isNum(dy.inertia, 1, 100000)) e.push('dynamics.inertia must be 1-100000 lb·in².');
       if (dy.wheelFriction !== undefined && !isNum(dy.wheelFriction, 0.05, 3)) e.push('dynamics.wheelFriction must be 0.05-3.');
       if (dy.wheelsPerSide !== undefined && !(Number.isInteger(dy.wheelsPerSide) && dy.wheelsPerSide >= 1 && dy.wheelsPerSide <= 8)) e.push('dynamics.wheelsPerSide must be a whole number 1-8.');

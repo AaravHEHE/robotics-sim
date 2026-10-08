@@ -11,6 +11,8 @@ import { repoRoot } from './node-toolchain.ts';
 
 export async function runSample(meta: SampleMeta, wasm: WebAssembly.Module, extra: Partial<RunOptions> = {}): Promise<Recording> {
   const profile = JSON.parse(await readFile(path.join(repoRoot, 'data/robots', meta.robot + '.json'), 'utf8')) as RobotProfile;
+  // PHYS_MODEL=idealized runs the samples with the old fixed-acceleration drive (to compare)
+  if (process.env.PHYS_MODEL === 'idealized') profile.dynamics = { ...profile.dynamics, model: 'idealized' };
   const field = JSON.parse(await readFile(path.join(repoRoot, 'data/fields', (meta.field ?? 'generic-12ft') + '.json'), 'utf8')) as FieldDef;
   const sp = meta.start ? field.startPositions?.find((p) => p.id === meta.start) : undefined;
   if (meta.start && !sp) throw new Error(`sample ${meta.id}: no start position ${meta.start} on ${field.id}`);

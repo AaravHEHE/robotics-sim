@@ -353,19 +353,20 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   // arm at its hard stop). Drive motors are moved by the idealized drivetrain, never stalled.
   f.motor_get_current_draw = getter((m) => {
     if (!m.cartridge) return 0;
+    if (m.telemetry) return m.telemetry.currentMa;
     const stalled = !m.driveSide && Math.abs(m.targetRpm()) > 5 && Math.abs(m.rpm) < 1;
     if (stalled) return 2500;
     return Math.round(120 + 600 * Math.min(1, Math.abs(m.rpm) / m.freeRpm));
   }, PROS_ERR);
   f.motor_get_direction = getter((m, s) => (s * m.rpm >= 0 ? 1 : -1), PROS_ERR);
   f.motor_get_efficiency = getter((m) => (m.rpm === 0 ? 0 : 80));
-  f.motor_is_over_current = getter(() => 0, PROS_ERR);
-  f.motor_is_over_temp = getter(() => 0, PROS_ERR);
+  f.motor_is_over_current = getter((m) => (m.telemetry && m.telemetry.currentMa > 2500 ? 1 : 0), PROS_ERR);
+  f.motor_is_over_temp = getter((m) => (m.telemetry && m.telemetry.tempC >= 55 ? 1 : 0), PROS_ERR);
   f.motor_get_faults = getter(() => 0, PROS_ERR);
   f.motor_get_flags = getter(() => 0, PROS_ERR);
   f.motor_get_power = getter((m) => Math.abs(m.rpm / (m.freeRpm || 1)) * 5);
-  f.motor_get_temperature = getter(() => 30);
-  f.motor_get_torque = getter(() => 0.1);
+  f.motor_get_temperature = getter((m) => (m.telemetry ? Math.round(m.telemetry.tempC / 5) * 5 : 30));
+  f.motor_get_torque = getter((m) => m.telemetry?.torqueNm ?? 0.1);
   f.motor_get_voltage = getter((m, s) => Math.round((s * m.rpm * 12000) / (m.freeRpm || 1)), PROS_ERR);
   f.motor_set_zero_position = (port: number, pos: number) => {
     const m = motor(port);
@@ -895,8 +896,11 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.competition_is_autonomous = () => (ctx.phase() === 2 ? 1 : 0);
   f.competition_is_field = () => 0;
   f.competition_is_switch = () => 1;
-  f.battery_get_voltage = () => 12800;
-  f.battery_get_current = () => 2000;
+  f.battery_get_voltage = () => Math.round(world.batteryVoltage * 1000);
+  f.battery_get_current = () => {
+    const dr = world.drive;
+    return dr ? Math.round(1000 * (dr.current[0] * world.profile.drivetrain.left.length + dr.current[1] * world.profile.drivetrain.right.length)) : 2000;
+  };
   f.battery_get_temperature = () => 25;
   f.battery_get_capacity = () => 100;
   f.usd_is_installed = () => 0;

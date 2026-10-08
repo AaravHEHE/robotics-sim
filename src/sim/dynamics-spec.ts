@@ -25,6 +25,12 @@ export interface MotorSpec {
 
 const STALL_TORQUE_NM: Record<Cartridge, number> = { red: 2.1, green: 1.05, blue: 0.35 };
 
+/** Torque per amp and back-EMF per rad/s, from the ratings above. */
+export function motorConstants(c: Cartridge): { kt: number; ke: number; spec: MotorSpec } {
+  const spec = motorSpec(c);
+  return { kt: spec.stallTorque / spec.currentLimit, ke: spec.nominalVoltage / spec.freeSpeed, spec };
+}
+
 export function motorSpec(c: Cartridge): MotorSpec {
   const nominalVoltage = 12;
   const currentLimit = 2.5;
@@ -32,8 +38,8 @@ export function motorSpec(c: Cartridge): MotorSpec {
     freeSpeed: (CARTRIDGE_RPM[c] * 2 * Math.PI) / 60,
     stallTorque: STALL_TORQUE_NM[c],
     currentLimit,
-    // at stall the motor would draw nominalVoltage / resistance; the V5's own limiter holds it near 2.5 A
-    resistance: nominalVoltage / (currentLimit * 1.6),
+    // the rated stall torque is reached at the 2.5 A limit, at the nominal 12 V
+    resistance: nominalVoltage / currentLimit,
     nominalVoltage,
   };
 }
@@ -52,6 +58,12 @@ export interface Dynamics {
 export const DEFAULT_MASS_LB = 12;
 export const DEFAULT_WHEEL_FRICTION = 0.9;
 export const DEFAULT_BATTERY_RESISTANCE = 0.15;
+/** Lateral (sideways) friction of the wheels, as a fraction of their grip: omni wheels roll sideways easily. */
+export const DEFAULT_LATERAL_FRICTION = 0.3;
+/** Gearbox and chain efficiency. */
+export const DRIVE_EFFICIENCY = 0.85;
+/** A full V5 battery's open-circuit voltage. */
+export const BATTERY_OPEN_CIRCUIT = 12.8;
 
 export function resolveDynamics(p: RobotProfile): Dynamics {
   const d = p.dynamics ?? {};

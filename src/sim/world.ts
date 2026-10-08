@@ -4,6 +4,7 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg, RAD, wrap180 } from './dmath.ts';
 import type { FieldDef, GoalDef, Vec2 } from './field.ts';
+import { DriveDynamics, type SideState } from './drive-dynamics.ts';
 import { CARTRIDGE_RPM, CARTRIDGE_TICKS, isMotorized, isPneumatic, maxSpeed, type Cartridge, type DeviceSpec, type MechanismSpec, type RobotProfile, type SensorMount } from './profile.ts';
 
 export interface Pose {
@@ -32,6 +33,8 @@ const LIFT_CREEP = 0.02;
 /** Unpowered, coasting: rolling friction plus back-driving the gearboxes (in/s^2); a robot
  * coasting from full speed rolls on for about a foot. */
 const COAST_DECEL = 150;
+/** Share of free speed motions plan with under the drive dynamics. */
+const CRUISE_FRACTION = 0.85;
 /** Friction that brings a braking robot to a final stop (in/s^2). */
 const FRICTION_DECEL = 40;
 
@@ -64,6 +67,8 @@ export class MotorState {
   /** Drivetrain motors are driven by the drivetrain model, not their own ramp. */
   driveSide: 'left' | 'right' | null = null;
   driveMount = 1;
+  /** What the drive's dynamics say this motor is doing (drive motors, when the profile uses them). */
+  telemetry: { currentMa: number; tempC: number; torqueNm: number } | null = null;
   voltageLimit = 0;
   currentLimit = 2500;
   /**
@@ -234,7 +239,8 @@ export class World {
   /** One recorded row of dynamics (the columns of `DYN_COLUMNS`). Current, heat and battery are not modelled yet. */
   dynSample(): number[] {
     const w = ((this.vL - this.vR) / this.profile.drivetrain.trackWidth) * (180 / Math.PI);
-    return [this.accelForward, w, 0, 0, 25, 25, 12.8];
+    const dr = this.drive;
+    return dr ? [this.accelForward, w, dr.current[0], dr.current[1], dr.temp[0], dr.temp[1], dr.battery] : [this.accelForward, w, 0, 0, 25, 25, 12.8];
   }
   readonly motors = new Map<number, MotorState>();
   readonly imus = new Map<number, ImuState>();
@@ -281,12 +287,15 @@ export class World {
   time = 0;
   /** Total distance driven by each side, in (for tracking/drive encoders). */
   private readonly maxV: number;
+  /** The drivetrain's motor, battery, grip and body model, when the profile asks for it. */
+  readonly drive: DriveDynamics | null;
 
   constructor(profile: RobotProfile, field: FieldDef, start: Pose) {
     this.profile = profile;
     this.field = field;
     this.pose = { ...start };
     this.maxV = maxSpeed(profile);
+    this.drive = profile.dynamics?.model === 'idealized' ? null : new DriveDynamics(profile);
     this.obstacles = fieldObstacles(field);
     const dt = profile.drivetrain;
     for (const [side, ports] of [['left', dt.left], ['right', dt.right]] as const) {
@@ -321,12 +330,17 @@ export class World {
     }
   }
 
+  /**
+   * Full speed as motions plan with it. With the drive dynamics it is the speed a drivetrain can
+   * still push toward (its motors' torque has fallen to a sixth of stall by then), so the planned
+   * wheel speeds are ones the drive keeps up with.
+   */
   get maxSpeed(): number {
-    return this.maxV;
+    return this.drive ? this.maxV * CRUISE_FRACTION : this.maxV;
   }
 
   get accel(): number {
-    return this.profile.drivetrain.maxAccel;
+    return this.drive ? this.drive.planAccel() : this.profile.drivetrain.maxAccel;
   }
 
   get trackWidth(): number {
@@ -384,6 +398,29 @@ export class World {
    * - Unpowered, by brake mode: coast rolls on against friction; brake shorts the windings
    *   (back-EMF braking, strong at speed, weak when slow); hold stops at full strength.
    */
+  /** One side as the dynamics model sees it. */
+  private sideState(ports: number[], v: number, target: number): SideState {
+    const unpowered = !this.controller && this.sideUnpowered(ports);
+    const motors = ports.map((p) => this.motors.get(Math.abs(p))!);
+    const brake = Math.min(...motors.map((m) => (m.noPower ? 0 : m.brakeMode)));
+    const share = motors.reduce((n, m) => n + m.torqueShare, 0) / motors.length;
+    return { v, target, powered: !unpowered, brake, motors: ports.length, currentLimit: 2.5 * share };
+  }
+
+  /** What the PROS API reports about each drive motor, from the dynamics model. */
+  private recordDriveTelemetry(): void {
+    const dr = this.drive!;
+    for (const m of this.motors.values()) {
+      if (!m.driveSide) continue;
+      const i = m.driveSide === 'left' ? 0 : 1;
+      m.telemetry = { currentMa: Math.round(dr.current[i] * 1000), tempC: dr.temp[i], torqueNm: dr.torque[i] };
+    }
+  }
+
+  get batteryVoltage(): number {
+    return this.drive ? this.drive.battery : 12.8;
+  }
+
   private sideAccel(v: number, target: number, ports: number[], dt: number): number {
     const traction = this.accel;
     const vmax = this.maxV;
@@ -411,16 +448,26 @@ export class World {
     tL = Math.max(-vmax, Math.min(vmax, tL));
     tR = Math.max(-vmax, Math.min(vmax, tR));
     const vPrev = (this.vL + this.vR) / 2;
-    let dL = this.sideAccel(this.vL, tL, d.left, dt);
-    let dR = this.sideAccel(this.vR, tR, d.right, dt);
+    let dL: number;
+    let dR: number;
     const eL = tL - this.vL;
     const eR = tR - this.vR;
+    if (this.drive) {
+      // motors, battery, grip and the body's mass and inertia decide how each side speeds up
+      const a = this.drive.step(this.sideState(d.left, this.vL, tL), this.sideState(d.right, this.vR, tR), dt);
+      dL = a.aL * dt;
+      dR = a.aR * dt;
+      this.recordDriveTelemetry();
+    } else {
+      dL = this.sideAccel(this.vL, tL, d.left, dt);
+      dR = this.sideAccel(this.vR, tR, d.right, dt);
+    }
     // Each side's motors follow their own command. A side that can reach its target this step
     // does; when both sides are flat out, their torques follow their voltages, so each speeds
     // up in proportion to how far it has to go. A difference between the sides' commands then
     // always turns the robot (a leftover spin dies out instead of persisting while both sides
     // accelerate), and a swing's locked side stays locked.
-    if ((this.controller || (!this.sideUnpowered(d.left) && !this.sideUnpowered(d.right))) && Math.abs(dL) < Math.abs(eL) && Math.abs(dR) < Math.abs(eR)) {
+    if (!this.drive && (this.controller || (!this.sideUnpowered(d.left) && !this.sideUnpowered(d.right))) && Math.abs(dL) < Math.abs(eL) && Math.abs(dR) < Math.abs(eR)) {
       const f = Math.min(dL / eL, dR / eR);
       dL = f * eL;
       dR = f * eR;

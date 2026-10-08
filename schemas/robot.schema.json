@@ -25,6 +25,7 @@
       "description": "Optional physical details; defaults are in src/sim/dynamics-spec.ts",
       "additionalProperties": false,
       "properties": {
+        "model": { "enum": ["idealized", "full"], "description": "full: motor, battery, grip and body dynamics; idealized: the fixed maxAccel limit" },
         "centerOfMass": {
           "type": "object",
           "additionalProperties": false,
