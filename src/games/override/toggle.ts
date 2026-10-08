@@ -13,17 +13,20 @@
 // roller's speed. Released between faces, the Toggle falls back to the nearest face.
 
 import type { FieldDef, ToggleDef, Vec2 } from '../../sim/field.ts';
+import { dsinDeg } from '../../sim/dmath.ts';
 import type { ToggleState } from './state.ts';
 
 /** How far from a detent a Toggle may rest and still count as fully seated. */
 export const SEAT_TOLERANCE_DEG = 4;
-/** Roll speed while a robot presses it, and settle speed when released (deg/s). */
-const PRESS_RATE = 480;
-const SETTLE_RATE = 360;
+/** The fastest a press rolls it (deg/s). */
+const PRESS_RATE = 600;
+/** A press never drives slower than this (deg/s) until it is on the face, or it would creep. */
+const PRESS_FLOOR = 200;
+/** Rolling at no more than this many deg/s and within this many degrees of a face, it clicks into the detent. */
+const SEAT_RATE = 40;
+const SEAT_SNAP_DEG = 2.5;
 /** Fraction of the overhang a robot must press into to roll the Toggle. */
 const PRESS_DEPTH = 0.6;
-/** A press faster than this (in/s) turns a Toggle two faces, not one (8059's toggler, used in autonomous). */
-const FAST_PRESS = 40;
 
 export type ToggleColor = 'red' | 'blue' | 'yellow';
 
@@ -103,15 +106,36 @@ function clip(poly: Vec2[], f: (p: Vec2) => number): Vec2[] {
   return out;
 }
 
+/**
+ * Rotational dynamics of a Toggle (angle and angular velocity, degrees).
+ *   - Three detents: a restoring torque -DETENT sin(3 angle) pulls it to the nearest face.
+ *   - Friction: viscous (DAMPING) and dry (FRICTION).
+ *   - A press: a robot part pushing into the overhang drives it toward the next face at up to
+ *     PRESS_RATE; the hit itself (its speed into the wall) also gives it an angular velocity
+ *     (HIT_GAIN deg/s per in/s). Fast enough, that carries it over the next detent's barrier: two
+ *     faces (about 40 in/s with these numbers, like 8059's toggler).
+ *   - A roller drags it toward the roller's surface speed.
+ * Constants are estimates fitted to the behaviour the game describes (one face per square press,
+ * two for a hard hit); they are not measurements of a real Toggle.
+ */
+const DETENT = 5000; // deg/s^2
+/** Viscous damping (1/s): strong at low speed (it settles on a face quickly), weak when spinning fast (a hard hit carries on). */
+const DAMPING_SLOW = 30;
+const DAMPING_FAST = 1;
+const DAMPING_KNEE = 300; // deg/s
+const FRICTION = 20; // deg/s^2
+const PRESS_GAIN = 60; // 1/s: how stiffly a press drives it to its rate
+const ROLLER_GAIN = 60; // 1/s
+const HIT_GAIN = 32; // deg/s per in/s of speed into the wall
+const MAX_RATE = 1400; // deg/s
+
 /** Steps every Toggle on the field from robot contact. */
 export class ToggleSim {
   private readonly defs: ToggleDef[];
-  /** Per toggle: the press already rolled it one face; wait for release. */
-  private readonly latched = new Map<string, boolean>();
-  /** Detent each Toggle is rolling toward while pressed. */
-  private readonly target = new Map<string, number>();
-  /** Toggles flung by a fast press: momentum carries them on to the second face. */
-  private readonly flung = new Set<string>();
+  /** Per toggle: a part was pressing it last step, the face it is being pressed toward, and whether it got there. */
+  private readonly pressed = new Set<string>();
+  private readonly goal = new Map<string, number>();
+  private readonly latched = new Set<string>();
 
   constructor(field: FieldDef) {
     this.defs = field.toggles ?? [];
@@ -124,58 +148,64 @@ export class ToggleSim {
       if (!s) continue;
       let pressing = false;
       let spin = 0;
+      let rolled = false;
       let locked = false;
-      let fast = false;
+      let into = 0;
       s.touched = false;
       for (const shape of shapes) {
         const depth = contactDepth(def, shape);
         if (depth <= 0) continue;
         s.touched = true;
         if (shape.lock) locked = true;
-        if (shape.spin !== undefined) spin += shape.spin; // rollers roll it, never shove it
-        else if (depth >= PRESS_DEPTH * overhang(def)) {
+        if (shape.spin !== undefined) {
+          spin += shape.spin; // rollers roll it, never shove it
+          rolled = true;
+        } else if (depth >= PRESS_DEPTH * overhang(def)) {
           pressing = true;
           // only the speed into the wall counts: sliding along it at speed is no hard hit
           const [vx, vy] = shape.velocity ?? [0, 0];
           const { n } = wallFrame(def);
-          if (-(vx * n[0] + vy * n[1]) > FAST_PRESS) fast = true;
+          into = Math.max(into, -(vx * n[0] + vy * n[1]));
         }
       }
+      let w = s.omega ?? 0;
       if (locked) {
         // jammed: nothing turns it (not even our own presses) until the jammer lets go
-        this.target.delete(def.id);
-        this.flung.delete(def.id);
+        s.omega = 0;
+        this.pressed.delete(def.id);
+        this.goal.delete(def.id);
         continue;
       }
-      if (spin) {
-        // a roller drives it continuously, either way; no detent latching
-        s.angle += Math.max(-PRESS_RATE, Math.min(PRESS_RATE, spin)) * dt;
-        this.latched.set(def.id, false);
-        this.target.delete(def.id);
-        this.flung.delete(def.id); // the roller has it now: no fast press carries on afterwards
-        continue;
+      if (rolled) pressing = false; // a roller has it: no press on top of it
+      if (pressing && !this.pressed.has(def.id)) {
+        // the hit: a new press starts toward the next face, with the speed it came in at
+        this.goal.set(def.id, 120 * Math.floor(s.angle / 120 + 1e-6) + 120);
+        this.latched.delete(def.id);
+        if (into > 0) w = Math.min(MAX_RATE, w + HIT_GAIN * into);
       }
-      if ((pressing && !this.latched.get(def.id)) || this.flung.has(def.id)) {
-        if (fast && !this.target.has(def.id)) this.flung.add(def.id);
-        const goal = this.target.get(def.id) ?? 120 * Math.floor(s.angle / 120 + 1e-6) + (fast ? 240 : 120);
-        this.target.set(def.id, goal);
-        s.angle = Math.min(goal, s.angle + PRESS_RATE * dt);
-        if (s.angle >= goal) {
-          // it stops on the face; a press still on it has to let go before it turns it again
-          this.latched.set(def.id, pressing);
-          this.target.delete(def.id);
-          this.flung.delete(def.id);
-        }
-        continue;
+      if (pressing) this.pressed.add(def.id);
+      else {
+        this.pressed.delete(def.id);
+        this.goal.delete(def.id);
+        this.latched.delete(def.id);
       }
-      if (!pressing) {
-        this.latched.set(def.id, false);
-        this.target.delete(def.id);
+      let a = -DETENT * dsinDeg(3 * s.angle) - (DAMPING_FAST + (DAMPING_SLOW - DAMPING_FAST) / (1 + (w / DAMPING_KNEE) ** 2)) * w - (Math.abs(w) > 1 ? Math.sign(w) * FRICTION : 0);
+      if (pressing && !this.latched.has(def.id)) {
+        const goal = this.goal.get(def.id)!;
+        if (s.angle >= goal) this.latched.add(def.id); // it stops on the face; the press must let go before it turns it again
+        else a += PRESS_GAIN * Math.max(0, Math.min(PRESS_RATE, Math.max(PRESS_FLOOR, 8 * (goal - s.angle))) - w);
       }
-      // settle onto the nearest face
-      const rest = 120 * Math.round(s.angle / 120);
-      const delta = rest - s.angle;
-      s.angle = Math.abs(delta) <= SETTLE_RATE * dt ? rest : s.angle + Math.sign(delta) * SETTLE_RATE * dt;
+      if (rolled) a += ROLLER_GAIN * (Math.max(-PRESS_RATE, Math.min(PRESS_RATE, spin)) - w);
+      w = Math.max(-MAX_RATE, Math.min(MAX_RATE, w + a * dt));
+      s.angle += w * dt;
+      // at rest on a face (and nothing driving it): it sits exactly on it
+      const face = 120 * Math.round(s.angle / 120);
+      const driven = rolled || (pressing && !this.latched.has(def.id));
+      if (!driven && Math.abs(w) < SEAT_RATE && Math.abs(s.angle - face) < SEAT_SNAP_DEG) {
+        s.angle = face;
+        w = 0;
+      }
+      s.omega = w;
     }
   }
 }

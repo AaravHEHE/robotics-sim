@@ -263,7 +263,7 @@ describe('Override Toggle tools', () => {
     run(1000);
     expect(game.state.toggles.find((x) => x.id === 'T_red1')!.angle).toBe(0);
     world.adiOut.set('C', true);
-    run(500);
+    run(900); // a face takes about half a second to roll and settle
     expect(game.state.toggles.find((x) => x.id === 'T_red1')!.angle).toBe(120);
   });
 });
