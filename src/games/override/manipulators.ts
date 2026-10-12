@@ -346,6 +346,8 @@ export class Manipulators {
     const v = this.world.speed;
     const velocity: Vec2 = [v * dsinDeg(this.world.pose.theta), v * dcosDeg(this.world.pose.theta)];
     const shapes: ContactShape[] = [{ poly: this.world.footprint(), bottom: 0, top: this.profile.size.height, velocity }];
+    // the other robot presses and turns Toggles the same way (it touches a Toggle: the Toggle is not set to a color)
+    for (const o of this.world.others) shapes.push({ poly: o.footprint(), bottom: 0, top: o.height, velocity: [o.vx, o.vy] });
     // claws and what they hold push Toggles too (a Flex pushing one with its claw)
     for (const a of this.attachments()) {
       const poly = octagon(...toField(this.world.pose, a), 2 * a.r);
