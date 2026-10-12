@@ -180,7 +180,12 @@ export class DriveDynamics {
     let net = load === 0 ? 0 : -drag;
     // static friction: a robot at rest that can't push the load stays put instead of rolling back
     if (load > 0 && Math.abs(L.v + R.v) <= 0.2 && heading !== 0 && (sum + net) * heading < 0) net = -sum;
-    return { aL: (sum + dif + extL + net) / INCH, aR: (sum - dif + extR + net) / INCH };
+    let aL = (sum + dif + extL + net) / INCH;
+    let aR = (sum - dif + extR + net) / INCH;
+    // an unpowered side that the coupling would carry past zero stops at zero instead (a spinning robot chattered)
+    if (!L.powered && L.v !== 0 && (L.v + aL * dt) * L.v < 0) aL = -L.v / dt;
+    if (!R.powered && R.v !== 0 && (R.v + aR * dt) * R.v < 0) aR = -R.v / dt;
+    return { aL, aR };
   }
 
   /** Current, battery and heat from the forces the sides pushed with. */
