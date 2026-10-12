@@ -55,12 +55,14 @@ export interface Dynamics {
   batteryResistance: number;
 }
 
+/** Anecdotal: VEX Forum posts put V5 robots at about 11 to 17 lb; the game sets no mass limit (docs/sources.md). */
 export const DEFAULT_MASS_LB = 12;
 export const DEFAULT_WHEEL_FRICTION = 0.7; // community tilt and pull tests on foam: 0.53 to 0.93, middle of the range (docs/sources.md)
+/** Estimate: VEX publishes no internal resistance for the V5 battery (docs/sources.md). */
 export const DEFAULT_BATTERY_RESISTANCE = 0.15;
-/** Lateral (sideways) friction of the wheels, as a fraction of their grip: omni wheels roll sideways easily. */
+/** Estimate, no source found: lateral (sideways) friction as a fraction of grip; omni wheels roll sideways easily. */
 export const DEFAULT_LATERAL_FRICTION = 0.3;
-/** Gearbox and chain efficiency. */
+/** Estimate, no source found: gearbox and chain efficiency. */
 export const DRIVE_EFFICIENCY = 0.85;
 /**
  * The V5 battery's nominal voltage (VEX KB, V5 Robot Battery spec table). The sim starts here and

@@ -20,14 +20,15 @@
 import { BATTERY_OPEN_CIRCUIT, DEFAULT_LATERAL_FRICTION, DRIVE_EFFICIENCY, G_SI, INCH, motorConstants, resolveDynamics, type Dynamics } from './dynamics-spec.ts';
 import { CARTRIDGE_RPM, type RobotProfile } from './profile.ts';
 
-/** Friction that stops an unpowered, coasting robot (in/s^2, the same figure as the idealized model's). */
+/** Estimate, no source found: friction that stops an unpowered, coasting robot (in/s^2, the same figure as the idealized model's). */
 const COAST_DECEL = 150 * INCH;
-/** What brings a braking robot to a final stop (m/s^2). */
+/** Estimate, no source found: what brings a braking robot to a final stop (m/s^2). */
 const FRICTION_DECEL = 40 * INCH;
 const AMBIENT_C = 25;
-/** Heat capacity of a motor (J/K) and its thermal resistance to the air (K/W): estimates. */
+/** Estimates, no source found: heat capacity of a motor (J/K) and its thermal resistance to the air (K/W). */
 const MOTOR_HEAT_CAPACITY = 60;
 const MOTOR_THERMAL_RESISTANCE = 1.2;
+// Estimate: the community reports about 55 C (VEX Forum); the KB gives current levels, not temperatures.
 const DERATE_START_C = 55;
 const DERATE_SPAN_C = 20;
 
