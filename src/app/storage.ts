@@ -81,7 +81,9 @@ export interface SavedProject {
  */
 /** A tab renews its claim on its id this often, and a claim older than LEASE_MS has lapsed (ms). */
 const LEASE_RENEW_MS = 2000;
-const LEASE_MS = 6000;
+// Browsers slow timers in a hidden tab to about once a minute, so a live but hidden tab must not look lapsed
+// after a few seconds; a closed tab releases its lease at once (pagehide), so a long lease costs nothing.
+const LEASE_MS = 120000;
 const newTabId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 /**
  * The tab's own key, and the key of the tab it was duplicated from (if any). "Duplicate tab"

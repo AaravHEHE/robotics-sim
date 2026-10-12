@@ -148,6 +148,16 @@ export class MapPanel {
     };
   }
 
+  /** What the plan looked like when last saved or opened from the list (null: never). */
+  private savedSig: string | null = null;
+  private sig(): string {
+    return JSON.stringify([this.name(), this.points, this.speedPct]);
+  }
+  /** Points or settings changed since the plan was last saved or opened: opening another plan would lose them. */
+  private unsaved(): boolean {
+    return this.points.length > 0 && this.sig() !== this.savedSig;
+  }
+
   private open(plan: MapPlan, id: string | null): void {
     this.lastOpened = plan;
     this.plan = { id, created: plan.created };
@@ -187,6 +197,7 @@ export class MapPanel {
       await savePlan(plan);
       this.plan.id = plan.id;
       $<HTMLInputElement>('plan-name').value = plan.name;
+      this.savedSig = this.sig();
       this.changed();
       this.host.status(`Saved the plan “${plan.name}” in this browser.`, 'ok');
     } catch (e) {
@@ -199,8 +210,9 @@ export class MapPanel {
     if (!id) return;
     const plan = (await listPlans()).find((p) => p.id === id);
     if (!plan) return;
-    if (this.points.length && !this.plan.id && !confirm(`Open “${plan.name}”? The ${this.points.length} unsaved points here will be replaced.`)) return void this.renderPlans();
+    if (this.unsaved() && !confirm(`Open “${plan.name}”? The unsaved changes to the plan here will be replaced.`)) return void this.renderPlans();
     this.open(plan, plan.id);
+    this.savedSig = this.sig();
     this.host.status(`Opened the plan “${plan.name}”.`, 'ok');
     this.warnField(plan);
     await this.renderPlans();
@@ -229,6 +241,7 @@ export class MapPanel {
       const plan = JSON.parse(await f.text()) as MapPlan;
       const errs = validatePlan(plan);
       if (errs.length) throw new Error(errs.join(' '));
+      if (this.unsaved() && !confirm(`Import “${plan.name}”? The unsaved changes to the plan here will be replaced.`)) return;
       this.open(plan, null);
       this.host.status(`Imported the plan “${plan.name}”. Press Save to keep it in this browser.`, 'ok');
       this.warnField(plan);
