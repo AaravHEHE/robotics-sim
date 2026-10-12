@@ -99,3 +99,17 @@ Read through the built-in browser (not downloaded). Anything marked "not downloa
 | V5 Robot Battery size | `scripts/gen-vex-parts.ts` (`v5-battery`) | 4.9 × 2.5 × 1.6 in | 6.31 × 1.82 × 1.18 in (KB) | **Not applied.** The chassis layout places the battery by this footprint; with the sourced size, six robots fail the "every part is fastened" check. Needs the layout reworked (Phase C, visuals). Kept as a comment in the generator. |
 | 5.5 W motor size | `scripts/gen-vex-parts.ts` (`exp-motor`) | 1.9 × 1.75 × 1.0 in | unresolved (the KB 5.5 W article gives the 11 W body size) | **Not applied**: needs checking against the physical 5.5 W motor. |
 | Flex Hero Bot preset | `data/robots/override-flex.json` | 1 motor per side, 4 in wheels, green cartridge, 200 rpm, 9 lb, 14 × 14 × 12 in | Official BOM: 4 V5 Smart Motors; drive wheel candidates are 2.75 in anti-static traction (×4). Which motors drive which wheels needs the build steps (the PDF). | **Not applied**: needs the PDF (see above) |
+
+## Flex build PDF (VEX, 2026-27 Hero Bot): read from the user's copy
+
+The file is `flex_build_instructions-v4.pdf` from the user's Downloads folder (18.0 MB, 215 pages, image-only). It was copied to the scratchpad and read by rendering pages to images, not by text extraction (the pages have no text layer, and no OCR tool is installed). Pages were read at low resolution; the sprocket tooth counts are not shown on the steps.
+
+What the PDF shows:
+
+- **Drive: one V5 Smart Motor per side, chain-driven.** Each side is a module with one black motor, a red sprocket on the motor shaft, and a chain to the wheel shafts (pages 41–49, 101–108). The BOM has four motors in total, and the VEXcode VR page lists only an arm motor and a claw motor besides the drive, so two motors are drive. This matches the preset's one motor per side.
+- **Wheels per side: three wheels on one module.** The module is a gray traction wheel at the top, an omni in the middle, and a gray traction wheel at the bottom (page 25 at higher resolution, pages 41–49). The top wheel looks about 4 in and the bottom about 2.75 in, but this is by eye.
+- **Final robot:** four wheel pods on a flat chassis, two omnis and two traction wheels visible per side (pages 196–215, 54–70).
+- **Lift:** a chain-and-sprocket lift with red gears (pages 121–140). Not part of the drive.
+- **Sprockets in the BOM:** 30T ×2, 24T ×1, 16T ×1, 6T ×2, plus 123 chain links. The ratio from motor to wheel depends on which sprocket is on the motor and which on the wheels. Not read from the images.
+
+What this means for the preset (`data/robots/override-flex.json`): the motor count (one per side) is consistent with the PDF. The wheel size (4 in for all drive wheels) and the gearing (green cartridge, 200 rpm wheel speed) are not confirmed. The BOM suggests the drive wheels are a mix of 2.75 in traction and 4 in omni, and the chain ratio is unknown. **Not changed**: the gearing needs the sprocket order, which is in the build steps around pages 92–110 at full resolution.
