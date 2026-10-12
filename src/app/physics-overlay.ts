@@ -52,11 +52,23 @@ export class PhysicsOverlay {
     return this.group.visible;
   }
 
+  /** Remove the impact arrows, freeing their geometry and materials (they are rebuilt every frame of an impact). */
+  private clearHits(): void {
+    for (const arrow of this.hits.children) {
+      arrow.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose();
+        for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mat?.dispose();
+      });
+    }
+    this.hits.clear();
+  }
+
   setRecording(rec: Recording | null, profile: RobotProfile | null): void {
     this.rec = rec;
     this.profile = profile;
     this.mass = profile ? resolveDynamics(profile).mass : 5;
-    this.hits.clear();
+    this.clearHits();
     this.vel.visible = this.acc.visible = this.com.visible = false;
   }
 
@@ -104,7 +116,7 @@ export class PhysicsOverlay {
       this.com.position.copy(toThree(x + cx * Math.cos(th) + cy * Math.sin(th), y - cx * Math.sin(th) + cy * Math.cos(th), d.com.z / 0.0254));
     }
     // impacts in the last moments
-    this.hits.clear();
+    this.clearHits();
     for (const c of rec.contacts ?? []) {
       if (c.impulse === undefined || c.x === undefined || c.y === undefined || c.nx === undefined || c.ny === undefined) continue;
       const age = t - c.t;

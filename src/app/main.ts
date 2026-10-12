@@ -1427,15 +1427,26 @@ async function loadRobots(): Promise<string[]> {
   const custom = await safe(listCustomRobots(), []);
   const ok: RobotProfile[] = [];
   const skipped: string[] = [];
-  for (const r of custom) {
+  for (const found of custom) {
+    let r = found;
     let errs: string[];
     try {
       errs = validateProfile(r);
     } catch (e) {
       errs = [(e as Error).message];
     }
-    if (errs.length) skipped.push(r?.name ?? r?.id ?? 'a robot');
-    else ok.push(r);
+    if (errs.length) {
+      skipped.push(r?.name ?? r?.id ?? 'a robot');
+      continue;
+    }
+    // an id that a preset (added in a later version, say) or another saved robot already uses: the robot moves to a new id
+    if (PRESETS.some((p) => p.id === r.id) || ok.some((o) => o.id === r.id)) {
+      const renamed = { ...r, id: `${r.id}-${Date.now().toString(36)}` };
+      await safe(saveCustomRobot(renamed), undefined);
+      await safe(deleteCustomRobot(r.id), undefined);
+      r = renamed;
+    }
+    ok.push(r);
   }
   state.robots = [...PRESETS, ...ok];
   return skipped;

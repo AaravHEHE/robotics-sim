@@ -252,7 +252,8 @@ export class MapPanel {
   }
 
   private async copyLink(): Promise<void> {
-    const url = `${location.origin}${location.pathname}#plan=${encodePlan(this.current())}`;
+    // (the page's own address: on a file:// page the origin reads "null")
+    const url = `${location.href.split('#')[0]}#plan=${encodePlan(this.current())}`;
     if (url.length > MAX_LINK) {
       this.host.status(`This plan is too big for a link (${url.length} characters): export it as a file instead.`, 'err');
       return;

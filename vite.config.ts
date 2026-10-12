@@ -10,7 +10,16 @@ function buildId(): string {
       return '';
     }
   })();
-  return sha ? sha.slice(0, 7) : 'dev';
+  if (!sha) return 'dev';
+  // a local build with uncommitted changes says so (read once, when the dev server starts)
+  const dirty = !process.env.GITHUB_SHA && (() => {
+    try {
+      return execSync('git status --porcelain', { encoding: 'utf8' }).trim() !== '';
+    } catch {
+      return false;
+    }
+  })();
+  return sha.slice(0, 7) + (dirty ? '+dirty' : '');
 }
 
 export default defineConfig({
