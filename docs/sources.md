@@ -25,14 +25,50 @@ official.
 
 A forum thread (https://www.vexforum.com/t/v5-smart-motor-estimating-performance-parameters/135200, unverified) estimates stall current near 4.7 A and free speed near 120 rpm from sampled curves. It conflicts with the official 2.5 A limit and with the 2.1 Nm figure, so it was not used.
 
-## Blocked or unreached sources (not yet read)
+## Battery, friction, mass and heat (Phase B, 2026-10-12)
 
-- vexrobotics.com product pages (403 from the proxy). Needed for wheel, C-channel, standoff, and screw dimensions, and for CAD downloads.
-- content.vexrobotics.com files other than the v1.1 manual (403 for some paths).
-- forum.vex.com and vexforum.com thread pages (403 from the proxy, except the search snippets above).
-- Team reveal videos and robot writeups (YouTube reachable, not yet searched for each preset).
+| Title | URL | What was taken | Status |
+|---|---|---|---|
+| V5 Battery Overview (VEX KB, fetched) | https://kb.vex.com/hc/en-us/articles/360035589732-V5-Battery-Overview | Pack named "Li-Ion 1100mAh" with LiFePO4 chemistry. Runs ten V5 Smart Motors at full power continuously. Motors run at 100% power at low battery. Charge about 60 min. Lifespan 2000 recharge cycles. No internal resistance or open-circuit voltage given. | Verified (read the page) |
+| Override Game Manual v2.0 (local copy) | `docs/manual/override-2.0.txt` | No robot weight or mass limit. The only size rules are the 18 × 18 × 18 in start size (<R3>) and a 50 in max height during a match (robot-size section, around manual line 1124). Searched for "lb", "pound", "kg", "mass", "weight": nothing relevant. | Verified |
+| Anyone have friction coefficient of vex wheels? (VEX Forum) | https://www.vexforum.com/t/anyone-have-friction-coefficient-of-vex-wheels/19261 | Tilt test on foam: about 0.67 (5 in wheel), 0.81 (4 in with tire), 0.93 (4 in omni and 2.75 in wheel). Poster says preliminary. | Community, unverified (search snippet) |
+| Pull tests for VEX wheels (VEX Forum) | https://www.vexforum.com/t/pull-tests-for-vex-wheels/20141 | Pull-test friction 0.53 to 0.84: 2.75 in green 0.59, 4 in stock tread 0.6, 5 in 0.84. | Community, unverified (search snippet) |
+| Omni wheel vs Mecanum (VEX Forum) | https://www.vexforum.com/t/omni-wheel-vs-mecanum/48151/13 | Pull force divided by about 16 lb of added weight; 4 in double omni about 0.87. Scale described as inaccurate. | Community, unverified (search snippet) |
+| Coming Soon: VRC Anti-Static Tiles (VEX Forum) | https://www.vexforum.com/t/coming-soon-vrc-anti-static-tiles/72260 | Quote from VEX that anti-static and foam tiles are functionally equivalent, with friction differences "extremely negligible". | Search snippet, not fetched |
+| Typical Robot Weight (VEX Forum) and related threads | https://www.vexforum.com/t/typical-robot-weight/17816 | Anecdotal V5 robot masses of about 11 to 17 lb (one thread 11 to 22 lb). Electronics about 6 lb. | Anecdotal, unverified |
+| V5 Overheating Threshold (VEX Forum) | https://www.vexforum.com/t/v5-overheating-threshold/64984 | Community reports of motors reaching over 55 °C and cutting out. No official temperature. | Community, unverified |
+| Understanding V5 Smart Motor (11W) Performance (VEX KB, already above) | https://kb.vex.com/hc/en-us/articles/360044325872-Understanding-V5-Smart-Motor-Performance | Four heat-response levels that cut current to 50%, 25%, 12.5%, 0%. The KB gives no temperature for any level. | Verified (read the page) |
+
+**Not found in any reachable source:** V5 battery internal resistance and open-circuit voltage; V5 wheel dimensions and CAD (the VEX product pages are blocked); a VEX-published foam tile friction coefficient; an official 2025-26 or 2026-27 robot mass rule.
+
+## Blocked or unreached sources
+
+- **Still blocked from this environment (403):** `www.vexrobotics.com` (product pages, CAD downloads, 26-27 manuals index), `www.vexforum.com` (thread pages except search snippets), `pd.vex.com`, and the root of `content.vexrobotics.com`. Needed for wheel, C-channel, standoff and screw dimensions, the official robot-preset specs, and the official V5 CAD.
+- **Reachable now (checked 2026-10-12):** `kb.vex.com`, `events.vex.com` (Override Q&A), `www.robotevents.com`, `cad.onshape.com`, `www.youtube.com`, `github.com`, `api.github.com`.
+- Team reveal videos and robot writeups: YouTube is reachable, but no per-preset team spec has been pulled yet (see the corrections table in Phase B status).
 
 ## Source-quality notes
 
 - Forum and search-snippet numbers are never copied into profiles without an "unverified" tag.
 - The local manual file is the rules source of truth. The field JSON (`data/fields/override.json`) has already been checked against its Goal heights.
+
+## Phase B status and corrections (for Phase C approval)
+
+No code changed in Phase B. Each row is a candidate for Phase C, to be approved first.
+
+| Item | File | Current value | Sourced value | Status | Proposed action |
+|---|---|---|---|---|---|
+| Wheel-to-floor friction | `src/sim/dynamics-spec.ts:59` (`DEFAULT_WHEEL_FRICTION`) | 0.9 | Community: 0.53 to 0.93, depending on method and wheel | Community only | Lower to about 0.7 (middle of the range), labelled as community. Moves goldens; re-run them. |
+| Sideways (scrub) friction | `dynamics-spec.ts:62` (`DEFAULT_LATERAL_FRICTION`) | 0.3 | None found | Estimate | Keep, labelled as estimate. |
+| Default robot mass | `dynamics-spec.ts:58` (`DEFAULT_MASS_LB`) | 12 lb | Anecdotal 11 to 17 lb; no official rule | Anecdotal | Keep; it's inside the anecdotal range. |
+| Battery internal resistance | `dynamics-spec.ts:60` (`DEFAULT_BATTERY_RESISTANCE`) | 0.15 Ω | None found | Estimate | Keep, labelled as estimate. |
+| Battery open-circuit voltage | `dynamics-spec.ts:66` (`BATTERY_OPEN_CIRCUIT`) | 12.8 V | KB names the pack "Li-Ion 1100mAh" with LiFePO4; no voltage figure in the page read | Unverified | Keep; check the nominal voltage in another KB article before relying on it. |
+| Drive efficiency | `dynamics-spec.ts:64` (`DRIVE_EFFICIENCY`) | 0.85 | None found | Estimate | Keep, labelled as estimate. |
+| Motor heat response | `drive-dynamics.ts:28-31`, `:100` | 55 °C start; half current at 95 °C | KB: four current levels (50/25/12.5/0%) with no temperatures; community about 55 °C | Estimate (the 55 °C start matches community reports) | Keep, labelled as estimate. The header comment is already corrected. |
+| Stall torque at 200 and 600 rpm | `dynamics-spec.ts:26` | 1.05 Nm, 0.35 Nm | KB: 2.1 Nm at 100 rpm only | Estimate (ideal speed scaling) | Keep, labelled as estimate (already so). |
+| Override robot presets: mass | `data/robots/override-*.json` | 9 to 18 lb | Anecdotal 11 to 17 lb | Anecdotal | Check each preset against its real robot before changing (the Flex at 9 lb and the midfield pusher at 18 lb are outside the range). |
+| Override robot presets: drivetrain | `data/robots/override-*.json` | 600 rpm (blue) cartridges at 450 rpm, 3.25 in wheels; Flex 200 rpm green, 4 in; midfield 4 in at 333 rpm | Not sourced (VEX wheel pages blocked; team specs not pulled) | Unverified | Pull each team's spec from its reveal video or VEX Forum writeup, then correct. Needs the blocked VEX pages or per-team sources. |
+| Parts catalog dimensions | `data/parts/vex-parts.json`, `scripts/gen-vex-parts.ts` | "approximate" (generator comment) | Not verifiable from reachable sources (VEX product pages blocked) | Blocked | Blocked until `www.vexrobotics.com` is allowed. |
+| Toggle constants | `src/games/override/toggle.ts` | fitted to the manual's described behaviour | Manual gives geometry only (25.8 in long, faces 2.05 in); no torque or spring data | Estimate | Keep, labelled as estimate. |
+
+**Still open for Phase B:** the per-preset robot specs, the parts catalogue, and the official Override field and robot references, all of which need `www.vexrobotics.com` or `www.vexforum.com`.
