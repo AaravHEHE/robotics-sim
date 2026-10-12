@@ -69,7 +69,7 @@ describe('drive dynamics', () => {
     // pushing against a wall: full target, no motion
     for (let t = 0; t < 20000; t++) dd.step(side(0, 60, { motors: n }), side(0, 60, { motors: n }), 0.001);
     expect(dd.battery).toBeLessThan(12.8 - 0.5);
-    expect(dd.temp[0]).toBeGreaterThan(30);
+    expect(dd.temp[0]).toBeGreaterThan(29); // (grip at 0.7 caps the force, so the motors warm a little less than at 0.9)
     const hot = dd.temp[0];
     for (let t = 0; t < 20000; t++) dd.step(side(0, 0, { motors: n, powered: false }), side(0, 0, { motors: n, powered: false }), 0.001);
     expect(dd.temp[0]).toBeLessThan(hot);

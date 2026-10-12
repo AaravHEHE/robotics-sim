@@ -56,7 +56,7 @@ export interface Dynamics {
 }
 
 export const DEFAULT_MASS_LB = 12;
-export const DEFAULT_WHEEL_FRICTION = 0.9;
+export const DEFAULT_WHEEL_FRICTION = 0.7; // community tilt and pull tests on foam: 0.53 to 0.93, middle of the range (docs/sources.md)
 export const DEFAULT_BATTERY_RESISTANCE = 0.15;
 /** Lateral (sideways) friction of the wheels, as a fraction of their grip: omni wheels roll sideways easily. */
 export const DEFAULT_LATERAL_FRICTION = 0.3;

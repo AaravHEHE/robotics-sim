@@ -58,7 +58,7 @@ No code changed in Phase B. Each row is a candidate for Phase C, to be approved 
 
 | Item | File | Current value | Sourced value | Status | Proposed action |
 |---|---|---|---|---|---|
-| Wheel-to-floor friction | `src/sim/dynamics-spec.ts:59` (`DEFAULT_WHEEL_FRICTION`) | 0.9 | Community: 0.53 to 0.93, depending on method and wheel | Community only | Lower to about 0.7 (middle of the range), labelled as community. Moves goldens; re-run them. |
+| Wheel-to-floor friction | `src/sim/dynamics-spec.ts:59` (`DEFAULT_WHEEL_FRICTION`) | 0.9 → 0.7 (done) | Community: 0.53 to 0.93, depending on method and wheel | Community only | Changed to 0.7. Goldens unchanged; one sanity bound on motor heat lowered from 30 °C to 29 °C in `tests/drive-dynamics.test.ts`. |
 | Sideways (scrub) friction | `dynamics-spec.ts:62` (`DEFAULT_LATERAL_FRICTION`) | 0.3 | None found | Estimate | Keep, labelled as estimate. |
 | Default robot mass | `dynamics-spec.ts:58` (`DEFAULT_MASS_LB`) | 12 lb | Anecdotal 11 to 17 lb; no official rule | Anecdotal | Keep; it's inside the anecdotal range. |
 | Battery internal resistance | `dynamics-spec.ts:60` (`DEFAULT_BATTERY_RESISTANCE`) | 0.15 Ω | None found | Estimate | Keep, labelled as estimate. |
