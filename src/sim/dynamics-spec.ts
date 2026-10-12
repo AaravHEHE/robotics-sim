@@ -62,7 +62,10 @@ export const DEFAULT_BATTERY_RESISTANCE = 0.15;
 export const DEFAULT_LATERAL_FRICTION = 0.3;
 /** Gearbox and chain efficiency. */
 export const DRIVE_EFFICIENCY = 0.85;
-/** A full V5 battery's open-circuit voltage. */
+/**
+ * The V5 battery's nominal voltage (VEX KB, V5 Robot Battery spec table). The sim starts here and
+ * sags by current times resistance; a freshly charged pack reads higher (about 14.4 V, VEX Forum).
+ */
 export const BATTERY_OPEN_CIRCUIT = 12.8;
 
 export function resolveDynamics(p: RobotProfile): Dynamics {
