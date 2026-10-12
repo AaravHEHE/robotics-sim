@@ -275,6 +275,9 @@ export function decodePlan(text: string): MapPlan {
   } catch {
     throw new Error('This link does not contain a readable plan (it may be cut short).');
   }
+  if (compact.p !== undefined && (!Array.isArray(compact.p) || compact.p.some((row: unknown) => !Array.isArray(row)))) {
+    throw new Error('This link does not contain a readable plan (its points are damaged).');
+  }
   const plan: MapPlan = {
     v: compact.v as 1,
     name: compact.n,

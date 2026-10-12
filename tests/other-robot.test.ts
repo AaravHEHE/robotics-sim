@@ -149,3 +149,20 @@ describe('the Override field with a second robot', () => {
     expect(rec.otherFrames!.length).toBe((rec.frames.length / rec.stride) * 3);
   });
 });
+
+describe('the other robot\'s delay', () => {
+  it('counts from autonomous, not from the world, so it waits through initialize()', async () => {
+    const f = await withOther({ x: 0, y: -60, path: [[0, 0]], speed: 40 });
+    f.objects[f.objects.length - 1].robot!.path = [[0, 40]];
+    f.objects[f.objects.length - 1].robot!.delay = 0.5;
+    const w = new World(await robot('tank-6m-450'), f, { x: -40, y: -60, theta: 0 });
+    for (let i = 0; i < 2000; i++) w.step(1); // initialize(): the robot stays put
+    const y0 = w.others[0].y;
+    expect(Math.abs(y0 - -60)).toBeLessThan(0.01);
+    w.startOthers();
+    for (let i = 0; i < 300; i++) w.step(1); // 0.3 s: still inside the 0.5 s delay
+    expect(Math.abs(w.others[0].y - -60)).toBeLessThan(0.01);
+    for (let i = 0; i < 1000; i++) w.step(1);
+    expect(w.others[0].y).toBeGreaterThan(-59);
+  });
+});

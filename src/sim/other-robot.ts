@@ -39,6 +39,13 @@ export class OtherRobot {
   private readonly delay: number;
   private next = 0;
   private time = 0;
+  /** Its program's clock starts with autonomous, not with the world (initialize() runs first). */
+  private started = false;
+
+  /** Autonomous has begun: the robot's delay counts from here. */
+  begin(): void {
+    this.started = true;
+  }
 
   constructor(o: FieldObject) {
     const sh = o.shape;
@@ -53,7 +60,9 @@ export class OtherRobot {
     this.y = sh.y;
     this.theta = sh.heading ?? 0;
     this.mass = (r.mass ?? 12) * LB;
-    this.inertia = (this.mass * ((sh.width * IN) ** 2 + (sh.length * IN) ** 2)) / 12;
+    const w = sh.width * IN;
+    const l = sh.length * IN;
+    this.inertia = (this.mass * (w * w + l * l)) / 12;
     this.path = r.path ?? [];
     this.speed = r.speed ?? 30;
     this.delay = r.delay ?? 0;
@@ -74,7 +83,7 @@ export class OtherRobot {
 
   /** Advance `dt` seconds: follow the path (if any), slide to a stop, and keep inside the walls (`half`: inside half-width). */
   step(dt: number, half: number): void {
-    this.time += dt;
+    if (this.started) this.time += dt;
     const driving = this.path.length > 0 && this.next < this.path.length && this.time >= this.delay;
     if (driving) {
       const [tx, ty] = this.path[this.next];

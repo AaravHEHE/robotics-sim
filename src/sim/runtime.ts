@@ -413,6 +413,7 @@ export async function runProgram(wasm: WebAssembly.Module, opts: RunOptions): Pr
   sched.onTaskDone = (t) => {
     if (t.phase === 0) {
       autonStart = sched.now;
+      world.startOthers();
       startPhase(2, 'autonomous');
     } else if (t.phase === 2) {
       autonEnd = sched.now;

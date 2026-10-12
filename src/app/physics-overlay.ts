@@ -57,7 +57,7 @@ export class PhysicsOverlay {
     this.profile = profile;
     this.mass = profile ? resolveDynamics(profile).mass : 5;
     this.hits.clear();
-    this.vel.visible = this.acc.visible = false;
+    this.vel.visible = this.acc.visible = this.com.visible = false;
   }
 
   /** Whether the recording has dynamics to show (older ones do not). */
@@ -100,6 +100,7 @@ export class PhysicsOverlay {
       const d = resolveDynamics(this.profile);
       const cx = d.com.x / 0.0254;
       const cy = d.com.y / 0.0254;
+      this.com.visible = true;
       this.com.position.copy(toThree(x + cx * Math.cos(th) + cy * Math.sin(th), y - cx * Math.sin(th) + cy * Math.cos(th), d.com.z / 0.0254));
     }
     // impacts in the last moments

@@ -373,6 +373,11 @@ export class World {
     return this.drive ? this.maxV * CRUISE_FRACTION : this.maxV;
   }
 
+  /** Autonomous has begun (after initialize()): the other robots' delays start counting. */
+  startOthers(): void {
+    for (const o of this.others) o.begin();
+  }
+
   get accel(): number {
     if (!this.drive) return this.profile.drivetrain.maxAccel;
     const d = this.profile.drivetrain;
