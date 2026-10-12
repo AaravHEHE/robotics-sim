@@ -445,7 +445,9 @@ export class World {
     const motors = ports.map((p) => this.motors.get(Math.abs(p))!);
     const brake = Math.min(...motors.map((m) => (m.noPower ? 0 : m.brakeMode)));
     const share = motors.reduce((n, m) => n + m.torqueShare, 0) / motors.length;
-    return { v, target, powered: !unpowered, brake, motors: ports.length, currentLimit: 2.5 * share };
+    // a side with no current can't push, controller or not: it coasts on friction like an unpowered side
+    const currentLimit = 2.5 * share;
+    return { v, target, powered: !unpowered && currentLimit > 0, brake, motors: ports.length, currentLimit };
   }
 
   /** What the PROS API reports about each drive motor, from the dynamics model. */
