@@ -128,6 +128,16 @@ export class MotorState {
     return this.currentLimit <= 0;
   }
 
+  /** Voltage the motor is driven at, in mV, signed for a port: the command itself in voltage mode (limited by the voltage limit), otherwise the back-EMF estimate. */
+  appliedMillivolts(sign: number): number {
+    if (this.mode === 'voltage') {
+      let v = Math.max(-127, Math.min(127, this.cmd));
+      if (this.voltageLimit > 0) v = Math.max((-this.voltageLimit / 12000) * 127, Math.min((this.voltageLimit / 12000) * 127, v));
+      return Math.round((sign * v * 12000) / 127);
+    }
+    return Math.round((sign * this.rpm * 12000) / (this.freeRpm || 1));
+  }
+
   /** Target physical rpm from the current command. */
   targetRpm(): number {
     if (this.noPower) return 0;

@@ -367,7 +367,7 @@ export function createProsApi(ctx: ApiContext): ProsApi {
   f.motor_get_power = getter((m) => Math.abs(m.rpm / (m.freeRpm || 1)) * 5);
   f.motor_get_temperature = getter((m) => (m.telemetry ? Math.round(m.telemetry.tempC / 5) * 5 : 30));
   f.motor_get_torque = getter((m) => m.telemetry?.torqueNm ?? 0.1);
-  f.motor_get_voltage = getter((m, s) => Math.round((s * m.rpm * 12000) / (m.freeRpm || 1)), PROS_ERR);
+  f.motor_get_voltage = getter((m, s) => m.appliedMillivolts(s), PROS_ERR);
   f.motor_set_zero_position = (port: number, pos: number) => {
     const m = motor(port);
     if (!m) return PROS_ERR;
