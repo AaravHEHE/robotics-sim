@@ -370,7 +370,9 @@ export class World {
   }
 
   get accel(): number {
-    return this.drive ? this.drive.planAccel() : this.profile.drivetrain.maxAccel;
+    if (!this.drive) return this.profile.drivetrain.maxAccel;
+    const d = this.profile.drivetrain;
+    return this.drive.planAccel({ left: this.sideState(d.left, 0, 0).currentLimit, right: this.sideState(d.right, 0, 0).currentLimit });
   }
 
   get trackWidth(): number {

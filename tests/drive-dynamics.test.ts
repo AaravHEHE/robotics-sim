@@ -134,3 +134,15 @@ describe('pushing a load', () => {
     expect(a.aL).toBeGreaterThan(-1e-9);
   });
 });
+
+describe('planAccel uses each side\'s current limit', () => {
+  it('low current limits cut the planned acceleration', async () => {
+    const p = await robot('tank-6m-450');
+    const dd = new DriveDynamics(p);
+    const full = dd.planAccel({ left: 2.5, right: 2.5 });
+    const low = dd.planAccel({ left: 0.5, right: 0.5 });
+    const none = dd.planAccel({ left: 0, right: 0 });
+    expect(low).toBeLessThan(full);
+    expect(none).toBe(0);
+  });
+});

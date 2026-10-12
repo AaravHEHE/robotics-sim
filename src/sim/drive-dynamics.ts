@@ -206,9 +206,9 @@ export class DriveDynamics {
   }
 
   /** The force one side can push with from rest, N. */
-  private stallForce(atSpeed = 0): number {
+  private stallForce(atSpeed = 0, currentLimit = motorConstants(this.profile.drivetrain.cartridge).spec.currentLimit): number {
     const d = this.profile.drivetrain;
-    const side: SideState = { v: 0, target: 1, powered: true, brake: 0, motors: d.left.length, currentLimit: motorConstants(d.cartridge).spec.currentLimit };
+    const side: SideState = { v: 0, target: 1, powered: true, brake: 0, motors: d.left.length, currentLimit };
     return this.forceLimit(side, 1, atSpeed, 12, AMBIENT_C);
   }
 
@@ -222,10 +222,12 @@ export class DriveDynamics {
    * driving straight and for turning in place (the weaker of the two: a turn's force difference
    * works against the robot's inertia, which is less than its mass would give).
    */
-  planAccel(): number {
-    // what the drive can count on across a move: its force at about half of top speed, not at stall
+  planAccel(limits: { left: number; right: number } = { left: 2.5, right: 2.5 }): number {
+    // what the drive can count on across a move: its force at about half of top speed, not at stall,
+    // with each side limited by its own motors' current (a side with no current gives no force)
     const d = this.profile.drivetrain;
-    const f = this.stallForce(0.5 * ((d.wheelRpm * Math.PI * d.wheelDiameter) / 60) * INCH);
+    const atSpeed = 0.5 * ((d.wheelRpm * Math.PI * d.wheelDiameter) / 60) * INCH;
+    const f = (this.stallForce(atSpeed, limits.left) + this.stallForce(atSpeed, limits.right)) / 2;
     return Math.min((2 * f) / this.dyn.mass, 2 * f * this.k) / INCH;
   }
 }
