@@ -82,6 +82,21 @@ export class OtherRobot {
   }
 
   /** Advance `dt` seconds: follow the path (if any), slide to a stop, and keep inside the walls (`half`: inside half-width). */
+  /** Push out of a fixed obstacle along `mtv` (inches), losing the speed that drives into it. */
+  pushOut(mtv: Vec2): void {
+    const d = Math.sqrt(mtv[0] * mtv[0] + mtv[1] * mtv[1]);
+    if (d < 1e-12) return;
+    this.x += mtv[0];
+    this.y += mtv[1];
+    const nx = mtv[0] / d;
+    const ny = mtv[1] / d;
+    const vn = this.vx * nx + this.vy * ny;
+    if (vn < 0) {
+      this.vx -= vn * nx;
+      this.vy -= vn * ny;
+    }
+  }
+
   step(dt: number, half: number): void {
     if (this.started) this.time += dt;
     const driving = this.path.length > 0 && this.next < this.path.length && this.time >= this.delay;

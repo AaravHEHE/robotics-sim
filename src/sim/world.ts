@@ -529,6 +529,7 @@ export class World {
     const bx = this.pose.x;
     const by = this.pose.y;
     for (const o of this.others) o.step(dt, this.field.perimeter.inside / 2);
+    this.resolveOtherObstacles();
     this.resolveObstacles();
     this.resolveWalls();
     const shift = this.collideOthers();
@@ -756,6 +757,22 @@ export class World {
     }
     this.knownAttachments.clear();
     for (const id of now) this.knownAttachments.add(id);
+  }
+
+  /** Other robots can't pass through static field elements either: push each out, as the robot is. */
+  private resolveOtherObstacles(): void {
+    for (const o of this.others) {
+      for (let iter = 0; iter < 3; iter++) {
+        let moved = false;
+        for (const ob of this.obstacles) {
+          const mtv = satMtv(o.footprint(), ob.poly);
+          if (!mtv) continue;
+          o.pushOut(mtv);
+          moved = true;
+        }
+        if (!moved) break;
+      }
+    }
   }
 
   /** Push the robot out of static field elements (goals, loaders, field objects). */

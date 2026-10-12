@@ -166,3 +166,16 @@ describe('the other robot\'s delay', () => {
     expect(w.others[0].y).toBeGreaterThan(-59);
   });
 });
+
+describe('the other robot and fixed field elements', () => {
+  it('a partner whose path runs through a field element is stopped by it', async () => {
+    const f = structuredClone(await field());
+    f.objects.push({ id: 'block', shape: { type: 'box', x: 0, y: 0, width: 10, length: 10, heading: 0 }, height: 10, color: '#888888' });
+    f.objects.push({ id: 'partner', shape: { type: 'box', x: 0, y: -40, width: 15, length: 15, heading: 0 }, height: 14, color: '#3fb950', robot: { mass: 12, path: [[0, 40]], speed: 40 } });
+    const w = new World(await robot('tank-6m-450'), f, { x: -40, y: 40, theta: 0 });
+    w.startOthers();
+    for (let i = 0; i < 3000; i++) w.step(1);
+    // the block's edge is 5" from its centre and the partner is 7.5" half-length: it can't get past y = -12.5
+    expect(w.others[0].y).toBeLessThan(-12);
+  });
+});
