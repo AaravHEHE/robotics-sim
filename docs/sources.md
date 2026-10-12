@@ -73,3 +73,29 @@ No code changed in Phase B. Each row is a candidate for Phase C, to be approved 
 | Toggle constants | `src/games/override/toggle.ts` | fitted to the manual's described behaviour | Manual gives geometry only (25.8 in long, faces 2.05 in); no torque or spring data | Estimate | Keep. Labelled in code (done). |
 
 **Still open for Phase B:** the per-preset robot specs, the parts catalogue, and the official Override field and robot references, all of which need `www.vexrobotics.com` or `www.vexforum.com`.
+
+## Phase B, round 2 (2026-10-12): official VEX pages, read in the browser
+
+Read through the built-in browser (not downloaded). Anything marked "not downloaded" is a file on a VEX page that would need a download to use.
+
+| Title | URL | What was taken | Status |
+|---|---|---|---|
+| Wheels (VEX Robotics) | https://www.vexrobotics.com/wheels.html | Omni: 2.75 in (220 mm travel), 3.25 in (260 mm), 4 in (320 mm); travel = π × diameter, so the diameters are confirmed. Traction: 2.75 in (276-1496), 2.75 in anti-static (276-8098), 3.25 in anti-static only (276-7771), 4 in (276-1497), 4 in anti-static (276-8103). Weights: omni 2.75 in 0.154 lb, omni 3.25 in 0.132 lb, omni 4 in 0.232 lb; traction 2.75 in 0.110 lb, 3.25 in anti-static 0.128 lb, 4 in 0.198 lb. 3.25 in wheels fit all V5 shafts. | Verified (read the page) |
+| V5 Smart Motor & Gear Cartridges (VEX Robotics) | https://www.vexrobotics.com/276-4840.html | Motor 276-4840, 0.35 lb. Cartridges 36:1 (100 rpm, 276-5840), 18:1 (200 rpm, 276-5841, ships with the motor), 6:1 (600 rpm, 276-5842). Position and velocity within ±1%. | Verified (read the page) |
+| V5 Robot Battery spec table (VEX KB) | https://kb.vex.com/hc/en-us/articles/360060529912-Understanding-the-V5-Robot-Battery | Dimensions 1.82 W × 6.31 L × 1.18 H in (46.45 × 160.45 × 30.33 mm). Weight 0.77 lb (350 g). | Verified (read the page) |
+| Understanding V5 Smart Motor (11W) Performance (VEX KB) | https://kb.vex.com/hc/en-us/articles/360044325872-Understanding-V5-Smart-Motor-Performance | Dimensions 2.26 W × 2.82 L × 1.30 H in (57.3 × 71.6 × 33.0 mm). | Verified (read the page) |
+| Understanding V5 Smart Motor (5.5W) Performance (VEX KB) | https://kb.vex.com/hc/en-us/articles/10002101702932 | Gives the same dimensions as the 11 W motor (2.26 W × 2.82 L × 1.30 H in). This conflicts with the catalogue's 5.5 W entry (1.9 × 1.75 × 1.0 in), which may be a different motor (the 393). | Verified text; the conflict is unresolved |
+| 2026-2027 V5 Herobot Flex Parts List (VEX, Google Sheet linked from the build page) | https://docs.google.com/spreadsheets/d/1w-5XjDNNn2YYYm22Y_y8By85Fy1YL3Lumy4sAulY0Hw (view only) | Official Flex BOM: 4 × V5 Smart Motor (11 W); 1 × V5 Brain; 1 × V5 Battery; 1 × V5 Radio; 1 × V5 Claw Assembly; drive wheels candidates: 4 × 2.75 in anti-static traction (276-8098), 2 × 4 in anti-static omni (276-8107), 1 × 4 in anti-static traction (276-8103); 30T, 24T, 16T, 6T sprockets and 123 chain links; structure: U-channel, C-channel, angles and standoffs. | Verified (read the sheet, not downloaded) |
+| Flex build PDF (VEX) | https://link.vex.com/docs/26-27/v5rc/hero-robot-instructions-pdf | This link starts a file download (a save dialog appeared; nothing was saved). Not read. | Not downloaded; needs your permission |
+| Flex 3D build (instructions.online viewer) | https://instructions.online/?id=4063-2026_-_2027_vrc_herobot_flex | A 3D viewer with no readable text. Not read. | Not readable as text |
+
+### Corrections from round 2
+
+| Item | Where | Before | After | Status |
+|---|---|---|---|---|
+| Omni 4 in wheel diameter | `scripts/gen-vex-parts.ts` (`omni-4`) | 4.125 in | 4.0 in (320 mm travel = π × 4) | Applied; catalogue regenerated |
+| Traction 3.25 in (non-anti-static) | `scripts/gen-vex-parts.ts` (`traction-3.25`) | listed | removed: VEX sells only the anti-static 3.25 in traction wheel (276-7771) | Applied; no profile or test refers to it |
+| V5 Smart Motor (11 W) size | `scripts/gen-vex-parts.ts` (`v5-motor`) | 2.5 × 2.25 × 1.25 in | 2.82 × 2.26 × 1.30 in (length along the output shaft, then width, then height) | Applied; visual tests pass |
+| V5 Robot Battery size | `scripts/gen-vex-parts.ts` (`v5-battery`) | 4.9 × 2.5 × 1.6 in | 6.31 × 1.82 × 1.18 in (KB) | **Not applied.** The chassis layout places the battery by this footprint; with the sourced size, six robots fail the "every part is fastened" check. Needs the layout reworked (Phase C, visuals). Kept as a comment in the generator. |
+| 5.5 W motor size | `scripts/gen-vex-parts.ts` (`exp-motor`) | 1.9 × 1.75 × 1.0 in | unresolved (the KB 5.5 W article gives the 11 W body size) | **Not applied**: needs checking against the physical 5.5 W motor. |
+| Flex Hero Bot preset | `data/robots/override-flex.json` | 1 motor per side, 4 in wheels, green cartridge, 200 rpm, 9 lb, 14 × 14 × 12 in | Official BOM: 4 V5 Smart Motors; drive wheel candidates are 2.75 in anti-static traction (×4). Which motors drive which wheels needs the build steps (the PDF). | **Not applied**: needs the PDF (see above) |

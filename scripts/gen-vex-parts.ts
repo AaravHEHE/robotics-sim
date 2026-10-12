@@ -90,9 +90,8 @@ add('Pulleys & string', { id: 'surgical-tubing', name: 'Surgical tubing', kind: 
 // ---------------- wheels ----------------
 add('Wheels', { id: 'omni-2.75', name: 'Omni wheel 2.75″', kind: 'wheel', diameter: 2.75, width: 1.06, style: 'omni' });
 add('Wheels', { id: 'omni-3.25', name: 'Omni wheel 3.25″', kind: 'wheel', diameter: 3.25, width: 1.06, style: 'omni' });
-add('Wheels', { id: 'omni-4', name: 'Omni wheel 4″', kind: 'wheel', diameter: 4.125, width: 1.13, style: 'omni' });
+add('Wheels', { id: 'omni-4', name: 'Omni wheel 4″', kind: 'wheel', diameter: 4.0, width: 1.13, style: 'omni' }); // 320 mm travel = π × 4 in (vexrobotics.com wheels page)
 add('Wheels', { id: 'traction-2.75', name: 'Traction wheel 2.75″', kind: 'wheel', diameter: 2.75, width: 1.06, style: 'traction' });
-add('Wheels', { id: 'traction-3.25', name: 'Traction wheel 3.25″', kind: 'wheel', diameter: 3.25, width: 1.06, style: 'traction' });
 add('Wheels', { id: 'traction-4', name: 'Traction wheel 4″', kind: 'wheel', diameter: 4.0, width: 1.13, style: 'traction' });
 add('Wheels', { id: 'antistatic-3.25', name: 'Anti-static wheel 3.25″', kind: 'wheel', diameter: 3.25, width: 1.06, style: 'traction', color: '#4b4f56' });
 add('Wheels', { id: 'mecanum-4', name: 'Mecanum wheel 4″', kind: 'wheel', diameter: 4.0, width: 1.5, style: 'mecanum' });
@@ -101,9 +100,11 @@ for (const d of [1.625, 2, 2.5, 3, 4, 5]) {
 }
 
 // ---------------- motors and electronics ----------------
-add('Motors & electronics', { id: 'v5-motor', name: 'V5 Smart Motor (11 W)', kind: 'motor', size: [2.5, 2.25, 1.25], cartridges: ['red', 'green', 'blue'], cartridge: 'green' });
+add('Motors & electronics', { id: 'v5-motor', name: 'V5 Smart Motor (11 W)', kind: 'motor', size: [2.82, 2.26, 1.3], cartridges: ['red', 'green', 'blue'], cartridge: 'green' }); // KB 11 W: 2.26 W × 2.82 L × 1.30 H in
 add('Motors & electronics', { id: 'exp-motor', name: 'V5 Smart Motor (5.5 W)', kind: 'motor', size: [1.9, 1.75, 1.0], cartridges: ['red', 'green', 'blue'], cartridge: 'green' });
 add('Motors & electronics', { id: 'v5-brain', name: 'V5 Robot Brain', kind: 'box', size: [5.5, 4.2, 1.3], color: '#1f2125', accent: '#3a6fd8' });
+// The KB size is 1.82 W × 6.31 L × 1.18 H in (docs/sources.md). Not applied yet: chassis-layout places the battery by this footprint,
+// and the sourced size fails the fastening check until that layout is reworked (Phase C, visuals).
 add('Motors & electronics', { id: 'v5-battery', name: 'V5 Robot Battery', kind: 'box', size: [4.9, 2.5, 1.6], color: '#1f2125', accent: '#d8343a' });
 add('Motors & electronics', { id: 'v5-radio', name: 'V5 Robot Radio', kind: 'box', size: [2.4, 1.25, 0.6], color: '#1f2125', accent: '#3fb950' });
 add('Motors & electronics', { id: 'imu', name: 'V5 Inertial Sensor', kind: 'box', size: [1.25, 1.25, 0.6], color: '#1f2125', accent: '#d8343a' });

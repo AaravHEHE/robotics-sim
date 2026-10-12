@@ -1330,7 +1330,7 @@
    "id": "omni-4",
    "name": "Omni wheel 4″",
    "kind": "wheel",
-   "diameter": 4.125,
+   "diameter": 4,
    "width": 1.13,
    "style": "omni"
   },
@@ -1340,15 +1340,6 @@
    "name": "Traction wheel 2.75″",
    "kind": "wheel",
    "diameter": 2.75,
-   "width": 1.06,
-   "style": "traction"
-  },
-  {
-   "group": "Wheels",
-   "id": "traction-3.25",
-   "name": "Traction wheel 3.25″",
-   "kind": "wheel",
-   "diameter": 3.25,
    "width": 1.06,
    "style": "traction"
   },
@@ -1440,9 +1431,9 @@
    "name": "V5 Smart Motor (11 W)",
    "kind": "motor",
    "size": [
-    2.5,
-    2.25,
-    1.25
+    2.82,
+    2.26,
+    1.3
    ],
    "cartridges": [
     "red",
