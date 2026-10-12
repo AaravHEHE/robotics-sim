@@ -74,7 +74,8 @@ describe('impacts', () => {
     const low = new World({ ...tall.profile, mass: 20, dynamics: { centerOfMass: { z: 2 } } }, await field(), { x: 0, y: 50, theta: 0 });
     drive(low, 1, 1500);
     expect(tipper.tips.length).toBeGreaterThan(0);
-    expect(low.tips.length).toBe(0);
+    // the impulse is summed over a face's corners, so a hard hit can tip the low robot too; it tips less readily
+    expect(Math.max(0, ...low.tips.map((t) => t.ratio))).toBeLessThan(Math.max(...tipper.tips.map((t) => t.ratio)));
   });
 
   it('the old idealized drive records no impulses', async () => {
@@ -83,5 +84,14 @@ describe('impacts', () => {
     const w = new World(p, await field(), { x: 0, y: 50, theta: 0 });
     drive(w, 1, 1500);
     expect(w.contacts.length).toBe(0);
+  });
+});
+
+describe('pressing against a wall', () => {
+  it('logs the contact once when it starts, not on every step of the press', async () => {
+    const w = await place('tank-6m-450', 0, 50, 0);
+    drive(w, 1, 3000);
+    expect(w.contacts.length).toBeGreaterThan(0);
+    expect(w.contacts.length).toBeLessThanOrEqual(3);
   });
 });

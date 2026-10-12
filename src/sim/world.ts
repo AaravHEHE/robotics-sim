@@ -42,6 +42,8 @@ const RESTITUTION = 0.15;
 const IMPACT_TIME = 0.03;
 /** The most impacts one run keeps (a robot pressed against something for minutes would log millions). */
 const MAX_CONTACTS = 5000;
+/** Touches of the same obstacle closer together than this (ms) are one contact. */
+const CONTACT_GAP_MS = 50;
 /** Share of free speed motions plan with under the drive dynamics. */
 const CRUISE_FRACTION = 0.85;
 /** Friction that brings a braking robot to a final stop (in/s^2). */
@@ -300,6 +302,8 @@ export class World {
   private readonly overlapping = new Set<string>();
   /** The pairs in `overlapping` that met from above: lowering further would sink into it. */
   private readonly resting = new Set<string>();
+  /** When each obstacle was last touched (ms), so a press logs one contact rather than one per step. */
+  private lastContactAt = new Map<string, number>();
   private readonly knownAttachments = new Set<string>();
   /** Attachment / stack pairs where the attachment is centred on the stack, sliding onto it (`Obstacle.nest`). */
   private readonly nested = new Set<string>();
@@ -865,6 +869,8 @@ export class World {
     const comX = this.pose.x + (dyn.com.x / IN) * cy + (dyn.com.y / IN) * sx;
     const comY = this.pose.y - (dyn.com.x / IN) * sx + (dyn.com.y / IN) * cy;
     // a few passes, so contacts that touch together (a face lands on two corners) share the impulse
+    // this step's impulse per obstacle: a face that lands on two corners is one contact, tested for a tip as a whole
+    const totals = new Map<string, { im: (typeof impacts)[number]; J: number }>();
     for (const im of [...impacts, ...impacts, ...impacts]) {
       const vf = (this.vL + this.vR) / 2;
       const w = -((this.vL - this.vR) / this.trackWidth); // rad/s, counterclockwise positive
@@ -906,11 +912,19 @@ export class World {
         o.vy -= (J * im.ny) / o.mass / IN;
         o.omega += (J * r2xn) / o.inertia / RAD;
       }
-      if (this.contacts.length < MAX_CONTACTS && !(this.contacts.length && this.contacts[this.contacts.length - 1].t === this.time && this.contacts[this.contacts.length - 1].what === im.what)) this.contacts.push({ t: this.time, what: im.what, x: im.x, y: im.y, nx: im.nx, ny: im.ny, impulse: J });
+      const t = totals.get(im.what);
+      if (t) t.J += J;
+      else totals.set(im.what, { im, J });
+    }
+    // a contact is logged when it starts; a robot pressed against something logs it once, not every step
+    for (const [what, { im, J }] of totals) {
+      const last = this.lastContactAt.get(what);
+      if ((last === undefined || this.time - last > CONTACT_GAP_MS) && this.contacts.length < MAX_CONTACTS) this.contacts.push({ t: this.time, what, x: im.x, y: im.y, nx: im.nx, ny: im.ny, impulse: J });
+      this.lastContactAt.set(what, this.time);
       // tipping: the impulse's moment about the wheel contact line against the weight's over the contact's duration
       const support = Math.max(0.5 * this.profile.size.length - this.profile.drivetrain.wheelDiameter / 2, 1) * IN;
       const ratio = (J * dyn.com.z) / (dyn.mass * G_SI * support * IMPACT_TIME);
-      if (ratio > 1) this.tips.push({ t: this.time, what: im.what, ratio });
+      if (ratio > 1) this.tips.push({ t: this.time, what, ratio });
     }
     void dt;
   }
