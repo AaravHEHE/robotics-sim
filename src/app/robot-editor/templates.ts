@@ -105,6 +105,8 @@ export function addSensor(p: RobotProfile, t: SensorTemplate): number {
 export function removeMechanism(p: RobotProfile, name: string): void {
   const m = p.mechanisms.find((x) => x.name === name);
   if (!m) return;
+  // the removed mechanism and the wrist that can't stay without its claw: their motors and ports go too
+  const removed: Array<(typeof p.mechanisms)[number]> = [m];
   p.mechanisms = p.mechanisms.filter((x) => x !== m);
   for (const x of p.mechanisms) {
     const r = x as unknown as Record<string, unknown>;
@@ -114,13 +116,19 @@ export function removeMechanism(p: RobotProfile, name: string): void {
     }
     if (x.kind === 'lift' && x.base === name) delete r.base;
     if (x.kind === 'intake' && x.into === name) delete r.into;
-    if (x.kind === 'wrist' && x.claw === name) p.mechanisms = p.mechanisms.filter((y) => y !== x);
+    if (x.kind === 'wrist' && x.claw === name) {
+      removed.push(x);
+      p.mechanisms = p.mechanisms.filter((y) => y !== x);
+    }
   }
   const stillUsed = (port: number | string) => p.mechanisms.some((x) => x.motors?.includes(port as number) || (x.adi !== undefined && String(x.adi).toUpperCase() === String(port).toUpperCase()));
   p.devices = p.devices.filter((d) => {
-    const own = (d.type === 'motor' && m.motors?.includes(d.port as number)) || (d.type === 'adi_digital_out' && m.adi !== undefined && String(m.adi).toUpperCase() === String(d.port).toUpperCase());
+    const own = removed.some((r) => (d.type === 'motor' && r.motors?.includes(d.port as number)) || (d.type === 'adi_digital_out' && r.adi !== undefined && String(r.adi).toUpperCase() === String(d.port).toUpperCase()));
     return !own || stillUsed(d.port);
   });
-  // optical sensors that watched it
-  for (const d of p.devices) if (d.type === 'optical' && d.watches === name) delete (d as { watches?: string }).watches;
+  // optical sensors that watched it, and rotation sensors that read it
+  for (const d of p.devices) {
+    if (d.type === 'optical' && d.watches === name) delete (d as { watches?: string }).watches;
+    if (d.type === 'rotation' && d.mechanism === name) delete d.mechanism;
+  }
 }
