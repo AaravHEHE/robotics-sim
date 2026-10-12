@@ -175,14 +175,20 @@ export const loadModel = (id: string) => safe(idb.get<ArrayBuffer>('models', id)
 /** A robot's VEX parts build (the parts kit), kept with the model it made. */
 export const saveAssembly = (assetId: string, asm: Assembly) => idb.put('models', `asm:${assetId}`, asm);
 
+/** The model-store keys that no saved robot uses. Official field models ("field:<id>") are never robot assets, so they are kept. */
+export function unusedModelKeys(keys: string[], used: Set<string>): string[] {
+  return keys.filter((key) => {
+    if (key.startsWith('field:')) return false;
+    const asset = key.startsWith('asm:') ? key.slice(4) : key;
+    return !used.has(asset);
+  });
+}
+
 /** Delete the models (and their parts builds) that no saved robot uses any more. */
 export async function pruneModels(): Promise<void> {
   const used = new Set((await listCustomRobots()).map((r) => r.model?.assetId).filter((x): x is string => !!x));
-  for (const k of await safe(idb.keys('models'), [])) {
-    const key = String(k);
-    const asset = key.startsWith('asm:') ? key.slice(4) : key;
-    if (!used.has(asset)) await safe(idb.del('models', key), undefined);
-  }
+  const keys = (await safe(idb.keys('models'), [])).map(String);
+  for (const key of unusedModelKeys(keys, used)) await safe(idb.del('models', key), undefined);
 }
 export const loadAssembly = (assetId: string) => safe(idb.get<Assembly>('models', `asm:${assetId}`), undefined);
 
