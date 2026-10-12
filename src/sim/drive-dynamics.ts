@@ -7,7 +7,7 @@
 //   back-EMF, capped by the V5's current limit (so torque falls linearly with speed).
 // - The battery: its terminal voltage sags with the current all motors draw.
 // - Heat: I^2 R in each motor, cooling to the room, and the V5 cutting back its current above
-//   55 C (to half at 65 C).
+//   55 C (down to half by 95 C: an estimate, the KB gives current levels, not temperatures).
 // - The wheels: grip limits the force each side can push with (friction x its share of the
 //   weight); beyond it the wheels slip and push with the friction they have.
 // - The body: both sides push on one mass, so the sum of the two sides' force speeds it up and

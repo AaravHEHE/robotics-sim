@@ -450,6 +450,7 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         if (m.base !== undefined) {
           ref(m, m.base, ['lift'], 'base');
           if (m.base === m.name) e.push(`Lift ${m.name}: base can't be itself.`);
+          if (m.lift !== 'chainbar') e.push(`Lift ${m.name}: only a chain bar can ride another lift (base).`);
           const b = names.get(m.base);
           if (b && b.kind === 'lift' && b.base) e.push(`Lift ${m.name}: base ${m.base} rides on another lift itself (one level of mounting only).`);
         }

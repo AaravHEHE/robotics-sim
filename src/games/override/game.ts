@@ -124,16 +124,22 @@ export class OverrideGame implements GameOps {
   private keepInside(): void {
     const half = this.field.perimeter.inside / 2;
     const { pose } = this.world;
-    let dx = 0;
-    let dy = 0;
+    // corrections pushing away from each wall: the left/near walls push positive, the right/far walls negative
+    let dxLo = 0;
+    let dxHi = 0;
+    let dyLo = 0;
+    let dyHi = 0;
     for (const a of this.world.attachments) {
       if (a.bottom >= this.field.perimeter.wallHeight) continue;
       const [x, y] = toField(pose, a);
-      if (x - a.r < -half) dx = Math.max(dx, -half - (x - a.r));
-      if (x + a.r > half) dx = Math.min(dx, half - (x + a.r));
-      if (y - a.r < -half) dy = Math.max(dy, -half - (y - a.r));
-      if (y + a.r > half) dy = Math.min(dy, half - (y + a.r));
+      if (x - a.r < -half) dxLo = Math.max(dxLo, -half - (x - a.r));
+      if (x + a.r > half) dxHi = Math.min(dxHi, half - (x + a.r));
+      if (y - a.r < -half) dyLo = Math.max(dyLo, -half - (y - a.r));
+      if (y + a.r > half) dyHi = Math.min(dyHi, half - (y + a.r));
     }
+    // (hard against both walls at once, the middle is the least it can move)
+    const dx = dxLo && dxHi ? (dxLo + dxHi) / 2 : dxLo + dxHi;
+    const dy = dyLo && dyHi ? (dyLo + dyHi) / 2 : dyLo + dyHi;
     if (!dx && !dy) return;
     pose.x += dx;
     pose.y += dy;
@@ -362,9 +368,15 @@ export class OverrideGame implements GameOps {
     this.state.floor.splice(this.state.floor.indexOf(s), 1);
     this.physics.remove(s.id);
     this.opponentSide.delete(s.id);
+    // each piece lies beyond the last, by its own length (a Pin is 6.5", a Cup's rim is 3.2")
+    let along = 1.5;
+    let prevHalf = 0;
     s.pieces.forEach((p, i) => {
-      const x = s.x + ux * (1.5 + 3 * i);
-      const y = s.y + uy * (1.5 + 3 * i);
+      const half = (p.kind === 'pin' ? PIN.length : CUP.rimDiameter) / 2;
+      along += i ? prevHalf + half + 0.2 : half;
+      prevHalf = half;
+      const x = s.x + ux * along;
+      const y = s.y + uy * along;
       const id = p.kind === 'pin' ? this.addLying(p.colors, x, y, heading) : this.addFloor([p], x, y);
       if (old) this.opponentSide.add(id);
     });

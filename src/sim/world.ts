@@ -1133,6 +1133,8 @@ export interface Attachment {
   r: number;
   /** Height of its lowest point above the tiles (in). */
   bottom: number;
+  /** Height of what it carries, from its bottom (in); omitted: a Cup's height. */
+  height?: number;
   /**
    * Runs into fixed things only (Goal bodies, Loaders, walls): an open claw's jaws, which go
    * around pieces to grab them.

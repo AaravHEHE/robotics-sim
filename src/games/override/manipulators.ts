@@ -349,7 +349,7 @@ export class Manipulators {
     // claws and what they hold push Toggles too (a Flex pushing one with its claw)
     for (const a of this.attachments()) {
       const poly = octagon(...toField(this.world.pose, a), 2 * a.r);
-      shapes.push({ poly, bottom: a.bottom, top: a.bottom + (a.fixedOnly ? 2 * GRIP_MARGIN : CUP.height), velocity });
+      shapes.push({ poly, bottom: a.bottom, top: a.bottom + (a.fixedOnly ? 2 * GRIP_MARGIN : (a.height ?? CUP.height)), velocity });
     }
     for (const tool of this.tools) {
       // a plate or jammer only reaches out while its piston is extended
@@ -380,7 +380,7 @@ export class Manipulators {
       const held = this.ops.state.held[c.spec.name];
       if (!held?.length) continue;
       const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, c.flipped);
-      out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, slot: `claw:${c.spec.name}`, nest: held[0].kind, x: b.x, y: b.y, r: stackRadius(held), bottom: b.z, drivenBy });
+      out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, slot: `claw:${c.spec.name}`, nest: held[0].kind, x: b.x, y: b.y, r: stackRadius(held), bottom: b.z, height: stackTop(held, 0, false), drivenBy });
     }
     return out;
   }
