@@ -211,6 +211,13 @@ export class OverrideGame implements GameOps {
       this.physics.setCarried(this.carried());
       this.physics.step();
       this.syncFromPhysics();
+      // (SG7 first: a stack the robot touched topples into new pieces, which would hide the touch)
+      for (const id of this.opponentSide) {
+        if (!this.physics.touchingRobot(id)) continue;
+        this.rules.add(this.clock, 'SG7', 'The robot touched a Scoring Object on the opposing side of the Autonomous Line.');
+        this.opponentSide.clear(); // reported once
+        break;
+      }
       this.checkToppling();
       // pushing pieces along the floor is work for the drive
       this.world.pushLoad = this.physics.pushedMass() * FloorPhysics.FLOOR_FRICTION * 9.80665;
@@ -222,12 +229,6 @@ export class OverrideGame implements GameOps {
       this.world.attachments = this.manipulators.attachments();
       this.updateGoalObstacles();
       this.updateStackObstacles();
-      for (const id of this.opponentSide) {
-        if (!this.physics.touchingRobot(id)) continue;
-        this.rules.add(this.clock, 'SG7', 'The robot touched a Scoring Object on the opposing side of the Autonomous Line.');
-        this.opponentSide.clear(); // reported once
-        break;
-      }
     }
     if (this.dirty) {
       this.dirty = false;

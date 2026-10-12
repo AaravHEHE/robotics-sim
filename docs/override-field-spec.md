@@ -181,8 +181,8 @@ The octagon's corner radius is R81.9 (3.22″). Its flat-to-hole-center distance
 
 ## Rules the simulator monitors
 
-- **SG1:** start size 18 × 18 × 18″, at most 1 Preload, touching the perimeter on your own side, one Robot per Quadrant.
-- **SG2 / SG3:** 24 × 24″ footprint and 50″ height at all times.
+- **SG1:** start size 18 × 18 × 18″ and at most 1 Preload are checked from the profile. Not checked: touching the perimeter on your own side, and one Robot per Quadrant.
+- **SG2 / SG3:** the profile's size is checked; the footprint and height during a run are not.
 - **SG6:** possession of at most 1 Pin and 1 Cup.
 - **SG7:** in autonomous, don't touch tiles, objects or elements on the opponent's side of the Autonomous Line. The 28 line objects are shared.
 - **SG9 / SG10:** never interact with opponent Goals; never remove Placed objects from neutral Goals (head-to-head).
