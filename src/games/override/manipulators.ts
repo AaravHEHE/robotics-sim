@@ -608,6 +608,8 @@ export class Manipulators {
     /** Where the stack lands on `existing` (its bottom), or null if it doesn't get there. */
     const what = first.kind === 'pin' ? 'Pin' : 'Cup';
     const inches = (v: number) => `${v.toFixed(1)}″`;
+    /** Where a stack let go here lands: lowered under guidance (below the top) it stays put; in free fall the robot's speed carries it on. */
+    const landing = (rest: number, top: number) => (b.z < top - CARRY_CLEARANCE ? { x: b.x, y: b.y } : drifted(b.z - rest));
     /** Where the stack lands on `existing` (its bottom), or why it doesn't get there. */
     const landsOn = (existing: Piece[], base: number, onGoal: boolean, x: number, y: number): number | string => {
       if (!upright) return `the claw was tilted ${Math.round(this.tilt(c.spec))}° (at most ${MAX_TILT}° sets a stack down)`;
@@ -615,7 +617,7 @@ export class Manipulators {
       const rest = nestRest(existing, base, onGoal, first.kind);
       if (rest === null) return `a ${what} can't sit on a ${what}`;
       const top = Math.max(base, stackTop(existing, base, onGoal));
-      const land = drifted(b.z - rest);
+      const land = landing(rest, top);
       const off = dhypot(land.x - x, land.y - y);
       if (b.z < rest - PLACE_SLOP) return `its bottom was ${inches(rest - b.z)} below where it would sit (it can't have got there: carry it over the top first)`;
       if (b.z > top + DROP_MAX) return `it was let go ${inches(b.z - top)} above the top (at most ${inches(DROP_MAX)} lands on it)`;
@@ -634,13 +636,14 @@ export class Manipulators {
       for (const p of pieces) this.setTransit(p.id, { from: { x: b.x, y: b.y, z: b.z }, to: { x, y, z: rest }, t0: this.now, t1 });
     };
     for (const g of field.goals ?? []) {
-      // (near misses say why: a release up to 3 in off a Goal is meant for it)
-      if (dhypot(b.x - g.x, b.y - g.y) > 3) continue;
+      // (near misses say why: a release up to 3 in off a Goal is meant for it). Prefilters use where it would land.
+      const near = landing(g.height, g.height);
+      if (dhypot(near.x - g.x, near.y - g.y) > 3) continue;
       const rest = landsOn(state.goals[g.id], g.height, true, g.x, g.y);
       if (typeof rest === 'string') {
         missed = `At ${(this.now / 1000).toFixed(2)} s, the ${what} ${c.spec.name} let go at Goal ${g.id} didn't land on it: ${rest}.`;
         // over the Goal but it won't sit: it falls off (beside it, it may still land on a stack there)
-        if (dhypot(b.x - g.x, b.y - g.y) <= PLACE_TOLERANCE) break;
+        if (dhypot(near.x - g.x, near.y - g.y) <= PLACE_TOLERANCE) break;
         continue;
       }
       if (this.ops.mode === 'h2h' && g.color !== 'neutral' && g.color !== this.ops.alliance) {
@@ -654,7 +657,8 @@ export class Manipulators {
       return;
     }
     for (const s of state.floor) {
-      if (dhypot(b.x - s.x, b.y - s.y) > PLACE_TOLERANCE) continue;
+      const near = landing(0, stackTop(s.pieces, 0, false));
+      if (dhypot(near.x - s.x, near.y - s.y) > PLACE_TOLERANCE) continue;
       const rest = landsOn(s.pieces, 0, false, s.x, s.y);
       if (typeof rest === 'string') continue;
       s.pieces.push(...pieces);
