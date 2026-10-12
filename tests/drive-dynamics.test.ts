@@ -146,3 +146,19 @@ describe('planAccel uses each side\'s current limit', () => {
     expect(none).toBe(0);
   });
 });
+
+describe('the battery\'s 20 A maximum', () => {
+  it('a high-grip drive pushing hard draws no more than 20 A in all, and the battery sags only as far as that', async () => {
+    const p = await robot('tank-6m-450');
+    p.dynamics = { wheelFriction: 3 }; // more grip than the wheels can use: the motors would draw ~50 A
+    const dd = new DriveDynamics(p);
+    let peak = 0;
+    for (let t = 0; t < 300; t++) {
+      dd.step(side(0, 60, { motors: 10 }), side(0, 60, { motors: 10 }), 0.001);
+      peak = Math.max(peak, 10 * dd.current[0] + 10 * dd.current[1]);
+    }
+    expect(peak).toBeLessThanOrEqual(20 + 1e-6);
+    expect(peak).toBeGreaterThan(19);
+    expect(dd.battery).toBeCloseTo(12.8 - 0.15 * (10 * dd.current[0] + 10 * dd.current[1]), 5);
+  });
+});

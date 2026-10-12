@@ -17,7 +17,7 @@
 // reaches its target speed as fast as its torque and grip allow, then holds it), rolling
 // resistance while powered (negligible), tire squish, wheel flex, gearbox backlash.
 
-import { BATTERY_OPEN_CIRCUIT, DEFAULT_LATERAL_FRICTION, DRIVE_EFFICIENCY, G_SI, INCH, motorConstants, resolveDynamics, type Dynamics } from './dynamics-spec.ts';
+import { BATTERY_MAX_A, BATTERY_OPEN_CIRCUIT, DEFAULT_LATERAL_FRICTION, DRIVE_EFFICIENCY, G_SI, INCH, motorConstants, resolveDynamics, type Dynamics } from './dynamics-spec.ts';
 import { CARTRIDGE_RPM, type RobotProfile } from './profile.ts';
 
 /** Estimate, no source found: friction that stops an unpowered, coasting robot (in/s^2, the same figure as the idealized model's). */
@@ -174,6 +174,13 @@ export class DriveDynamics {
     } else {
       FL = this.unpoweredForce(L, vL, vApp, dt);
       FR = this.unpoweredForce(R, vR, vApp, dt);
+    }
+    // the battery supplies 20 A at most: past that, every motor gets proportionally less current, so less force
+    const drawn = (s: SideState, F: number) => (s.powered || s.brake > 0 ? (Math.abs(F) * this.r) / (this.kt * this.gear * DRIVE_EFFICIENCY) : 0);
+    const amps = drawn(L, FL) + drawn(R, FR);
+    if (amps > BATTERY_MAX_A) {
+      FL *= BATTERY_MAX_A / amps;
+      FR *= BATTERY_MAX_A / amps;
     }
     const sum = (FL + FR) / m;
     const dif = (FL - FR) * k;

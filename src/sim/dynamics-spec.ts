@@ -69,6 +69,8 @@ export const DRIVE_EFFICIENCY = 0.85;
  * sags by current times resistance; a freshly charged pack reads higher (about 14.4 V, VEX Forum).
  */
 export const BATTERY_OPEN_CIRCUIT = 12.8;
+/** The V5 battery's maximum current, A (VEX KB, V5 Robot Battery spec table). */
+export const BATTERY_MAX_A = 20;
 
 export function resolveDynamics(p: RobotProfile): Dynamics {
   const d = p.dynamics ?? {};
