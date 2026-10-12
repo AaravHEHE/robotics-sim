@@ -8,7 +8,7 @@ import { handlesFor, type Handle, type Shape } from './draft.ts';
 import { renderForm } from './forms.ts';
 import { RobotPreview } from './preview.ts';
 import { SvgView } from './svg-view.ts';
-import { addMechanism, addSensor, MECHANISM_TEMPLATES, removeMechanism, SENSOR_TEMPLATES, type MechanismTemplate, type SensorTemplate } from './templates.ts';
+import { addMechanism, addSensor, MECHANISM_TEMPLATES, removeMechanism, renameReferences, SENSOR_TEMPLATES, type MechanismTemplate, type SensorTemplate } from './templates.ts';
 import { esc } from '../html.ts';
 
 export interface LayoutElements {
@@ -191,7 +191,13 @@ export class LayoutEditor {
       renderForm(form, p.drivetrain as unknown as Record<string, unknown>, p, this.formChanged, undefined, true);
     } else if (this.selected.startsWith('mech:')) {
       const m = p.mechanisms.find((x) => x.name === this.selected.slice(5))!;
+      const before = m.name;
       renderForm(form, m as unknown as Record<string, unknown>, p, () => {
+        // a rename moves every reference to it; a name already taken is refused
+        if (m.name !== before) {
+          if (p.mechanisms.some((x) => x !== m && x.name === m.name)) m.name = before;
+          else renameReferences(p, before, m.name);
+        }
         // a renamed mechanism stays selected
         this.selected = `mech:${m.name}`;
         this.formChanged();

@@ -132,3 +132,18 @@ export function removeMechanism(p: RobotProfile, name: string): void {
     if (d.type === 'rotation' && d.mechanism === name) delete d.mechanism;
   }
 }
+
+/** Point everything that named a mechanism `from` at `to` (after it was renamed). */
+export function renameReferences(p: RobotProfile, from: string, to: string): void {
+  for (const x of p.mechanisms) {
+    const r = x as unknown as Record<string, unknown>;
+    if (x.kind === 'claw' && x.lift === from) r.lift = to;
+    if (x.kind === 'lift' && x.base === from) r.base = to;
+    if (x.kind === 'intake' && x.into === from) r.into = to;
+    if (x.kind === 'wrist' && x.claw === from) r.claw = to;
+  }
+  for (const d of p.devices) {
+    if (d.type === 'optical' && d.watches === from) (d as { watches?: string }).watches = to;
+    if (d.type === 'rotation' && d.mechanism === from) d.mechanism = to;
+  }
+}

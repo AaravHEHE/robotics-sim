@@ -541,6 +541,8 @@ export class FieldViewer {
     this.trail = this.futureTrail = null;
     this.ghost.visible = false;
     this.physics.setRecording(rec, this.profile);
+    // back to the rest pose: a cleared run must not leave its end-of-run lift and claw on the robot
+    this.manipVis?.update(() => 0);
     clearGroup(this.othersGroup);
     this.otherBoxes = [];
     for (const o of rec?.others ?? []) {
