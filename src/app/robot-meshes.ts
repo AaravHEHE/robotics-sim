@@ -178,7 +178,10 @@ export function buildBoxRobot(p: RobotProfile, opts: { merge?: boolean } = {}): 
     const { x: bx, y: batY, turned, bars, size: [bw, bd, bh] } = lay.battery;
     if (turned) kit.part('v5-battery', V(bx, batY, deckTop + bh / 2), Y, X);
     else kit.part('v5-battery', V(bx, batY, deckTop + bh / 2), X, Y);
-    for (const y of bars) {
+    // (a battery thinner than the gap between the crossbars is strapped where it overlaps each one: at its edge)
+    const reach = (turned ? bw : bd) / 2 - 0.08;
+    for (const bar of bars) {
+      const y = Math.max(batY - reach, Math.min(batY + reach, bar));
       if (turned) kit.strap(V(bx, y, (railTop + deckTop + bh) / 2), X, bd / 2 + 0.02, Z, (deckTop + bh - railTop) / 2);
       else kit.strap(V(bx, y, (railTop + deckTop + bh) / 2), X, bw / 2 + 0.02, Z, (deckTop + bh - railTop) / 2);
     }
