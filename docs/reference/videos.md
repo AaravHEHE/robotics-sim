@@ -33,3 +33,9 @@ What each source showed, as used for the robot presets ([../robots.md](../robots
 | Toggle lock (`Kyow3GVag-0`) | A wedge in the Toggle's notches stops rollers (legality debated, G9). |
 
 Not found: a reveal of the actual Claw Gate / Clawscade. Its preset is approximate (99182E + ACE).
+
+## Event footage: Fall 2026 Illini Cornfield Clash Jr.
+
+Full 7 h 23 m stream (`9H4powqTyUA`), every contact sheet read; findings on robot types, contact behaviour and the event structure (and why it cannot calibrate speeds) are in [cornfield-clash-2026.md](cornfield-clash-2026.md).
+
+All takeaways by robot and lift type (DR4B, DR6B, 2-bar, 4-bar, 6-bar, cascade, continuous), with sources tagged: [../cornfield-clash-takeaways.md](../cornfield-clash-takeaways.md).

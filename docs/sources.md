@@ -113,3 +113,7 @@ What the PDF shows:
 - **Sprockets in the BOM:** 30T ×2, 24T ×1, 16T ×1, 6T ×2, plus 123 chain links. The ratio from motor to wheel depends on which sprocket is on the motor and which on the wheels. Not read from the images.
 
 What this means for the preset (`data/robots/override-flex.json`): the motor count (one per side) is consistent with the PDF. The wheel size (4 in for all drive wheels) and the gearing (green cartridge, 200 rpm wheel speed) are not confirmed. The BOM suggests the drive wheels are a mix of 2.75 in traction and 4 in omni, and the chain ratio is unknown. **Not changed**: the gearing needs the sprocket order, which is in the build steps around pages 92–110 at full resolution.
+
+## Cornfield Clash Jr. footage (2026-11-07)
+
+YouTube `9H4powqTyUA`, read as 10 s frames from a 640 x 360 copy; used only for qualitative robot and contact observations, **no numbers taken** for the simulator. Details and limits: [reference/cornfield-clash-2026.md](reference/cornfield-clash-2026.md).
