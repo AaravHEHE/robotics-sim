@@ -48,22 +48,32 @@ The DR4B you linked first ("botty override 26-27 - Copy", 340 instances, owned b
 copying nor export, so it was not used. The imported DR4B is the public document it was copied from: the same
 robot with fewer parts.
 
-## Logic problems found in the CADs (`check-gears.ts`)
+## Logic problems found in the CADs and how they were fixed
 
-- **DR4B (public version).** Two mirrored 7-gear base trains, two 3-gear lift stacks (84T - 60T - 84T), all able to
-  turn (no locked loop). Not connected to anything: three 12T-36T pairs (the 36T output at x = +/-6.7 in has no
-  gear above it), one 60T-36T pair, and one 48T gear that meshes with nothing. These are candidates for the
-  "wrong number of gears" problem; the lift motors (36:1) sit on the towers at z = 6.9 in, nowhere near the base
-  trains, so how the lift is meant to be driven needs confirming against the real design.
-- **Cascade.** Trains of 4, 2, 6 and 2 gears; three gears (48T, two 60T) mesh with nothing.
-- Neither build was modified: nothing here proves which gear is the intended one, so the fixes wait for a
-  decision (see the open questions in the session notes).
+`node scripts/check-gears.ts <build>` finds them; `node scripts/fix-cad-logic.ts <build> [--bridge=<json>]` writes
+`data/builds/<name>.fixed.build.json` and leaves the imported 1:1 build as it is. The fixes were chosen by the
+assistant when asked to "pick", from your rule (every gear train has an odd number of gears) and the CAD's geometry;
+check them against the real robots.
+
+- **Gear rule.** A train of two, four or six gears turns its output the opposite way to its input. One 36T idler
+  (on a short shaft) is added at the end of every even train, meshing the last gear, in the first free direction
+  around it (nothing overlapped, nothing through the floor).
+  - DR4B: trains 7, 7, 2, 3, 2, 2, 3 became 7, 7, 3, 3, 3, 3, 3 (three idlers).
+  - Cascade: trains 4, 2, 6, 2 became 5, 3, 7, 3 (four idlers).
+- **Cascade intake going nowhere.** The five first-stage rollers (CAD y 1.0 to 3.4, z -12 to -9.5) were fed to
+  side ramps that ended at y -2.7, while the back plate began at y -7.6 and the second stage sits at y -10 to
+  -15, z -8.6 to -7: a gap of about 5 in that pieces fell through. A 9.18 x 3.30 x 0.12 in bridge plate
+  (a `custom-box`, tilted 20 degrees) now spans it, in the 3.3 in gap between the two side ramps.
+- **Left alone.** Four gears that mesh with nothing (one DR4B 48T, one cascade 48T and two 60T): they may sit on a
+  shaft that a chain or something outside the model drives. The lift motors on the DR4B are not geared to
+  anything in the CAD; how the real robot drives them still needs confirming.
 
 ## Not done yet
 
 - Lifts do not move: the build is a static pose. Animating it needs each part assigned to a moving group (lift
   stages, DR4B links) from the CAD's connections.
-- The custom boxes are boxes, not the real shapes (the intake ramps show as blocks).
+- The custom boxes are boxes, not the real shapes (the intake ramps show as blocks). The bridge's position was
+  checked by eye in one render only.
 - Attaching a build to a robot preset so the app draws it instead of the profile-built look.
 - Other lift types: public CADs were searched (see below) but none imported.
 - Pin physics and the other robot presets were not changed.

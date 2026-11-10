@@ -35,3 +35,30 @@ describe.each([
     expect(r.trains.filter((t) => !t.free)).toEqual([]);
   });
 });
+
+// The corrected builds (scripts/fix-cad-logic.ts): every gear train has an odd number of gears and can
+// turn; the cascade's intake has a bridge between its two stages.
+describe.each(['cascade', 'dr4b'])('%s build after the logic fixes', (name) => {
+  const asm = JSON.parse(readFileSync(`data/builds/${name}.fixed.build.json`, 'utf8')) as Assembly;
+
+  it('is valid and keeps every imported part', () => {
+    expect(validateAssembly(asm, cat)).toEqual([]);
+    expect(asm.parts.length).toBeGreaterThanOrEqual(load(name).parts.length);
+  });
+
+  it('has only odd gear trains, and each can turn', () => {
+    const r = gearReport(asm, cat);
+    expect(r.trains.filter((t) => !t.free)).toEqual([]);
+    expect(r.trains.filter((t) => t.members.length % 2 === 0)).toEqual([]);
+  });
+});
+
+it('the cascade intake bridge spans the gap between the side ramps and the second stage', () => {
+  const asm = JSON.parse(readFileSync('data/builds/cascade.fixed.build.json', 'utf8')) as Assembly;
+  const bridge = asm.parts.at(-1)!;
+  expect(bridge.part).toBe('custom-box');
+  const b = bounds({ v: 1, parts: [bridge] }, cat)!;
+  // CAD y 1.0 .. -7.6 (the robot's origin is 3.69 in off the CAD's y), rising toward the back
+  expect(b.max[1]).toBeGreaterThan(-3.69 + 0.5);
+  expect(b.min[1]).toBeLessThan(-7.6 + 3.69 + 0.5);
+});
