@@ -3,7 +3,7 @@
 // has it (free placement, see FreeXf in src/app/parts/assembly.ts).
 //
 //   python scripts/onshape/gltf-extract.py <assembly.gltf> <extract.json>
-//   node scripts/import-onshape.ts <extract.json> <out.build.json> [--forward=+y] [--exclude=Goal]
+//   node scripts/import-onshape.ts <extract.json> <out.build.json> [--forward=+y|-y] [--yaw=<deg>] [--exclude=Goal]
 //
 // The CAD frame is taken as x right, y forward, z up (Onshape's own, with the export left at
 // its default). The robot's origin goes to the middle of the drive wheels, the floor to the
@@ -179,14 +179,21 @@ const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
 const x0 = mean(wheelCenters.map((v) => v[0]));
 const y0 = mean(wheelCenters.map((v) => v[1]));
 const floor = drive.length ? Math.min(...drive.map((q) => q.world[2] - ((q.p.size?.[1] ?? (defs.get(q.id)?.diameter as number) ?? 3.25) / 2))) : Math.min(...placed.map((q) => placement(get(q.id) as never, q.p).min[2])); // no wheels: the lowest part edge
-const flip = forward === '-y'; // a CAD whose front is -y: turn the whole robot half a turn about z
+// turn the whole robot about z when the CAD's front is not +y (--forward=-y, or --yaw=<degrees>)
+const yaw = flag('yaw') !== undefined ? Number(flag('yaw')) : forward === '-y' ? 180 : 0;
+const cy = Math.cos((yaw * Math.PI) / 180);
+const sy = Math.sin((yaw * Math.PI) / 180);
+const turnZ = (v: number[]) => [cy * v[0] - sy * v[1], sy * v[0] + cy * v[1], v[2]];
 for (const q of placed) {
   const xf = q.p.xf!;
   let c: V3 = [xf.c[0] - x0, xf.c[1] - y0, xf.c[2] - floor];
   let r = xf.r.slice() as number[];
-  if (flip) {
-    c = [-c[0], -c[1], c[2]];
-    r = [-r[0], -r[1], -r[2], -r[3], -r[4], -r[5], r[6], r[7], r[8]];
+  if (yaw !== 0) {
+    c = turnZ(c) as V3;
+    // R' = Rz * R: each column of R turned about z
+    const col = (j: number) => turnZ([r[j], r[3 + j], r[6 + j]]);
+    const [a, b, d] = [col(0), col(1), col(2)];
+    r = [a[0], b[0], d[0], a[1], b[1], d[1], a[2], b[2], d[2]];
   }
   xf.c = c.map((v) => Math.round(v * 10000) / 10000) as V3;
   xf.r = r.map((v) => Math.round(v * 1e6) / 1e6 || 0) as Rot3;

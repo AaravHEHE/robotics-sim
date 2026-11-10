@@ -11,7 +11,7 @@ build() { # <build name> <reduced export> [extra importer flags]
 build dr6b dr6b_x.json
 build sixbar sixbar_x.json
 build fourbar fourbar_x.json
-build twobar twobar_x.json
+build twobar twobar_x.json --yaw=90
 build continuous cont_x.json
 for n in dr6b sixbar fourbar twobar continuous; do
   node scripts/fix-cad-logic.ts "data/builds/$n.build.json" | tail -1

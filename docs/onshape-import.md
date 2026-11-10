@@ -37,16 +37,28 @@ profile still decides how it drives and what it can do.
 - `src/app/parts/gear-trains.ts`: which gears mesh (parallel axles, centers (T1+T2)/48 in apart), which trains can
   turn (no odd loop) and which gears mesh with nothing.
 
-## What was imported (2026-11-09)
+## What was imported
 
-| Build | From | Parts | Notes |
+| Build | From (public Onshape document, assembly) | Parts | Notes |
 |---|---|---|---|
-| `data/builds/cascade.build.json` | "Botty override rework" (cascade), 330 instances | 329 | Goal left out. 26 custom boxes: 23 small unnamed parts, two intake ramps, one plate. |
-| `data/builds/dr4b.build.json` | public "botty override 26-27" copy of the DR4B, 254 instances (247 with meshes) | 247 | 10 custom boxes: 4 pneumatic cylinder bodies, 2 cylinder rods, 4 unnamed parts. |
+| `cascade` | "Botty override rework", `cascade` (the project owner's) | 329 | Goal left out. 26 custom boxes. |
+| `dr4b` | public "botty override 26-27" copy, `Assembly 3` | 247 | 10 custom boxes (pneumatic cylinder parts, unnamed). The 340-part version first linked was view-only with export off. |
+| `dr6b` | "v2 bot" by Carlos A (8 copies), `dr6b` | 43 | Lift only (no chassis). 1x3x1 channels are 0.66 in wide in this CAD and keep that width. |
+| `sixbar` | "Team A 2026 bot prototype design" by Justin Tabas Carson, `6 bar` | 171 | Prototype frame: angle links, 72T high-strength gears, 24 bearing flats. |
+| `fourbar` | same document, `mirrored 4 bar` | 127 | Prototype: two arms on meshing 84T gears, a coupler. |
+| `continuous` | "20W Assembly" by XLR8 (Jan 2025), `Continuous Lift` | 306 | Whole robot: chassis, 4 wheels, 5 nested stages. Washers, gear inserts and pulleys mapped. |
+| `twobar` | "2 bar lift" by LCI 7481 (Sep 30), `Assembly 1` | 19 | Imported with `--yaw=90` (the CAD swings the arm sideways). |
 
-The DR4B you linked first ("botty override 26-27 - Copy", 340 instances, owned by someone else) allows neither
-copying nor export, so it was not used. The imported DR4B is the public document it was copied from: the same
-robot with fewer parts.
+Every build has a `<name>.fixed.build.json` (odd gear trains; see below). `bash scripts/reimport-builds.sh <folder>` rebuilds
+the new ones from the reduced exports.
+
+### How the public search went
+
+Searched Onshape's public documents for the exact words: "dr6b" (14 documents, all named `dr6b`, mostly in progress; one
+opened and imported), "6 bar" and "4 bar" (many; the 2026 Team A document holds 4-bar, 6-bar, cascade and DR4B tabs),
+"continuous lift" (a one-part stub, an FRC elevator, and the 20W robot used here) and "2 bar lift" (14). Not every
+result was opened: only the ones with a VEX-looking thumbnail, a recent date or a copy count were, about ten of them.
+Result lists render poorly in the app's browser pane, so names, owners and links were read from the page text.
 
 ## Logic problems found in the CADs and how they were fixed
 
@@ -68,19 +80,29 @@ check them against the real robots.
   shaft that a chain or something outside the model drives. The lift motors on the DR4B are not geared to
   anything in the CAD; how the real robot drives them still needs confirming.
 
+## Animation (the motion layer)
+
+The CAD's mates are not in the glTF export and fastener tracing finds almost no rigid groups (7 of 174 in the DR4B),
+so each lift's moving parts are chosen from the CAD's geometry by a rule in `scripts/gen-motion.ts`, written to
+`data/builds/<name>.motion.json` and applied by `poseBuild()` in `src/app/parts/build-motion.ts`.
+
+| Lift | Motion | How the groups were read |
+|---|---|---|
+| Four-bar | two arms turn about the 84T pivot gears (y 4.4, z 15 and 11.5); the coupler translates with the top arm's end and stays level | gears, arm bars, coupler at y -8.6; checked in render at 0 and 40 degrees |
+| Two-bar | the hanging arm, its 84T gear and shaft hardware turn about the gear's axle | read off the gear |
+| Cascade | stages in 1 in y planes (-1.3 base, -2.2, -3.1, -3.9 carriage) rise together, stage k by k/3 of the carriage rise | nearest stage plane |
+| Continuous | stages (y 1.2 to 5.2) rise one at a time, carriage first | nearest stage plane; checked in render fully extended |
+
+`tests/build-motion.test.ts` checks the kinematics (arm turn, coupler level and on the right circle, stage ratios, in-turn
+rise, rest pose unchanged).
+
 ## Not done yet
 
-- Lifts do not move: the build is a static pose. Animating it needs each part assigned to a moving group (lift
-  stages, DR4B links) from the CAD's connections.
-- The custom boxes are boxes, not the real shapes (the intake ramps show as blocks). The bridge's position was
-  checked by eye in one render only.
-- Attaching a build to a robot preset so the app draws it instead of the profile-built look.
-- Other lift types: public CADs were searched (see below) but none imported.
-- Pin physics and the other robot presets were not changed.
-
-## Public CAD search (Onshape, "Public" filter, 2026-11-09)
-
-Searches: `vex dr6b` (no results), `vex dr4b lift` (3: a "VEX V5 DR4B Lift", a "VEX V5 6W Drive" and one other),
-`vex continuous lift` (2 documents titled "Vex Continuous ..."), `vex cascade lift` (many: several "Cascade Lift
-(VEX ...)" and "VEX Cascade" documents). 2-bar, 4-bar and 6-bar were not searched yet. Search URL pattern:
-`https://cad.onshape.com/documents?nodeId=3&resourceType=filter&q=_all:<terms> type:all foundin:w when:latest`.
+- **Motion for the 6-bar, DR4B and DR6B.** Their links cross and share joints (the DR4B has eight 14 in links in X
+  pairs between a rear tower and a front carriage), and a rule that assigns them without the CAD's mates needs more
+  analysis and renders than was done. The builds are static poses for now.
+- Nothing draws a build as a robot in the app: the poses are made by `poseBuild`, but no viewer or preset calls it
+  yet, and the sim's lift state is not connected to a build.
+- The custom boxes are boxes, not the real shapes (the intake ramps show as blocks).
+- The sim still has all its other presets, and no "only the seven lift types" cut has been made.
+- Pin physics was not changed.

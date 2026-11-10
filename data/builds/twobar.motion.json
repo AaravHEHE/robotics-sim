@@ -1,0 +1,1 @@
+{"v":1,"lift":"arm","out":{"unit":"deg","min":0,"max":120},"groups":[{"name":"arm","parts":[1,2,4,6,7,10,13,16,18],"joint":{"type":"revolute","pivot":[-1.0289,10.212],"ratio":1}}],"notes":"Arm hangs down at rest (out 0); out > 0 swings it forward and up."}
