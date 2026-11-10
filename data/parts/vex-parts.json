@@ -1053,6 +1053,15 @@
   },
   {
    "group": "Gears",
+   "id": "gear-hs-72",
+   "name": "High-strength gear 72T",
+   "kind": "gear",
+   "teeth": 72,
+   "width": 0.375,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Gears",
    "id": "gear-hs-84",
    "name": "High-strength gear 84T",
    "kind": "gear",

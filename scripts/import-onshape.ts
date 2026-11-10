@@ -11,7 +11,7 @@
 // and are listed in the report so they can be modelled properly.
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { partSize, type Placed, type Rot3 } from '../src/app/parts/assembly.ts';
+import { partSize, placement, type Placed, type Rot3 } from '../src/app/parts/assembly.ts';
 import { repoRoot } from './node-toolchain.ts';
 
 interface Inst { name: string; m: number[]; lo: number[]; hi: number[]; cen: number[]; mesh: number }
@@ -46,8 +46,10 @@ function mapPart(name: string, D: V3): Spec | null {
   let m: RegExpMatchArray | null;
   if (/C-Channel/i.test(name)) {
     const web = sorted[1]; // the width across the web (the flange height is the smallest)
-    const id = web < 1.25 ? 'c-channel-1x2x1' : web < 2 ? 'c-channel-1x3x1' : web < 3 ? 'c-channel-1x5x1' : 'c-channel-2x2x2';
-    return { id, length: holes(long) };
+    const id = web < 0.8 ? 'c-channel-1x1x1' : web < 1.25 ? 'c-channel-1x2x1' : web < 2 ? 'c-channel-1x3x1' : web < 3 ? 'c-channel-1x5x1' : 'c-channel-2x2x2';
+    const standard = (get(id).web as number) * 0.5;
+    // a channel cut or modelled to another width keeps the size it has in the CAD
+    return Math.abs(web - standard) > 0.1 ? { id, length: holes(long), size: [long, web, sorted[2]] } : { id, length: holes(long) };
   }
   if (/Aluminum Angle/i.test(name)) {
     const w = sorted[1];
@@ -63,7 +65,9 @@ function mapPart(name: string, D: V3): Spec | null {
   if (/Nylock Nut/i.test(name)) return { id: 'nut-nylock' };
   if (/Keps/i.test(name)) return { id: 'nut' };
   if (/Shaft Collar/i.test(name)) return { id: 'collar' };
-  if (/Gear Shaft Insert/i.test(name)) return { id: 'collar', size: [Math.min(...D), long, long] };
+  if (/Gear Shaft Insert|Gear Insert/i.test(name)) return { id: 'collar', size: [Math.min(...D), long, long] };
+  if (/Washer/i.test(name)) return { id: 'washer', size: [Math.min(...D), long, long] };
+  if (/^Pulley/i.test(name)) return { id: 'pulley-1', size: [Math.min(...D), long, long] };
   if (/Flat Bearing/i.test(name)) return { id: 'bearing-flat', length: holes(long) };
   if (/Pillow Block/i.test(name)) return { id: 'pillow-block', length: holes(long) };
   if (/VersaHex/i.test(name)) return { id: 'versahex-adapter' };
@@ -174,7 +178,7 @@ const wheelCenters = drive.length ? drive.map((q) => q.world) : placed.map((q) =
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
 const x0 = mean(wheelCenters.map((v) => v[0]));
 const y0 = mean(wheelCenters.map((v) => v[1]));
-const floor = drive.length ? Math.min(...drive.map((q) => q.world[2] - ((q.p.size?.[1] ?? (defs.get(q.id)?.diameter as number) ?? 3.25) / 2))) : Math.min(...placed.map((q) => q.world[2]));
+const floor = drive.length ? Math.min(...drive.map((q) => q.world[2] - ((q.p.size?.[1] ?? (defs.get(q.id)?.diameter as number) ?? 3.25) / 2))) : Math.min(...placed.map((q) => placement(get(q.id) as never, q.p).min[2])); // no wheels: the lowest part edge
 const flip = forward === '-y'; // a CAD whose front is -y: turn the whole robot half a turn about z
 for (const q of placed) {
   const xf = q.p.xf!;

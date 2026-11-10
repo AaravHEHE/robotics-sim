@@ -69,7 +69,7 @@ add('Shafts & bearings', { id: 'shaft', name: 'Square shaft ⅛″', kind: 'shaf
 add('Shafts & bearings', { id: 'shaft-hs', name: 'High-strength shaft ¼″', kind: 'shaft', lengths: [4, 6, 8, 12, 16, 24], length: 8, thickness: 0.25 });
 add('Shafts & bearings', { id: 'shaft-hex', name: 'Hex shaft (insert)', kind: 'shaft', lengths: [4, 8, 12], length: 8, thickness: 0.25, color: '#b9bec5' });
 for (const t of [12, 36, 48, 60, 72, 84]) add('Gears', { id: `gear-${t}`, name: `Gear ${t}T`, kind: 'gear', teeth: t });
-for (const t of [12, 36, 48, 60, 84]) add('Gears', { id: `gear-hs-${t}`, name: `High-strength gear ${t}T`, kind: 'gear', teeth: t, width: 0.375, color: '#2a2d31' });
+for (const t of [12, 36, 48, 60, 72, 84]) add('Gears', { id: `gear-hs-${t}`, name: `High-strength gear ${t}T`, kind: 'gear', teeth: t, width: 0.375, color: '#2a2d31' });
 add('Gears', { id: 'crown-gear', name: 'Crown gear 60T', kind: 'gear', teeth: 60, width: 0.4, color: '#4b4f56' });
 add('Gears', { id: 'worm', name: 'Worm gear', kind: 'cylinder', diameter: 0.75, length: 1.25, color: '#4b4f56' });
 add('Gears', { id: 'rack', name: 'Rack gear', kind: 'rack', lengths: [10, 19], length: 19 });

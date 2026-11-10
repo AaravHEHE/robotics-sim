@@ -12,6 +12,11 @@ const load = (n: string) => JSON.parse(readFileSync(`data/builds/${n}.build.json
 describe.each([
   ['cascade', 329],
   ['dr4b', 247],
+  ['dr6b', 43],
+  ['sixbar', 171],
+  ['fourbar', 127],
+  ['twobar', 19],
+  ['continuous', 306],
 ])('%s build from Onshape', (name, parts) => {
   const asm = load(name);
 
@@ -31,14 +36,14 @@ describe.each([
 
   it('has no gear train that cannot turn (an odd loop of meshing gears)', () => {
     const r = gearReport(asm, cat);
-    expect(r.gears.length).toBeGreaterThan(5);
+    expect(r.gears.length).toBeGreaterThanOrEqual(2);
     expect(r.trains.filter((t) => !t.free)).toEqual([]);
   });
 });
 
 // The corrected builds (scripts/fix-cad-logic.ts): every gear train has an odd number of gears and can
 // turn; the cascade's intake has a bridge between its two stages.
-describe.each(['cascade', 'dr4b'])('%s build after the logic fixes', (name) => {
+describe.each(['cascade', 'dr4b', 'dr6b', 'sixbar', 'fourbar', 'twobar', 'continuous'])('%s build after the logic fixes', (name) => {
   const asm = JSON.parse(readFileSync(`data/builds/${name}.fixed.build.json`, 'utf8')) as Assembly;
 
   it('is valid and keeps every imported part', () => {
