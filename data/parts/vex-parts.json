@@ -1035,6 +1035,15 @@
   },
   {
    "group": "Gears",
+   "id": "gear-hs-48",
+   "name": "High-strength gear 48T",
+   "kind": "gear",
+   "teeth": 48,
+   "width": 0.375,
+   "color": "#2a2d31"
+  },
+  {
+   "group": "Gears",
    "id": "gear-hs-60",
    "name": "High-strength gear 60T",
    "kind": "gear",
@@ -1174,6 +1183,15 @@
   },
   {
    "group": "Sprockets & chain",
+   "id": "sprocket-hs-6",
+   "name": "High-strength sprocket 6T (#35)",
+   "kind": "sprocket",
+   "teeth": 6,
+   "pitch": 0.375,
+   "width": 0.2
+  },
+  {
+   "group": "Sprockets & chain",
    "id": "sprocket-hs-12",
    "name": "High-strength sprocket 12T (#35)",
    "kind": "sprocket",
@@ -1205,6 +1223,15 @@
    "name": "High-strength sprocket 30T (#35)",
    "kind": "sprocket",
    "teeth": 30,
+   "pitch": 0.375,
+   "width": 0.2
+  },
+  {
+   "group": "Sprockets & chain",
+   "id": "sprocket-hs-36",
+   "name": "High-strength sprocket 36T (#35)",
+   "kind": "sprocket",
+   "teeth": 36,
    "pitch": 0.375,
    "width": 0.2
   },
@@ -1734,6 +1761,30 @@
    "length": 16,
    "thickness": 0.16,
    "color": "#2f81f7"
+  },
+  {
+   "group": "Hardware",
+   "id": "versahex-adapter",
+   "name": "VersaHex adapter ½″ (¼″ square bore)",
+   "kind": "box",
+   "size": [
+    0.7,
+    0.343,
+    0.7
+   ],
+   "color": "#9aa0a6"
+  },
+  {
+   "group": "Other",
+   "id": "custom-box",
+   "name": "Custom part (box of its size)",
+   "kind": "box",
+   "size": [
+    1,
+    1,
+    1
+   ],
+   "color": "#3a3d42"
   },
   {
    "group": "Other",

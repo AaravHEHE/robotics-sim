@@ -66,6 +66,20 @@ export interface Catalog {
   parts: PartDef[];
 }
 
+/** A row-major 3×3 rotation matrix. */
+export type Rot3 = [number, number, number, number, number, number, number, number, number];
+
+/**
+ * Free placement, for parts imported from a CAD (their positions are not on the hole grid
+ * and their turns are not quarter turns): the center of the part's box in the robot frame
+ * (in) and its rotation, which maps the part's own axes (x along its length, y across,
+ * z up) into the robot frame. When present it replaces `pos` and `rot`.
+ */
+export interface FreeXf {
+  c: [number, number, number];
+  r: Rot3;
+}
+
 export interface Placed {
   part: string;
   /** Length in holes, for parts that come in lengths. */
@@ -76,6 +90,10 @@ export interface Placed {
   pos: [number, number, number];
   /** Quarter turns about x, y, z (applied in that order). */
   rot: [number, number, number];
+  /** Free placement (see {@link FreeXf}); `pos` and `rot` are then 0. */
+  xf?: FreeXf;
+  /** Box size (in) for a custom part (`box` and other catalog parts without sizes of their own). */
+  size?: [number, number, number];
 }
 
 export interface Assembly {
@@ -91,7 +109,8 @@ export const BEARING_BOSS = 0.09;
 export const MAX_PARTS = 500;
 
 /** A part's outer size before rotation (in): x along its length, y across, z up. */
-export function partSize(def: PartDef, p: Pick<Placed, 'length'>): [number, number, number] {
+export function partSize(def: PartDef, p: Pick<Placed, 'length'> & Partial<Pick<Placed, 'size'>>): [number, number, number] {
+  if (p.size) return p.size; // a part imported from a CAD keeps the size it has there
   const len = (p.length ?? def.length ?? 1) * PITCH;
   switch (def.kind) {
     case 'channel':
@@ -174,10 +193,54 @@ export function rotation(rot: [number, number, number]): Mat3 {
   return mul(quarter(2, rot[2]), mul(quarter(1, rot[1]), quarter(0, rot[0])));
 }
 
+/** Move a placed part by whole holes (a free part moves by the same distance in inches). */
+export function nudge(p: Placed, dx: number, dy: number, dz: number): void {
+  if (p.xf) {
+    p.xf.c[0] += dx * PITCH;
+    p.xf.c[1] += dy * PITCH;
+    p.xf.c[2] += dz * PITCH;
+  } else {
+    p.pos[0] += dx;
+    p.pos[1] += dy;
+    p.pos[2] += dz;
+  }
+}
+
+/** Turn a placed part a quarter turn about the robot's x, y or z axis (a free part turns about its own center). */
+export function turnQuarter(p: Placed, axis: 0 | 1 | 2): void {
+  if (!p.xf) {
+    p.rot[axis] = (p.rot[axis] + 1) % 4;
+    return;
+  }
+  const q = quarter(axis, 1);
+  p.xf.r = mul(q, p.xf.r as Mat3).map((v) => Math.round(v * 1e9) / 1e9) as Rot3;
+}
+
+/** A placed part's rotation: free if it has one, else its quarter turns. */
+export function rotationOf(p: Pick<Placed, 'rot' | 'xf'>): Mat3 {
+  return p.xf ? (p.xf.r as Mat3) : rotation(p.rot);
+}
+
 /** Where a placed part is: its box corners in the robot frame, and the offset its own corner moves by. */
 export function placement(def: PartDef, p: Placed): { min: [number, number, number]; max: [number, number, number]; offset: [number, number, number] } {
   const size = partSize(def, p);
-  const R = rotation(p.rot);
+  const R = rotationOf(p);
+  if (p.xf) {
+    // free placement: the box's center is at xf.c, so its corner is half a box away, turned
+    const half = size.map((s) => s / 2);
+    const offset = [0, 1, 2].map((i) => p.xf!.c[i] - (R[i * 3] * half[0] + R[i * 3 + 1] * half[1] + R[i * 3 + 2] * half[2])) as [number, number, number];
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let c = 0; c < 8; c++) {
+      const v = [c & 1 ? size[0] : 0, c & 2 ? size[1] : 0, c & 4 ? size[2] : 0];
+      for (let i = 0; i < 3; i++) {
+        const w = offset[i] + R[i * 3] * v[0] + R[i * 3 + 1] * v[1] + R[i * 3 + 2] * v[2];
+        lo[i] = Math.min(lo[i], w);
+        hi[i] = Math.max(hi[i], w);
+      }
+    }
+    return { min: lo as [number, number, number], max: hi as [number, number, number], offset };
+  }
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   for (let c = 0; c < 8; c++) {
@@ -231,8 +294,8 @@ export function suggestProfile(asm: Assembly, cat: Catalog): { size?: { width: n
   for (const p of asm.parts) {
     const def = defOf(cat, p.part);
     if (def?.kind !== 'wheel') continue;
-    const R = rotation(p.rot);
-    if (Math.abs(R[0]) !== 1) continue; // its axle isn't across the robot
+    const R = rotationOf(p);
+    if (Math.abs(R[0]) < 0.99) continue; // its axle isn't across the robot
     const pl = placement(def, p);
     const x = (pl.min[0] + pl.max[0]) / 2;
     (x < cx ? left : right).push(x);
@@ -254,7 +317,11 @@ export function validateAssembly(a: unknown, cat: Catalog): string[] {
   if (asm.parts.length > MAX_PARTS) e.push(`Too many parts (${asm.parts.length}; at most ${MAX_PARTS}).`);
   asm.parts.forEach((p, i) => {
     if (!defOf(cat, p?.part)) e.push(`Part ${i + 1}: unknown part "${String(p?.part)}".`);
-    else if (!Array.isArray(p.pos) || p.pos.length !== 3 || !p.pos.every(Number.isInteger)) e.push(`Part ${i + 1}: position must be three whole hole counts.`);
+    else if (p.xf !== undefined) {
+      const x = p.xf;
+      const ok = x && Array.isArray(x.c) && x.c.length === 3 && Array.isArray(x.r) && x.r.length === 9 && [...x.c, ...x.r].every(Number.isFinite);
+      if (!ok) e.push(`Part ${i + 1}: free placement needs a center (3 numbers) and a rotation (9 numbers).`);
+    } else if (!Array.isArray(p.pos) || p.pos.length !== 3 || !p.pos.every(Number.isInteger)) e.push(`Part ${i + 1}: position must be three whole hole counts.`);
     else if (!Array.isArray(p.rot) || p.rot.length !== 3 || !p.rot.every(Number.isInteger)) e.push(`Part ${i + 1}: rotation must be three whole quarter turns.`);
   });
   return e;

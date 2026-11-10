@@ -3,7 +3,7 @@
 // `placement()`; geometry and materials are shared between identical parts.
 
 import * as THREE from 'three';
-import { BEARING_BOSS, partSize, placement, rotation, SCREW_HEAD, sprocketPitchDiameter, type PartDef, type Placed } from './assembly.ts';
+import { BEARING_BOSS, partSize, placement, rotationOf, SCREW_HEAD, sprocketPitchDiameter, type PartDef, type Placed } from './assembly.ts';
 import { shared } from '../override-meshes.ts';
 
 const cache = new Map<string, THREE.Object3D>();
@@ -398,8 +398,8 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
 }
 
 /** A part's own shape: x along its length, y across, z up, with its corner at the origin. */
-export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> = {}): THREE.Object3D {
-  const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}`;
+export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> & Partial<Pick<Placed, 'size'>> = {}): THREE.Object3D {
+  const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}|${p.size?.join(',') ?? ''}`;
   let proto = cache.get(key);
   if (!proto) {
     cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p })));
@@ -417,7 +417,7 @@ export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> 
  * A part placed by the center of its box: its length (x) along `xDir` and its width (y)
  * along `yDir`, in whatever frame the caller works in.
  */
-export function centeredPart(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'>, center: THREE.Vector3, xDir: THREE.Vector3, yDir: THREE.Vector3): THREE.Object3D {
+export function centeredPart(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> & Partial<Pick<Placed, 'size'>>, center: THREE.Vector3, xDir: THREE.Vector3, yDir: THREE.Vector3): THREE.Object3D {
   const size = partSize(def, p);
   const inner = partShape(def, p);
   inner.position.set(-size[0] / 2, -size[1] / 2, -size[2] / 2);
@@ -433,7 +433,7 @@ export function centeredPart(def: PartDef, p: Pick<Placed, 'length' | 'cartridge
 /** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
 export function partObject(def: PartDef, p: Placed): THREE.Object3D {
   const o = partShape(def, p);
-  const R = rotation(p.rot);
+  const R = rotationOf(p);
   const { offset } = placement(def, p);
   o.matrixAutoUpdate = false;
   o.matrix.set(R[0], R[1], R[2], offset[0], R[3], R[4], R[5], offset[1], R[6], R[7], R[8], offset[2], 0, 0, 0, 1);

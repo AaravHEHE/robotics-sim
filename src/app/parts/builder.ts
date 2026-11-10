@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { bounds, MAX_PARTS, partSize, PITCH, suggestProfile, type Assembly, type PartDef, type Placed } from './assembly.ts';
+import { bounds, MAX_PARTS, nudge, partSize, PITCH, turnQuarter, suggestProfile, type Assembly, type PartDef, type Placed } from './assembly.ts';
 import { partObject } from './geometry.ts';
 import { CATALOG } from './catalog.ts';
 
@@ -242,7 +242,7 @@ export class PartsBuilder {
     }
     if (k === 'PageUp' || k === 'PageDown') {
       e.preventDefault();
-      if (this.selected >= 0) this.edit((p) => (p.pos[2] += k === 'PageUp' ? 1 : -1));
+      if (this.selected >= 0) this.edit((p) => nudge(p, 0, 0, k === 'PageUp' ? 1 : -1));
       else this.setLevel(this.level + (k === 'PageUp' ? 1 : -1));
       return;
     }
@@ -251,17 +251,14 @@ export class PartsBuilder {
     if (move[k]) {
       e.preventDefault();
       const n = e.shiftKey ? 4 : 1;
-      this.edit((p) => {
-        p.pos[0] += move[k][0] * n;
-        p.pos[1] += move[k][1] * n;
-      });
-    } else if (k === 'r' || k === 'R') this.edit((p) => (p.rot[2] = (p.rot[2] + 1) % 4));
-    else if (k === 't' || k === 'T') this.edit((p) => (p.rot[0] = (p.rot[0] + 1) % 4));
-    else if (k === 'y' || k === 'Y') this.edit((p) => (p.rot[1] = (p.rot[1] + 1) % 4));
+      this.edit((p) => nudge(p, move[k][0] * n, move[k][1] * n, 0));
+    } else if (k === 'r' || k === 'R') this.edit((p) => turnQuarter(p, 2));
+    else if (k === 't' || k === 'T') this.edit((p) => turnQuarter(p, 0));
+    else if (k === 'y' || k === 'Y') this.edit((p) => turnQuarter(p, 1));
     else if (k === 'd' || k === 'D') {
       this.checkpoint();
       const copy = structuredClone(this.asm.parts[this.selected]);
-      copy.pos[0] += Math.round(partSize(CATALOG.parts.find((d) => d.id === copy.part)!, copy)[0] / PITCH);
+      nudge(copy, Math.round(partSize(CATALOG.parts.find((d) => d.id === copy.part)!, copy)[0] / PITCH), 0, 0);
       this.asm.parts.push(copy);
       this.selected = this.asm.parts.length - 1;
       this.rebuild();
@@ -320,7 +317,7 @@ export class PartsBuilder {
     const p = this.asm.parts[this.selected];
     const d = p && CATALOG.parts.find((x) => x.id === p.part);
     this.els.info.textContent = d
-      ? `${d.name}${p.length ? `, ${p.length} holes` : ''} at hole (${p.pos.join(', ')}). Arrows move it (Shift: 4 holes), PgUp/PgDn up and down, R/T/Y turn it, D duplicates, Delete removes, Esc deselects.`
+      ? `${d.name}${p.length ? `, ${p.length} holes` : ''} ${p.xf ? `at (${p.xf.c.map((v) => v.toFixed(2)).join(', ')}) in, free placement (from a CAD).` : `at hole (${p.pos.join(', ')}).`} Arrows move it (Shift: 4 holes), PgUp/PgDn up and down, R/T/Y turn it, D duplicates, Delete removes, Esc deselects.`
       : 'Click the grid to place the part picked on the left; click a part to select it. PgUp/PgDn change the build level. Drag to turn the camera. Ctrl+Z undoes.';
   }
 

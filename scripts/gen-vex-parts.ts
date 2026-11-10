@@ -69,14 +69,14 @@ add('Shafts & bearings', { id: 'shaft', name: 'Square shaft ⅛″', kind: 'shaf
 add('Shafts & bearings', { id: 'shaft-hs', name: 'High-strength shaft ¼″', kind: 'shaft', lengths: [4, 6, 8, 12, 16, 24], length: 8, thickness: 0.25 });
 add('Shafts & bearings', { id: 'shaft-hex', name: 'Hex shaft (insert)', kind: 'shaft', lengths: [4, 8, 12], length: 8, thickness: 0.25, color: '#b9bec5' });
 for (const t of [12, 36, 48, 60, 72, 84]) add('Gears', { id: `gear-${t}`, name: `Gear ${t}T`, kind: 'gear', teeth: t });
-for (const t of [12, 36, 60, 84]) add('Gears', { id: `gear-hs-${t}`, name: `High-strength gear ${t}T`, kind: 'gear', teeth: t, width: 0.375, color: '#2a2d31' });
+for (const t of [12, 36, 48, 60, 84]) add('Gears', { id: `gear-hs-${t}`, name: `High-strength gear ${t}T`, kind: 'gear', teeth: t, width: 0.375, color: '#2a2d31' });
 add('Gears', { id: 'crown-gear', name: 'Crown gear 60T', kind: 'gear', teeth: 60, width: 0.4, color: '#4b4f56' });
 add('Gears', { id: 'worm', name: 'Worm gear', kind: 'cylinder', diameter: 0.75, length: 1.25, color: '#4b4f56' });
 add('Gears', { id: 'rack', name: 'Rack gear', kind: 'rack', lengths: [10, 19], length: 19 });
 add('Gears', { id: 'gear-differential', name: 'Differential gear set', kind: 'box', size: [1.6, 2, 2], color: '#4b4f56' });
 // #25 chain (¼″ pitch) and high-strength #35 chain (⅜″ pitch)
 for (const t of [6, 10, 12, 15, 18, 24, 30, 36, 40, 48]) add('Sprockets & chain', { id: `sprocket-${t}`, name: `Sprocket ${t}T (#25 chain)`, kind: 'sprocket', teeth: t, pitch: 0.25 });
-for (const t of [12, 18, 24, 30]) add('Sprockets & chain', { id: `sprocket-hs-${t}`, name: `High-strength sprocket ${t}T (#35)`, kind: 'sprocket', teeth: t, pitch: 0.375, width: 0.2 });
+for (const t of [6, 12, 18, 24, 30, 36]) add('Sprockets & chain', { id: `sprocket-hs-${t}`, name: `High-strength sprocket ${t}T (#35)`, kind: 'sprocket', teeth: t, pitch: 0.375, width: 0.2 });
 add('Sprockets & chain', { id: 'chain-25', name: 'Chain #25 (¼″ pitch)', kind: 'chain', pitch: 0.25, lengths: [8, 16, 24, 32, 48], length: 24 });
 add('Sprockets & chain', { id: 'chain-35', name: 'High-strength chain #35', kind: 'chain', pitch: 0.375, lengths: [8, 16, 24, 32, 48], length: 24 });
 // pulleys and string: what cascades and continuous lifts run on
@@ -130,6 +130,9 @@ add('Pneumatics', { id: 'regulator', name: 'Pressure regulator', kind: 'cylinder
 add('Pneumatics', { id: 'tubing', name: 'Pneumatic tubing', kind: 'rope', lengths: [8, 16, 24], length: 16, thickness: 0.16, color: '#2f81f7' });
 
 // ---------------- game-specific / misc ----------------
+add('Hardware', { id: 'versahex-adapter', name: 'VersaHex adapter ½″ (¼″ square bore)', kind: 'box', size: [0.7, 0.343, 0.7], color: '#9aa0a6' });
+// a part a CAD import has no catalog part for: drawn as a box of its real size (set per placed part)
+add('Other', { id: 'custom-box', name: 'Custom part (box of its size)', kind: 'box', size: [1, 1, 1], color: '#3a3d42' });
 add('Other', { id: 'license-plate', name: 'License plate', kind: 'box', size: [8, 0.08, 1.6], color: '#d8343a' });
 add('Other', { id: 'polycarbonate', name: 'Polycarbonate sheet', kind: 'plate', web: 10, lengths: [10, 20, 30], length: 20, color: '#dfe8f0' });
 
