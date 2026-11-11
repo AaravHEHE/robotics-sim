@@ -133,6 +133,8 @@ add('Pneumatics', { id: 'tubing', name: 'Pneumatic tubing', kind: 'rope', length
 add('Hardware', { id: 'versahex-adapter', name: 'VersaHex adapter ½″ (¼″ square bore)', kind: 'box', size: [0.7, 0.343, 0.7], color: '#9aa0a6' });
 // a part a CAD import has no catalog part for: drawn as a box of its real size (set per placed part)
 add('Other', { id: 'custom-box', name: 'Custom part (box of its size)', kind: 'box', size: [1, 1, 1], color: '#3a3d42' });
+// a CAD part's real shape (its triangles are kept in the build); drawn as a box of its size when the build has none
+add('Other', { id: 'custom-mesh', name: 'Custom part (its own shape)', kind: 'mesh', size: [1, 1, 1], color: '#3a3d42' });
 add('Other', { id: 'license-plate', name: 'License plate', kind: 'box', size: [8, 0.08, 1.6], color: '#d8343a' });
 add('Other', { id: 'polycarbonate', name: 'Polycarbonate sheet', kind: 'plate', web: 10, lengths: [10, 20, 30], length: 20, color: '#dfe8f0' });
 

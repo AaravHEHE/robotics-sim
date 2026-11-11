@@ -3,7 +3,7 @@
 // `placement()`; geometry and materials are shared between identical parts.
 
 import * as THREE from 'three';
-import { BEARING_BOSS, partSize, placement, rotationOf, SCREW_HEAD, sprocketPitchDiameter, type PartDef, type Placed } from './assembly.ts';
+import { BEARING_BOSS, partSize, placement, rotationOf, SCREW_HEAD, sprocketPitchDiameter, type MeshData, type PartDef, type Placed } from './assembly.ts';
 import { shared } from '../override-meshes.ts';
 
 const cache = new Map<string, THREE.Object3D>();
@@ -124,7 +124,7 @@ function rod(radius: number, len: number, m: THREE.Material, segments = 24, cent
   return new THREE.Mesh(g, m);
 }
 
-function build(def: PartDef, p: Placed): THREE.Object3D {
+function build(def: PartDef, p: Placed, lib?: Record<string, MeshData>): THREE.Object3D {
   const [sx, sy, sz] = partSize(def, p);
   const g = new THREE.Group();
   const t = 0.063; // aluminum wall
@@ -294,6 +294,28 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
     case 'cylinder':
       g.add(rod(sy / 2, sx, plain(def.color ?? '#c9cdd2', 0.4, 0.4)));
       break;
+    case 'mesh': {
+      // a CAD part's own triangles, moved from its box center to the box corner (the kit's origin)
+      const m = p.mesh ? lib?.[p.mesh] : undefined;
+      if (!m) {
+        g.add(slab(sx, sy, sz, plain(def.color ?? '#3a3d42', 0.2, 0.6)));
+        break;
+      }
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(m.v.length);
+      for (let k = 0; k < m.v.length; k += 3) {
+        pos[k] = m.v[k] + sx / 2;
+        pos[k + 1] = m.v[k + 1] + sy / 2;
+        pos[k + 2] = m.v[k + 2] + sz / 2;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setIndex(m.i);
+      geo.computeVertexNormals();
+      const mat = plain(def.color ?? '#3a3d42', 0.25, 0.55);
+      mat.side = THREE.DoubleSide;
+      g.add(new THREE.Mesh(geo, mat));
+      break;
+    }
     case 'screw': {
       // a star-drive button head (head toward -x, flat face at x = SCREW_HEAD) on a threaded shank
       const steel = plain(def.color ?? '#2a2d31', 0.7, 0.35);
@@ -398,11 +420,11 @@ function build(def: PartDef, p: Placed): THREE.Object3D {
 }
 
 /** A part's own shape: x along its length, y across, z up, with its corner at the origin. */
-export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> & Partial<Pick<Placed, 'size'>> = {}): THREE.Object3D {
-  const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}|${p.size?.join(',') ?? ''}`;
+export function partShape(def: PartDef, p: Pick<Placed, 'length' | 'cartridge'> & Partial<Pick<Placed, 'size' | 'mesh'>> = {}, lib?: Record<string, MeshData>): THREE.Object3D {
+  const key = `${def.id}|${p.length ?? ''}|${p.cartridge ?? ''}|${p.size?.join(',') ?? ''}|${p.mesh ?? ''}|${p.mesh ? (lib?.[p.mesh]?.i.length ?? 0) : ''}`;
   let proto = cache.get(key);
   if (!proto) {
-    cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p })));
+    cache.set(key, (proto = build(def, { part: def.id, pos: [0, 0, 0], rot: [0, 0, 0], ...p }, lib)));
     // its clones share these: they belong to the cache, not to the scene a clone is in
     proto.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -441,8 +463,8 @@ export function placeObject(o: THREE.Object3D, def: PartDef, p: Placed): void {
 }
 
 /** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
-export function partObject(def: PartDef, p: Placed): THREE.Object3D {
-  const o = partShape(def, p);
+export function partObject(def: PartDef, p: Placed, lib?: Record<string, MeshData>): THREE.Object3D {
+  const o = partShape(def, p, lib);
   placeObject(o, def, p);
   return o;
 }

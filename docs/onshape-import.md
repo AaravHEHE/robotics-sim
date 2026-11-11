@@ -111,7 +111,8 @@ named lift each frame, mapping the lift's whole output range onto the build's wh
 - Lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`) have no chassis, so no preset uses them as a robot's body; they
   are in the app's build list for a profile that wants one. Whole-robot builds fit the presets only loosely (the CAD's
   size and claw are not the profile's), so the profile's numbers were not changed.
-- The custom boxes are boxes, not the real shapes (the intake ramps show as blocks).
+- Parts over 6000 triangles (a few large custom parts, like the 2.9 x 3.2 x 2.8 in block in the piston claw) are still
+  drawn as boxes of their size.
 - The sim still has all its other presets, and no "only the seven lift types" cut has been made.
 - Pin physics was not changed.
 
@@ -136,3 +137,24 @@ What the mates said (2026-11-10):
 
 The DR6B's gears are meant to counter-rotate in pairs (a 1:1 gear relation), so the app draws it from the imported
 build, not the odd-gear copy (an idler there would not be in the mechanism).
+
+## Custom meshes and the claws
+
+A CAD part with no catalog match used to become a box of its size. `scripts/onshape/gltf-extract.py <gltf> <extract> <meshes>`
+now also writes each part's own triangles (up to 6000 per part; screws, gears and wheels come from the catalog instead),
+and `scripts/import-onshape.ts ... --meshes=<meshes>` keeps them in the build (`meshes`, one per shape, shared by every
+instance) as `custom-mesh` parts in the CAD's own axes. The cascade's intake ramps, the DR4B's finger plates and the
+piston claw's curved fingers now have their real shapes.
+
+**The DR4B does have a claw.** The public DR4B CAD carries one at the carriage (y -5 to -11, z 5 to 7 in the robot
+frame): a 25 mm pneumatic cylinder, mounting angles and standoffs, and four finger plates. It looked absent in the app
+because the finger plates were flat boxes (and what the claw holds is drawn at the *profile's* claw, not the CAD's). The
+plates are now the real curved fingers.
+
+Claw CADs found on public Onshape (read with the API, 2026-11-10): the document "AK Dr4B Cad" (BryanOlsen2025x, 12 copies)
+holds over 30 VEX-parts robots and claws, all with pneumatic cylinders: `claw new` (a piston claw, imported as
+`claw-piston`: 31 parts, curved fingers, a 25 mm cylinder; the Cup it was modelled around is left out), `claw'` (a
+mechanical claw, 64 instances), `roller claw - inno` (121), and full DR4B robots (`dr4b Copy 1`, 288 instances;
+`8K1C BOT`, 255). "VEX V5 Override - Lift Arm and Rotating Claw" (Ken Liu, 24 instances) and "VURC Override Claw & Mini
+Arm" (James) are smaller. The two "Vex Override Claw" documents (18 and 22 copies) hold one part each. Only `claw new` is
+imported so far; it has no mates, so it is a static pose (its jaws open along x, about 0.5 in each side for the 25 mm stroke).

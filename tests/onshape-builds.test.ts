@@ -67,3 +67,41 @@ it('the cascade intake bridge spans the gap between the side ramps and the secon
   expect(b.max[1]).toBeGreaterThan(-3.69 + 0.5);
   expect(b.min[1]).toBeLessThan(-7.6 + 3.69 + 0.5);
 });
+
+// CAD parts with no catalog match keep their own shape (scripts/onshape/gltf-extract.py writes the triangles,
+// the importer keeps them in the build's `meshes`).
+describe('custom meshes', () => {
+  it('the piston claw build has curved finger meshes, and every mesh part has its triangles', () => {
+    const claw = load('claw-piston');
+    expect(validateAssembly(claw, cat)).toEqual([]);
+    const meshParts = claw.parts.filter((p) => p.part === 'custom-mesh');
+    expect(meshParts.length).toBe(4);
+    for (const p of meshParts) {
+      const m = claw.meshes![p.mesh!];
+      expect(m.i.length / 3).toBeGreaterThan(100);
+      expect(p.size!.every((v) => v > 0)).toBe(true);
+    }
+    expect(claw.parts.some((p) => p.part === 'piston-25')).toBe(true); // the 25 mm cylinder
+  });
+
+  it('leaves the game Cup out of the claw (it is a field object)', () => {
+    expect(JSON.stringify(load('claw-piston'))).not.toMatch(/9250/);
+  });
+
+  it('the DR4B and cascade bodies draw their custom parts from meshes', () => {
+    for (const n of ['dr4b', 'cascade']) {
+      const a = JSON.parse(readFileSync(`data/builds/${n}.fixed.build.json`, 'utf8')) as Assembly;
+      expect(validateAssembly(a, cat)).toEqual([]);
+      expect(a.parts.filter((p) => p.part === 'custom-mesh').length).toBeGreaterThan(2);
+    }
+  });
+
+  it('rejects a mesh part whose mesh is missing, or a mesh with a bad triangle', () => {
+    const claw = JSON.parse(JSON.stringify(load('claw-piston'))) as Assembly;
+    const key = claw.parts.find((p) => p.part === 'custom-mesh')!.mesh!;
+    claw.meshes![key].i[0] = 1e9;
+    expect(validateAssembly(claw, cat).join(' ')).toMatch(/not valid triangles/);
+    delete claw.meshes![key];
+    expect(validateAssembly(claw, cat).join(' ')).toMatch(/needs its mesh/);
+  });
+});

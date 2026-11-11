@@ -24,7 +24,11 @@ const flag = (n: string) => args.find((a) => a.startsWith(`--${n}=`))?.slice(n.l
 const [inFile, outFile] = args.filter((a) => !a.startsWith('--'));
 if (!inFile || !outFile) throw new Error('usage: node scripts/import-onshape.ts <extract.json> <out.build.json> [--forward=+y|-y] [--exclude=Goal]');
 const forward = flag('forward') ?? '+y';
-const exclude = new RegExp(flag('exclude') ?? '^Goal$');
+// the Goal and the game's Cup (276-9250) are field objects a CAD may include to show a fit, not parts of the robot
+const meshFile = flag('meshes'); // triangles of the CAD's part meshes (scripts/onshape/gltf-extract.py <gltf> <extract> <meshes>)
+const meshLib = meshFile ? (JSON.parse(await readFile(meshFile, 'utf8')) as Record<string, { v: number[]; i: number[] }>) : {};
+const usedMeshes: Record<string, { v: number[]; i: number[] }> = {};
+const exclude = new RegExp(flag('exclude') ?? '^(Goal$|276-9250)');
 
 const catalog = JSON.parse(await readFile(path.join(repoRoot, 'data/parts/vex-parts.json'), 'utf8')) as { parts: Def[] };
 const defs = new Map(catalog.parts.map((d) => [d.id, d]));
@@ -71,6 +75,7 @@ function mapPart(name: string, D: V3): Spec | null {
   if (/Flat Bearing/i.test(name)) return { id: 'bearing-flat', length: holes(long) };
   if (/Pillow Block/i.test(name)) return { id: 'pillow-block', length: holes(long) };
   if (/VersaHex/i.test(name)) return { id: 'versahex-adapter' };
+  if (/Pneumatic Cylinder (Body|Rod)/i.test(name)) return { id: 'piston-25', size: [long, sorted[1], sorted[2]] };
   if (/Spacer/i.test(name)) {
     // a spacer is a short cylinder: its axle is its shortest side
     const t = Math.min(...D);
@@ -122,21 +127,29 @@ for (const i of insts) {
   const cLocal = lo.map((v, k) => (v + hi[k]) / 2) as V3;
   const e = i.cen.map((v, k) => v * IN - cLocal[k]) as V3; // the centroid's offset from the box center, CAD axes
   let spec = mapPart(i.name, D);
+  let meshKey: string | undefined;
   if (!spec) {
-    spec = { id: 'custom-box', size: D };
-    unmapped.set(i.name, (unmapped.get(i.name) ?? 0) + 1);
+    const m = meshLib[String(i.mesh)];
+    if (m) {
+      // a CAD part with no catalog match keeps its own shape (in the CAD's own axes, about the center of its box)
+      meshKey = `m${i.mesh}`;
+      usedMeshes[meshKey] ??= { v: m.v.map((v, k) => Math.round((v - cLocal[k % 3]) * 1000) / 1000), i: m.i };
+      spec = { id: 'custom-mesh', size: D };
+    } else spec = { id: 'custom-box', size: D };
+    unmapped.set(i.name + (meshKey ? ' (mesh)' : ''), (unmapped.get(i.name + (meshKey ? ' (mesh)' : '')) ?? 0) + 1);
   }
   const def = get(spec.id);
   const part: Placed = { part: spec.id, pos: [0, 0, 0], rot: [0, 0, 0] };
   if (spec.length) part.length = spec.length;
   if (spec.cartridge) part.cartridge = spec.cartridge;
   if (spec.size) part.size = spec.size.map((v) => Math.round(v * 1000) / 1000) as V3;
+  if (meshKey) part.mesh = meshKey;
   const S = partSize(def as never, part);
 
   // match the catalog box to the CAD box: which CAD axis each catalog axis lies along
   let best = PERMS[0];
   let cost = Infinity;
-  for (const pm of PERMS) {
+  for (const pm of meshKey ? [PERMS[0]] : PERMS) {
     const c = Math.abs(S[0] - D[pm[0]]) + Math.abs(S[1] - D[pm[1]]) + Math.abs(S[2] - D[pm[2]]);
     if (c < cost - 1e-9) ((cost = c), (best = pm));
   }
@@ -203,6 +216,7 @@ const out = {
   v: 1 as const,
   source: { importer: 'scripts/import-onshape.ts', input: path.basename(inFile), forward, yaw, origin: [x0, y0, floor], instances: insts.length, excluded: excluded.length },
   parts: placed.map((q) => q.p),
+  ...(Object.keys(usedMeshes).length ? { meshes: usedMeshes } : {}),
 };
 await writeFile(outFile, JSON.stringify(out));
 

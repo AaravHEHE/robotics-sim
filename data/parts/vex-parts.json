@@ -1797,6 +1797,18 @@
   },
   {
    "group": "Other",
+   "id": "custom-mesh",
+   "name": "Custom part (its own shape)",
+   "kind": "mesh",
+   "size": [
+    1,
+    1,
+    1
+   ],
+   "color": "#3a3d42"
+  },
+  {
+   "group": "Other",
    "id": "license-plate",
    "name": "License plate",
    "kind": "box",

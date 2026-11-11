@@ -32,6 +32,7 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
     build: (await import('../../../data/builds/fourbar.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/fourbar.motion.json')).default as unknown as MotionSpec,
   }),
+  'claw-piston': async () => ({ build: (await import('../../../data/builds/claw-piston.build.json')).default as unknown as Assembly }),
   twobar: async () => ({
     build: (await import('../../../data/builds/twobar.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/twobar.motion.json')).default as unknown as MotionSpec,
@@ -57,7 +58,7 @@ export class CadBody {
     this.group.add(inner);
     for (const p of build.parts) {
       const def = CATALOG.parts.find((d) => d.id === p.part);
-      const o = def ? partObject(def, p) : new THREE.Group();
+      const o = def ? partObject(def, p, build.meshes) : new THREE.Group();
       this.objects.push(o);
       inner.add(o);
     }

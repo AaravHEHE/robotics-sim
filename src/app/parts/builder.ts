@@ -156,7 +156,7 @@ export class PartsBuilder {
 
   private updateGhost(): void {
     this.ghost.clear();
-    const o = partObject(this.part, this.next([0, 0, this.level]));
+    const o = partObject(this.part, this.next([0, 0, this.level]), this.asm.meshes);
     o.traverse((m) => {
       const mesh = m as THREE.Mesh;
       if (mesh.isMesh) {
@@ -205,7 +205,7 @@ export class PartsBuilder {
     this.ghost.visible = !!h;
     if (h) {
       const o = this.ghost.children[0];
-      const placed = partObject(this.part, this.next(h));
+      const placed = partObject(this.part, this.next(h), this.asm.meshes);
       o.matrix.copy(placed.matrix);
     }
     this.draw();
@@ -325,7 +325,7 @@ export class PartsBuilder {
     this.partsGroup.clear();
     for (const p of this.asm.parts) {
       const d = CATALOG.parts.find((x) => x.id === p.part);
-      if (d) this.partsGroup.add(partObject(d, p));
+      if (d) this.partsGroup.add(partObject(d, p, this.asm.meshes));
     }
     this.els.count.textContent = `${this.asm.parts.length} part${this.asm.parts.length === 1 ? '' : 's'}`;
     this.showSelection();
@@ -348,7 +348,7 @@ export class PartsBuilder {
     out.add(inner);
     for (const p of this.asm.parts) {
       const d = CATALOG.parts.find((x) => x.id === p.part);
-      if (d) inner.add(partObject(d, p));
+      if (d) inner.add(partObject(d, p, this.asm.meshes));
     }
     out.updateMatrixWorld(true);
     return (await new GLTFExporter().parseAsync(out, { binary: true })) as ArrayBuffer;

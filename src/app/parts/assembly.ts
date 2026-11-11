@@ -26,7 +26,8 @@ export type PartKind =
   | 'collar'
   | 'spacer'
   | 'bearing'
-  | 'gusset';
+  | 'gusset'
+  | 'mesh';
 
 export interface PartDef {
   id: string;
@@ -92,13 +93,23 @@ export interface Placed {
   rot: [number, number, number];
   /** Free placement (see {@link FreeXf}); `pos` and `rot` are then 0. */
   xf?: FreeXf;
+  /** A `mesh` part's shape: its key in the assembly's `meshes`. */
+  mesh?: string;
   /** Box size (in) for a custom part (`box` and other catalog parts without sizes of their own). */
   size?: [number, number, number];
+}
+
+/** A part's own triangles (inches, relative to the center of its box, in its own axes). */
+export interface MeshData {
+  v: number[];
+  i: number[];
 }
 
 export interface Assembly {
   v: 1;
   parts: Placed[];
+  /** Shapes of `mesh` parts (a CAD part with no catalog match), shared by key. */
+  meshes?: Record<string, MeshData>;
 }
 
 export const PITCH = 0.5;
@@ -314,9 +325,13 @@ export function validateAssembly(a: unknown, cat: Catalog): string[] {
   const asm = a as Partial<Assembly>;
   if (!asm || asm.v !== 1 || !Array.isArray(asm.parts)) return ['Not a parts build.'];
   const e: string[] = [];
+  for (const [k, m] of Object.entries(asm.meshes ?? {})) {
+    if (!Array.isArray(m.v) || !Array.isArray(m.i) || m.v.length % 3 || m.i.length % 3 || !m.v.every(Number.isFinite) || !m.i.every((x) => Number.isInteger(x) && x >= 0 && x < m.v.length / 3)) e.push(`Mesh ${k} is not valid triangles.`);
+  }
   if (asm.parts.length > MAX_PARTS) e.push(`Too many parts (${asm.parts.length}; at most ${MAX_PARTS}).`);
   asm.parts.forEach((p, i) => {
     if (!defOf(cat, p?.part)) e.push(`Part ${i + 1}: unknown part "${String(p?.part)}".`);
+    else if (defOf(cat, p.part)!.kind === 'mesh' && !(p.mesh && asm.meshes?.[p.mesh])) e.push(`Part ${i + 1}: a mesh part needs its mesh in the build.`);
     else if (p.xf !== undefined) {
       const x = p.xf;
       const ok = x && Array.isArray(x.c) && x.c.length === 3 && Array.isArray(x.r) && x.r.length === 9 && [...x.c, ...x.r].every(Number.isFinite);
