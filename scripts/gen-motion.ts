@@ -162,6 +162,23 @@ const rules: Record<string, Rule> = {
     ];
     return { lift: 'fourbar', out: { unit: 'deg', min: -20, max: 60 }, groups, notes: 'Arms pivot at the 84T gears (y 4.4); out > 0 raises the coupler. Rest pose is the CAD pose (arms level).' };
   },
+  // The Team A six-bar: a tower at y 4.1 with two meshing 72T gears (z = 18 and 15). Two arm pairs run back (-y) to a
+  // front bar at y -8.4: the upper pair (z 21 and 18) turns with the upper gear, the lower pair (z 15 and 11.5) with the
+  // lower one, and the front bar (the coupler) translates with the upper arm's end and stays level. The CAD's mates
+  // leave 8 degrees of freedom (the extra links are not closed), so this follows the four-bar rule, not the mates.
+  sixbar(asm) {
+    const c = centers(asm);
+    const top = [4.1, 18] as [number, number];
+    const bottom = [4.2, 15] as [number, number];
+    const end = [-8.6, 18] as [number, number];
+    const arm = (belongs: (z: number) => boolean) => asm.parts.map((_, i) => i).filter((i) => c[i][1] > -7.4 && c[i][1] < 3.5 && c[i][2] >= 10 && belongs(c[i][2]));
+    const groups: MotionGroup[] = [
+      { name: 'upper arms', parts: arm((z) => z > 16.5), joint: { type: 'revolute', pivot: top, ratio: -1 } },
+      { name: 'lower arms', parts: arm((z) => z <= 16.5), joint: { type: 'revolute', pivot: bottom, ratio: -1 } },
+      { name: 'coupler', parts: asm.parts.map((_, i) => i).filter((i) => c[i][1] <= -7.4), joint: { type: 'couple', pivot: top, track: end, ratio: -1 } },
+    ];
+    return { lift: 'sixbar', out: { unit: 'deg', min: -20, max: 60 }, groups, notes: 'Arms pivot at the 72T gears (y 4.1); out > 0 raises the coupler. Rest pose is the CAD pose. Follows the four-bar rule (the CAD mates are under-constrained).' };
+  },
 };
 
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(rules);

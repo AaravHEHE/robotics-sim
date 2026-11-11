@@ -30,7 +30,10 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
     build: (await import('../../../data/builds/dr6b.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/dr6b.motion.json')).default as unknown as MotionSpec,
   }),
-  sixbar: async () => ({ build: (await import('../../../data/builds/sixbar.fixed.build.json')).default as unknown as Assembly }),
+  sixbar: async () => ({
+    build: (await import('../../../data/builds/sixbar.fixed.build.json')).default as unknown as Assembly,
+    motion: (await import('../../../data/builds/sixbar.motion.json')).default as unknown as MotionSpec,
+  }),
   fourbar: async () => ({
     build: (await import('../../../data/builds/fourbar.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/fourbar.motion.json')).default as unknown as MotionSpec,
