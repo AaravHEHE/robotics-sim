@@ -6,13 +6,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { FieldDef } from '../sim/field.ts';
-import { isPneumatic, type RobotProfile } from '../sim/profile.ts';
+import { isPneumatic, type LiftSpec, type MechanismSpec, type RobotProfile } from '../sim/profile.ts';
 import { PhysicsOverlay, readoutText } from './physics-overlay.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
 import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
 import { ManipulatorVisuals } from './manipulator-meshes.ts';
+import { loadCadBody, type CadBody } from './parts/cad-body.ts';
+import { liftOffset } from '../sim/lift.ts';
 import { buildBoxRobot, type MechVisual } from './robot-meshes.ts';
 import { drawTape, shared, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
@@ -87,6 +89,8 @@ export class FieldViewer {
   private robotLoad = 0;
   /** Game manipulators and the pieces they hold. */
   private manipVis: ManipulatorVisuals | null = null;
+  /** The robot's body when it is drawn from a CAD build (see RobotProfile.cad). */
+  private cadBody: CadBody | null = null;
   private lastGameState: OverrideState | null = null;
   private profile: RobotProfile | null = null;
   private field: FieldDef | null = null;
@@ -460,6 +464,8 @@ export class FieldViewer {
     // two quick robot changes: only the last one may build the robot
     const token = ++this.robotLoad;
     const body = glb ? await this.loadModel(profile, glb).catch(() => null) : null;
+    // a robot with a CAD build and no model of its own is drawn from the build
+    const cad = !body && profile.cad ? await loadCadBody(profile.cad.build).catch(() => null) : null;
     if (token !== this.robotLoad) {
       if (body) clearGroup(body);
       return;
@@ -468,8 +474,10 @@ export class FieldViewer {
     clearGroup(this.robotGroup);
     clearGroup(this.ghost);
     this.mechs = (body?.userData.mechs as MechVisual[] | undefined) ?? [];
-    this.robotGroup.add(body ?? this.boxRobot(profile));
-    this.manipVis = new ManipulatorVisuals(profile, this.robotGroup, !body);
+    this.cadBody = cad;
+    this.robotGroup.add(body ?? cad?.group ?? this.boxRobot(profile));
+    this.manipVis = new ManipulatorVisuals(profile, this.robotGroup, !body && !cad);
+    this.poseCad(() => 0);
     this.manipVis.setHeld(this.lastGameState);
     this.manipVis.update(() => 0);
     // ghost (start pose marker)
@@ -484,6 +492,18 @@ export class FieldViewer {
     this.ghost.add(outline, arrow);
     this.ghost.visible = false;
     this.needsRender = true;
+  }
+
+  /** Move a CAD body with its lift: `read` gives a mechanism's output (degrees, or the spool turn of a slide). */
+  private poseCad(read: (m: MechanismSpec) => number): void {
+    const cad = this.cadBody;
+    const ref = this.profile?.cad;
+    if (!cad || !cad.animated || !ref?.lift) return;
+    const lift = this.profile?.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === ref.lift);
+    if (!lift) return;
+    const v = read(lift);
+    // arms and bars turn by the output; slides rise by what the spool lets out
+    cad.setOut(lift.lift === 'cascade' || lift.lift === 'piston' ? liftOffset(lift, v).dz : v);
   }
 
   private boxRobot(p: RobotProfile): THREE.Group {
@@ -543,6 +563,7 @@ export class FieldViewer {
     this.physics.setRecording(rec, this.profile);
     // back to the rest pose: a cleared run must not leave its end-of-run lift and claw on the robot
     this.manipVis?.update(() => 0);
+    this.poseCad(() => 0);
     clearGroup(this.othersGroup);
     this.otherBoxes = [];
     for (const o of rec?.others ?? []) {
@@ -615,6 +636,10 @@ export class FieldViewer {
         m.object.rotation.copy(m.base.rotation);
         m.object.rotateX(-v * DEG);
       }
+    });
+    this.poseCad((m) => {
+      const k = 6 + (this.profile?.mechanisms.indexOf(m) ?? -1);
+      return k < 6 ? 0 : lerp(k);
     });
     // the game state first: what each mechanism holds, then where it is
     this.showGameAt(t);

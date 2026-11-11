@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "id": "override-ace",
+  "cad": { "build": "cascade", "lift": "Cascade" },
   "name": "Override: ACE (cascade + chain bar + lobster claw)",
   "description": "Modelled on ACE's robot. A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a chain bar (port 9, green, 1:3) whose \"lobster claw\" (ADI A: a bent shaft that clamps a Cup at its waist, with the Pin inside) stays level as it swings from the front over the top to the back. No intake: it clamps upright stacks and loaded stacks straight off the floor or out of a Loader. Passive one-way \"finger\" Toggle mech on the front, and anti-tip wedges. Starts holding the Preload.",
   "size": {

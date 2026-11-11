@@ -25,7 +25,14 @@
       "description": "Optional physical details; defaults are in src/sim/dynamics-spec.ts",
       "additionalProperties": false,
       "properties": {
-        "model": { "enum": ["idealized", "full"], "description": "full: motor, battery, grip and body dynamics; idealized: the fixed maxAccel limit" },
+        "cad": {
+      "type": "object",
+      "description": "Draw the robot from a CAD build (cosmetic only). lift names the lift mechanism that moves it.",
+      "required": ["build"],
+      "properties": { "build": { "type": "string" }, "lift": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "model": { "enum": ["idealized", "full"], "description": "full: motor, battery, grip and body dynamics; idealized: the fixed maxAccel limit" },
         "centerOfMass": {
           "type": "object",
           "additionalProperties": false,

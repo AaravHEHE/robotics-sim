@@ -146,6 +146,16 @@ model is scaled to fit the profile's footprint unless you set `model.scale`. Rot
 with `model.rotationDeg` if its front doesn't face forward, and shift it with
 `model.offset`. The model never changes the physics.
 
+### Drawing the robot from a CAD build
+
+A profile can name a CAD build instead of an imported model: `"cad": { "build": "cascade", "lift": "Cascade" }`. The
+build (one of `data/builds`, made from an Onshape CAD: [onshape-import.md](onshape-import.md)) is drawn as the robot's
+body and moves with the named lift mechanism (arms and bars by their output angle, a cascade by the rise its spool lets
+out). It is cosmetic like every model: size, speeds, lifts and claws still come from the profile, held pieces are still
+drawn at the profile's claw, and a model of your own (`model`) takes priority. A build without a motion spec (the
+DR4B, DR6B and 6-bar so far) is drawn still. Builds the app has: `cascade`, `continuous`, `dr4b`, `dr6b`, `sixbar`,
+`fourbar`, `twobar`. The presets Claw Gate and ACE use `cascade`; the 8059A-style DR4B preset uses `dr4b`.
+
 ## A second robot on the field
 
 A field's `objects` list may hold a robot nobody programs: give an object a box `shape` (its footprint and start pose: `x`, `y`, `width`, `length`, `heading`) and a `robot` entry. It is not a wall: it has mass, slides to a stop on the tiles, spins when hit off-center, stays inside the walls, and the robot you run pushes it and is held back by it.

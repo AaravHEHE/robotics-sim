@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "id": "override-dr4b-intake",
+  "cad": { "build": "dr4b", "lift": "DR4B" },
   "name": "Override: DR4B + intake chamber (8059A-style)",
   "description": "Modelled on 8059A. A 3-stage 600 rpm front intake (port 10) carries pieces over the robot into a chamber on a standoff-linkage DR4B at the back (ports 7 and 8, red, 12:84: 14 rpm, motors low). A piston clamp (ADI A) holds them; the chamber floor lets the Pin drop onto a Goal behind the robot. 360 rpm traction drive. Passive rubber-band toggler on the front: driven into a Toggle fast, it turns it two faces. The Preload starts in the chamber. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking down into the chamber (port 9) for Skills.",
   "size": {

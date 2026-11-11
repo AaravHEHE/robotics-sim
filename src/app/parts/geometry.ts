@@ -430,13 +430,19 @@ export function centeredPart(def: PartDef, p: Pick<Placed, 'length' | 'cartridge
   return outer;
 }
 
-/** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
-export function partObject(def: PartDef, p: Placed): THREE.Object3D {
-  const o = partShape(def, p);
+/** Put an already built part at where `p` places it (the part's own shape is kept). */
+export function placeObject(o: THREE.Object3D, def: PartDef, p: Placed): void {
   const R = rotationOf(p);
   const { offset } = placement(def, p);
   o.matrixAutoUpdate = false;
   o.matrix.set(R[0], R[1], R[2], offset[0], R[3], R[4], R[5], offset[1], R[6], R[7], R[8], offset[2], 0, 0, 0, 1);
+  o.matrixWorldNeedsUpdate = true;
   o.userData.part = p;
+}
+
+/** A placed part, positioned and rotated in the robot frame (x right, y forward, z up). */
+export function partObject(def: PartDef, p: Placed): THREE.Object3D {
+  const o = partShape(def, p);
+  placeObject(o, def, p);
   return o;
 }

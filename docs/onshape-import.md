@@ -96,13 +96,20 @@ so each lift's moving parts are chosen from the CAD's geometry by a rule in `scr
 `tests/build-motion.test.ts` checks the kinematics (arm turn, coupler level and on the right circle, stage ratios, in-turn
 rise, rest pose unchanged).
 
+## In the app
+
+`RobotProfile.cad` (see [robot-profile.md](robot-profile.md)) draws a robot from a build; the viewer poses it from the
+named lift each frame (`src/app/parts/cad-body.ts`, `Viewer.poseCad`). Claw Gate and ACE use the cascade build and the
+8059A-style DR4B preset uses the DR4B build; checked in the running app (the cascade robot is drawn on the field).
+
 ## Not done yet
 
 - **Motion for the 6-bar, DR4B and DR6B.** Their links cross and share joints (the DR4B has eight 14 in links in X
   pairs between a rear tower and a front carriage), and a rule that assigns them without the CAD's mates needs more
   analysis and renders than was done. The builds are static poses for now.
-- Nothing draws a build as a robot in the app: the poses are made by `poseBuild`, but no viewer or preset calls it
-  yet, and the sim's lift state is not connected to a build.
+- Lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`) have no chassis, so no preset uses them as a robot's body; they
+  are in the app's build list for a profile that wants one. Whole-robot builds fit the presets only loosely (the CAD's
+  size and claw are not the profile's), so the profile's numbers were not changed.
 - The custom boxes are boxes, not the real shapes (the intake ramps show as blocks).
 - The sim still has all its other presets, and no "only the seven lift types" cut has been made.
 - Pin physics was not changed.

@@ -266,6 +266,12 @@ export interface RobotProfile {
     offset?: [number, number, number];
     rotationDeg?: number;
   };
+  /**
+   * Draw the robot from a CAD build (data/builds, see docs/onshape-import.md) instead of from
+   * the profile. Cosmetic only: size, lifts and claws still come from this profile. `lift` names
+   * the lift mechanism that moves the build (a build without a motion spec stays still).
+   */
+  cad?: { build: string; lift?: string };
 }
 
 /** Theoretical top speed in in/s. */
@@ -283,6 +289,10 @@ export function validateProfile(p: unknown): string[] {
   if (!r || typeof r !== 'object') return ['Profile must be a JSON object.'];
   if (r.schema !== 1) e.push('schema must be 1.');
   if (!r.id || typeof r.id !== 'string') e.push('id is required.');
+  if (r.cad !== undefined) {
+    if (!r.cad || typeof r.cad.build !== 'string' || !r.cad.build) e.push('cad.build must be the name of a CAD build.');
+    else if (r.cad.lift !== undefined && !(Array.isArray(r.mechanisms) && r.mechanisms.some((m) => m.kind === 'lift' && m.name === r.cad!.lift))) e.push(`cad.lift "${String(r.cad.lift)}" is not a lift mechanism of this robot.`);
+  }
   if (!r.name || typeof r.name !== 'string') e.push('name is required.');
   if (!r.size || !isNum(r.size.width, 1, 36) || !isNum(r.size.length, 1, 36) || !isNum(r.size.height, 1, 36)) {
     e.push('size.width / length / height must be numbers in inches (1-36).');
