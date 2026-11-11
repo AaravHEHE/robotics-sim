@@ -6,9 +6,9 @@ The numbers every later physics phase is compared against. A phase that moves on
 
 | Sample | Red | Blue |
 |---|---|---|
-| override-flex | 35 | 0 |
+| override-twobar | 35 | 0 |
 | override-banshee, -ace, -claw-gate, -dr4b-intake | 55 | 0 |
-| override-sixbar-wrist, -workhorse-toggle | 45 | 0 |
+| override-sixbar, -workhorse-toggle | 45 | 0 |
 | override-toggle-bot | 40 | 0 |
 | override-midfield-pusher | 8 | 0 |
 | override-skills | 48 | 0 |

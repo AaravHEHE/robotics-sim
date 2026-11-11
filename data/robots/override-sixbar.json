@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "id": "override-sixbar-wrist",
+  "id": "override-sixbar",
   "name": "Override: 6-bar + wrist claw",
-  "description": "A 6-bar (port 7, 1:5) with a pneumatic claw (ADI A) on a motorized wrist (port 8, 1:2) that turns the held stack end over end past 90 degrees. Starts holding the Preload yellow end down.",
+  "description": "Six-bar robot, drawn from a public Team A six-bar CAD. A 6-bar (port 7, 1:5) with a pneumatic claw (ADI A) on a motorized wrist (port 8, 1:2) that turns the held stack end over end past 90 degrees. Starts holding the Preload yellow end down.",
   "size": {
     "width": 15,
     "length": 15,
@@ -11,8 +11,16 @@
   "mass": 15,
   "drivetrain": {
     "type": "tank",
-    "left": [-1, -2, -3],
-    "right": [4, 5, 6],
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
     "cartridge": "blue",
     "wheelDiameter": 3.25,
     "wheelRpm": 450,
@@ -48,9 +56,14 @@
       "kind": "lift",
       "name": "Six-bar",
       "lift": "sixbar",
-      "motors": [7],
+      "motors": [
+        7
+      ],
       "ratio": 0.2,
-      "range": [0, 110],
+      "range": [
+        0,
+        110
+      ],
       "home": {
         "y": 10,
         "z": 3
@@ -70,9 +83,19 @@
       "kind": "wrist",
       "name": "Wrist",
       "claw": "Claw",
-      "motors": [8],
+      "motors": [
+        8
+      ],
       "ratio": 0.5,
-      "range": [0, 180]
+      "range": [
+        0,
+        180
+      ]
     }
-  ]
+  ],
+  "cad": {
+    "build": "sixbar",
+    "lift": "Six-bar",
+    "claw": "Claw"
+  }
 }

@@ -23,7 +23,7 @@ async function run(id: string, ms: number, target?: number) {
 
 describe('drive dynamics', () => {
   it('reaches top speed, going straight, in a believable time', async () => {
-    for (const id of ['tank-6m-450', 'override-banshee', 'override-dr4b-intake']) {
+    for (const id of ['tank-6m-450', 'override-banshee', 'override-dr4b']) {
       const r = await run(id, 3000);
       expect(r.vL / r.top, id).toBeGreaterThan(0.98);
       expect(Math.abs(r.vL - r.vR)).toBeLessThan(1e-6);

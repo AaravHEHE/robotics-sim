@@ -123,7 +123,7 @@ function stackHits(boxes: Box[], bottoms: THREE.Vector3[], skip: (b: Box) => boo
   return hits;
 }
 
-const IDS = ['override-banshee', 'override-claw-gate', 'override-dr4b-intake'];
+const IDS = ['override-banshee', 'override-cascade', 'override-dr4b'];
 
 describe('intakes and claws clear the robot', () => {
   for (const id of IDS) {

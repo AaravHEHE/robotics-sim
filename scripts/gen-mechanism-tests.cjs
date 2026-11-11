@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const mainH = fs.readFileSync('samples/override-flex/include/main.h', 'utf8');
+const mainH = fs.readFileSync('samples/override-twobar/include/main.h', 'utf8');
 
 const header = (name, intro) => `#include "main.h"
 
@@ -143,8 +143,8 @@ const liftTest = (label, motor, ratio, targets, tol = 3) => `  printf("-- ${labe
   }`;
 
 const robots = {
-  'test-flex': {
-    robot: 'override-flex',
+  'test-twobar': {
+    robot: 'override-twobar',
     name: 'Override: Flex (Hero Bot) arm + claw',
     intro: ': the arm to three heights, then the claw lets go of the Preload and picks it up again',
     devices: `pros::MotorGroup leftDrive({-1}, pros::MotorGears::green, pros::MotorUnits::degrees);
@@ -212,8 +212,8 @@ void mechanismTest() {
   intake.brake();
 }`,
   },
-  'test-dr4b-intake': {
-    robot: 'override-dr4b-intake',
+  'test-dr4b': {
+    robot: 'override-dr4b',
     name: 'Override: DR4B + intake chamber (8059A-style)',
     intro: ': the GPS and chamber sensor are read, the DR4B lifts the Preload to three heights, the clamp lets go and grabs again, and the intake spins both ways',
     devices: `pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
@@ -252,8 +252,8 @@ ${liftTest('DR4B (12:84)', 'lift', 7, [30, 60, 90, 0])}
   intake.brake();
 }`,
   },
-  'test-claw-gate': {
-    robot: 'override-claw-gate',
+  'test-cascade': {
+    robot: 'override-cascade',
     name: 'Override: Claw Gate (cascade + chain-bar claw + intake)',
     intro: ': the cascade to three heights, the chain bar over the top and back, the claw drops and re-grabs the Preload, and the intake spins',
     devices: `${blueDrive}
@@ -330,8 +330,8 @@ pros::adi::Pneumatics claw('A', true);  // extended = closed (on the Preload)`,
   settle(chainBar, 0, 9);
 }`,
   },
-  'test-sixbar-wrist': {
-    robot: 'override-sixbar-wrist',
+  'test-sixbar': {
+    robot: 'override-sixbar',
     name: 'Override: 6-bar + wrist + claw',
     intro: ': the 6-bar to three heights, the wrist turns the Preload over and back, and the claw drops and re-grabs it',
     devices: `${blueDrive}
@@ -359,7 +359,7 @@ ${liftTest('6-bar (1:5)', 'lift', 5, [30, 60, 90, 0])}
 }`,
   },
   'test-workhorse': {
-    robot: 'override-fourbar-claw',
+    robot: 'override-fourbar',
     name: 'Override: 4-bar + rear piston claw + front Toggle bumper',
     intro: ': the rear 4-bar to three heights, and the rear claw drops and re-grabs the Preload behind the robot',
     devices: `${blueDrive}

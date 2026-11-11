@@ -134,7 +134,7 @@ const R2 = { x: -23.547, y: -47.091 }; // red alliance Goal, 3.25" tall
 describe('nothing phases through anything', () => {
   it('a Pin held out in front pushes a standing stack instead of passing through it', async () => {
     // the 6-bar's claw is 10" ahead (outside the 15" frame), holding the Preload on the tiles
-    const s = await onField('override-sixbar-wrist', { x: -23.548, y: -40, theta: 0 });
+    const s = await onField('override-sixbar', { x: -23.548, y: -40, theta: 0 });
     const stack = s.game.state.floor.find((st) => Math.hypot(st.x + 23.548, st.y + 23.548) < 0.1)!;
     s.world.adiOut.set('A', true);
     s.drive(60);
@@ -145,7 +145,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('a Pin carried below a Goal top runs into the Goal, and opening the claw there does not score it', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    const s = await onField('override-sixbar', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.world.adiOut.set('A', true);
     s.drive(60);
     s.run(900);
@@ -158,7 +158,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('lifted over the Goal top, the same Pin goes over it and in', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    const s = await onField('override-sixbar', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.world.adiOut.set('A', true);
     s.sixBar(16); // the Pin's bottom 3.6" up, over the 3.25" Goal
     s.run(300);
@@ -171,7 +171,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('pieces on a Goal are solid: a Pin carried below a Placed Pin runs into it', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    const s = await onField('override-sixbar', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.game.state.goals.R2.push({ kind: 'pin', id: 'placed', colors: ['red', 'yellow'] });
     s.game.changed();
     s.world.adiOut.set('A', true);
@@ -185,7 +185,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('a lift lowering a held Pin off-centre onto a Goal stops on the Goal top', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x + 1, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    const s = await onField('override-sixbar', { x: R2.x + 1, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.world.adiOut.set('A', true);
     s.sixBar(16); // carried over the Goal top
     s.run(300);
@@ -200,7 +200,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('centred on the Goal, a lowered Pin slides into the socket until the claw meets the Goal top', async () => {
-    const s = await onField('override-sixbar-wrist', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
+    const s = await onField('override-sixbar', { x: R2.x, y: -62, theta: 0 }, { x: R2.x, y: -62, r: 12 });
     s.world.adiOut.set('A', true);
     s.sixBar(16);
     s.run(300);
@@ -226,7 +226,7 @@ describe('nothing phases through anything', () => {
 
   it('a lift lowering a held Pin onto a floor stack stops on top of it', async () => {
     // the clear-up Cup holding a yellow Pin at (-23.548, -23.548): a Pin can't go on a Pin
-    const s = await onField('override-sixbar-wrist', { x: -23.548, y: -45, theta: 0 });
+    const s = await onField('override-sixbar', { x: -23.548, y: -45, theta: 0 });
     const stack = s.game.state.floor.find((st) => Math.hypot(st.x + 23.548, st.y + 23.548) < 0.1)!;
     const top = stackTop(stack.pieces, 0, false);
     s.world.adiOut.set('A', true);
@@ -253,7 +253,7 @@ describe('nothing phases through anything', () => {
   });
 
   it('a robot whose rear claw would hold the Preload through the wall starts far enough in', async () => {
-    const s = await onField('override-fourbar-claw', { x: -60.705, y: -37, theta: 90 });
+    const s = await onField('override-fourbar', { x: -60.705, y: -37, theta: 90 });
     expect(s.world.pose.x).toBeCloseTo(-57.62, 1);
     expect(s.game.notes.some((n) => n.includes('through the perimeter wall'))).toBe(true);
     s.world.adiOut.set('A', true);

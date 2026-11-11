@@ -139,7 +139,7 @@ describe('the Override field with a second robot', () => {
     const { runProgram } = await import('../src/sim/runtime.ts');
     const path = await import('node:path');
     const f = JSON.parse(await readFile('data/fields/override-partner.json', 'utf8')) as FieldDef;
-    const meta = SAMPLES.find((s) => s.id === 'override-midfield-pusher')!;
+    const meta = SAMPLES.find((s) => s.id === 'override-twobar')!;
     const b = await build(await readProjectDir(path.join(repoRoot, 'samples', meta.id)));
     expect(b.ok).toBe(true);
     const profile = await robot(meta.robot);

@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "id": "override-dr4b",
+  "cad": {
+    "build": "dr4b",
+    "lift": "DR4B",
+    "claw": "Chamber"
+  },
+  "name": "Override: DR4B + intake chamber (8059A-style)",
+  "description": "Double reverse four-bar robot, drawn from a public DR4B CAD with a lobster claw. Modelled on 8059A. A 3-stage 600 rpm front intake (port 10) carries pieces over the robot into a chamber on a standoff-linkage DR4B at the back (ports 7 and 8, red, 12:84: 14 rpm, motors low). A piston clamp (ADI A) holds them; the chamber floor lets the Pin drop onto a Goal behind the robot. 360 rpm traction drive. Passive rubber-band toggler on the front: driven into a Toggle fast, it turns it two faces. The Preload starts in the chamber. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking down into the chamber (port 9) for Skills.",
+  "size": {
+    "width": 15,
+    "length": 15,
+    "height": 15
+  },
+  "mass": 16,
+  "drivetrain": {
+    "type": "tank",
+    "left": [
+      -1,
+      -2,
+      -3
+    ],
+    "right": [
+      4,
+      5,
+      6
+    ],
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 360,
+    "trackWidth": 11.5,
+    "maxAccel": 170
+  },
+  "devices": [
+    {
+      "type": "imu",
+      "port": 11,
+      "name": "IMU"
+    },
+    {
+      "type": "motor",
+      "port": 7,
+      "cartridge": "red",
+      "name": "DR4B L"
+    },
+    {
+      "type": "motor",
+      "port": 8,
+      "cartridge": "red",
+      "name": "DR4B R"
+    },
+    {
+      "type": "motor",
+      "port": 10,
+      "cartridge": "blue",
+      "name": "Intake"
+    },
+    {
+      "type": "adi_digital_out",
+      "port": "A",
+      "name": "Chamber clamp"
+    },
+    {
+      "type": "gps",
+      "port": 12,
+      "name": "GPS",
+      "mount": {
+        "x": 0,
+        "y": -6,
+        "heading": 180
+      }
+    },
+    {
+      "type": "optical",
+      "port": 9,
+      "name": "Chamber eye",
+      "watches": "Chamber",
+      "mount": {
+        "x": 0,
+        "y": -11,
+        "z": 9,
+        "heading": 180
+      }
+    }
+  ],
+  "mechanisms": [
+    {
+      "kind": "intake",
+      "name": "Intake",
+      "motors": [
+        10
+      ],
+      "ratio": 1,
+      "zone": {
+        "x": 0,
+        "y": 8.25,
+        "width": 8,
+        "length": 1.5
+      },
+      "into": "Chamber",
+      "transferMs": 450,
+      "rollerDiameter": 2.75
+    },
+    {
+      "kind": "lift",
+      "name": "DR4B",
+      "lift": "dr4b",
+      "motors": [
+        7,
+        8
+      ],
+      "ratio": 0.1429,
+      "range": [
+        0,
+        110
+      ],
+      "home": {
+        "y": -11,
+        "z": 2
+      },
+      "length": 10,
+      "startAngle": -45
+    },
+    {
+      "kind": "claw",
+      "name": "Chamber",
+      "lift": "DR4B",
+      "grip": "piston",
+      "adi": "A",
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Toggler",
+      "tool": "bumper",
+      "box": {
+        "x": 0,
+        "y": 7.75,
+        "width": 12,
+        "length": 0.5
+      },
+      "bottom": 11,
+      "top": 13.5
+    }
+  ]
+}

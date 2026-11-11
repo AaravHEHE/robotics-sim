@@ -12,15 +12,11 @@ import { build } from './helpers.ts';
 
 /** Score, Toggles and Pins Placed on Goals (counting the ones on the field at the start). */
 const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?: Record<string, string> }> = {
-  'override-flex': { red: 35, blue: 0, pins: 6, toggles: { red1: 'red' } },
-  'override-banshee': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'override-ace': { red: 55, blue: 0, pins: 8, toggles: { red2: 'red' } },
-  'override-claw-gate': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'override-dr4b-intake': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'override-sixbar-wrist': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
-  'override-toggle-bot': { red: 40, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
+  'override-twobar': { red: 35, blue: 0, pins: 6, toggles: { red1: 'red' } },
+  'override-cascade': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-dr4b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-sixbar': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
-  'override-midfield-pusher': { red: 8, blue: 0, pins: 0 },
   'override-skills': { red: 48, blue: 0, pins: 4, toggles: { red1: 'red', red2: 'red' } },
 };
 
@@ -53,15 +49,11 @@ describe('Override sample autons', () => {
  * pieces really moved the way the program says (its checks can't see them).
  */
 const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean }> = {
-  'test-flex': { checks: 13, holder: 'Claw', regrab: true },
-  'test-banshee': { checks: 18, holder: 'Roller claw', regrab: true },
-  'test-dr4b-intake': { checks: 18, holder: 'Chamber', regrab: true },
-  'test-claw-gate': { checks: 17, holder: 'Claw', regrab: true },
-  'test-ace': { checks: 16, holder: 'Lobster claw', regrab: true },
-  'test-sixbar-wrist': { checks: 15, holder: 'Claw', regrab: true, flips: true },
+  'test-twobar': { checks: 13, holder: 'Claw', regrab: true },
+  'test-dr4b': { checks: 18, holder: 'Chamber', regrab: true },
+  'test-cascade': { checks: 17, holder: 'Claw', regrab: true },
+  'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true },
   'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },
-  'test-toggle-bot': { checks: 14 },
-  'test-midfield-pusher': { checks: 10 },
 };
 
 describe('Override sample settings', () => {

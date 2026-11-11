@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "id": "override-claw-gate",
+  "id": "override-cascade",
   "cad": {
     "build": "cascade",
     "lift": "Cascade",
     "claw": "Claw"
   },
-  "name": "Override: Claw Gate (cascade + chain-bar claw + intake), approximate",
-  "description": "Approximates the top-ranked \"Claw Gate / Clawscade\" design from 99182E and CPSLO (no reveal of the original was found). A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
+  "name": "Override: Cascade + chain-bar claw + intake",
+  "description": "Cascade robot, drawn from a public cascade CAD with a Banshee roller claw (flex-wheel intake to the back, rollers that pivot up to drop the Pin; 2360A runs one). Physics are the Claw Gate / Clawscade approximation (no reveal of the original was found). A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
   "size": {
     "width": 15,
     "length": 15,

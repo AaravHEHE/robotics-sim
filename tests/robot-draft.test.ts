@@ -30,14 +30,14 @@ describe('robot layout editor', () => {
     const ids = handlesFor(p).map((h) => h.id);
     expect(ids).toEqual(expect.arrayContaining(['chassis-top', 'chassis-side', 'track', 'mech:Arm:home', 'mech:Arm:pivot', 'mech:Intake:rect', 'mech:Intake:handoff']));
     expect(ids.some((i) => i.startsWith('mech:Toggle bumper'))).toBe(true);
-    const dr4b = handlesFor(await robot('override-dr4b-intake')).map((h) => h.id);
+    const dr4b = handlesFor(await robot('override-dr4b')).map((h) => h.id);
     expect(dr4b).toContain('mech:DR4B:home');
     expect(dr4b).not.toContain('mech:DR4B:pivot'); // a DR4B rises straight up: no pivot to drag
     expect(dr4b.filter((i) => i.startsWith('dev:'))).toHaveLength(2); // GPS and the chamber eye
   });
 
   it('resizing the chassis edits size; the track edits trackWidth', async () => {
-    const p = await robot('override-flex');
+    const p = await robot('override-twobar');
     const hs = handlesFor(p);
     hs.find((h) => h.id === 'chassis-top')!.set(p, { u: 0, v: 0, w: 15, h: 16.5 });
     hs.find((h) => h.id === 'chassis-side')!.set(p, { u: 0, v: 7, w: 16.5, h: 14 });
@@ -47,7 +47,7 @@ describe('robot layout editor', () => {
   });
 
   it('dragging a bar lift tip keeps its pivot: the length and start angle follow', async () => {
-    for (const id of ['override-banshee', 'override-flex', 'override-sixbar-wrist', 'override-fourbar-claw', 'override-ace']) {
+    for (const id of ['override-banshee', 'override-twobar', 'override-sixbar', 'override-fourbar', 'override-ace']) {
       const p = await robot(id);
       const lift = p.mechanisms.find((m) => m.kind === 'lift' && ['arm', 'fourbar', 'sixbar', 'chainbar'].includes(m.lift)) as LiftSpec;
       const pivot = barPivot(lift);

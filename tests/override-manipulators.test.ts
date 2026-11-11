@@ -575,7 +575,7 @@ void autonomous() {
   left.brake(); right.brake();
 }
 `),
-      'override-fourbar-claw',
+      'override-fourbar',
       { field: await field(), start: { x: R1.x, y: R1.y + 16.5, theta: 0 } }, // north of R1, claw toward it
     );
     expect(rec.error).toBeNull();

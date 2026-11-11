@@ -27,7 +27,7 @@ function runUntil(w: World, done: () => boolean, maxMs = 10000): number {
 describe('presets and field', () => {
   it('all presets and the generic field validate', async () => {
     const ids = readdirSync(path.join(repoRoot, 'data/robots')).map((f) => f.replace(/\.json$/, ''));
-    expect(ids.length).toBeGreaterThanOrEqual(11);
+    expect(ids.length).toBeGreaterThanOrEqual(8);
     for (const id of ids) expect(validateProfile(await robot(id)), id).toEqual([]);
     expect(validateField(await field())).toEqual([]);
   });

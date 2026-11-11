@@ -1,5 +1,6 @@
 // Shared helpers for end-to-end tests: compile projects with the real browser
 // pipeline (running in Node) and simulate them.
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadNodeBundle, readProjectDir } from '../scripts/node-bundle.ts';
@@ -29,7 +30,10 @@ export async function fixture(name: string, edits: Record<string, (text: string)
 }
 
 export async function robot(id: string): Promise<RobotProfile> {
-  const p: RobotProfile = JSON.parse(await readFile(path.join(repoRoot, 'data/robots', id + '.json'), 'utf8'));
+  // the shipped presets, or a retired design kept as a test fixture (tests/fixtures/robots) to exercise a mechanism type
+  const shipped = path.join(repoRoot, 'data/robots', id + '.json');
+  const file = existsSync(shipped) ? shipped : path.join(repoRoot, 'tests/fixtures/robots', id + '.json');
+  const p: RobotProfile = JSON.parse(await readFile(file, 'utf8'));
   // PHYS_MODEL=idealized runs a whole suite with the old fixed-acceleration drive, to compare
   if (process.env.PHYS_MODEL === 'idealized') p.dynamics = { ...p.dynamics, model: 'idealized' };
   return p;

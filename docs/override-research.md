@@ -198,16 +198,16 @@ Pieces on the floor use deterministic 2D rigid-body physics, so robots can push 
 **Step 2.4 (manipulators)** adds the `lift`, `claw`, `intake`, `staging`, `wrist` and `toggleTool` profile mechanisms, documented in [robot-profile.md](robot-profile.md):
 - **Rules:** pickup, placement and drop rules; the Preload; and Skills Match Loads through the red Loaders.
 - **New monitors:** SG6 possession, SG9 adding to or removing from opponent Goals, and SG10 removing from neutral Goals.
-- **First preset:** `override-fourbar-claw`, the 4-bar workhorse with a Toggle bumper.
+- **First preset:** `override-fourbar`, the 4-bar workhorse with a Toggle bumper.
 
 **Step 2.5 (presets and samples)** adds one preset per archetype in `data/robots/override-*.json`, plus sample autons. Each sample opens on its own field, start position and auto-stop, and has a golden score test (`tests/override-samples.test.ts`).
 
 | Sample | Robot | Code | Mode | What it does | Red |
 |---|---|---|---|---|---|
-| `override-flex` | Flex | PROS | 15 s | Preload into R1; chassis presses the Red 1 Toggle twice | 35 |
+| `override-twobar` | Flex | PROS | 15 s | Preload into R1; chassis presses the Red 1 Toggle twice | 35 |
 | `override-dr4b` | DR4B + roller claw | LemLib | 15 s | Preload; Cup + yellow Pin stacked on it; Toggle to red | 45 |
 | `override-cascade` | Cascade + intake | LemLib | 15 s | Same, with the intake feeding the stack into the claw | 45 |
-| `override-sixbar-wrist` | 6-bar + wrist | EZ-Template | 15 s | Wrist turns the Preload red end down; Toggle to red | 35 |
+| `override-sixbar` | 6-bar + wrist | EZ-Template | 15 s | Wrist turns the Preload red end down; Toggle to red | 35 |
 | `override-toggle-bot` | Toggle bot | PROS | 15 s | Rolls both red-side Toggles red, so the yellow Pins on N_R1 and N_R2 score | 40 |
 | `override-workhorse-toggle` | 4-bar (rear claw) + front bumper | EZ-Template | 15 s | Backs the Preload into R1; backs onto a Cup + yellow Pin and stacks it on the Preload; bumper presses the Toggle to red | 45 |
 | `override-midfield-pusher` | Midfield pusher | PROS | 60 s Skills | Parks in the Midfield | 8 |

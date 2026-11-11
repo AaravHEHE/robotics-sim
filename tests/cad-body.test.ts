@@ -13,8 +13,8 @@ describe('profiles with a CAD build', () => {
   const withCad = presets.filter((p) => p.cad);
 
   it('some presets draw from a CAD, and every one is a valid profile naming a build the app has', () => {
-    expect(withCad.map((p) => p.id).sort()).toEqual(['override-ace', 'override-claw-gate', 'override-dr4b-intake']);
-    expect(presets.find((p) => p.id === 'override-dr4b-intake')!.cad!.claw).toBe('Chamber');
+    expect(withCad.map((p) => p.id).sort()).toEqual(['override-cascade', 'override-continuous', 'override-dr4b', 'override-dr6b', 'override-fourbar', 'override-sixbar', 'override-twobar']);
+    expect(presets.find((p) => p.id === 'override-dr4b')!.cad!.claw).toBe('Chamber');
     for (const p of withCad) {
       expect(validateProfile(p)).toEqual([]);
       expect(CAD_BUILD_NAMES).toContain(p.cad!.build);
@@ -88,10 +88,10 @@ describe('CadBody', () => {
   });
 
   it('a build without a motion spec stays still', async () => {
-    const sixbar = (await loadCadBody('sixbar'))!;
-    expect(sixbar.animated).toBe(false);
-    expect(sixbar.outAt(1)).toBe(0);
-    sixbar.setOut(30); // nothing to move: no error
+    const piston = (await loadCadBody('claw-piston'))!;
+    expect(piston.animated).toBe(false);
+    expect(piston.outAt(1)).toBe(0);
+    piston.setOut(30); // nothing to move: no error
   });
 
   it('the DR6B moves from its mates', async () => {

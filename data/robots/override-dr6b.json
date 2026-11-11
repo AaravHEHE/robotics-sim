@@ -1,9 +1,12 @@
 {
   "schema": 1,
-  "id": "override-dr4b-intake",
-  "cad": { "build": "dr4b", "lift": "DR4B", "claw": "Chamber" },
-  "name": "Override: DR4B + intake chamber (8059A-style)",
-  "description": "Modelled on 8059A. A 3-stage 600 rpm front intake (port 10) carries pieces over the robot into a chamber on a standoff-linkage DR4B at the back (ports 7 and 8, red, 12:84: 14 rpm, motors low). A piston clamp (ADI A) holds them; the chamber floor lets the Pin drop onto a Goal behind the robot. 360 rpm traction drive. Passive rubber-band toggler on the front: driven into a Toggle fast, it turns it two faces. The Preload starts in the chamber. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking down into the chamber (port 9) for Skills.",
+  "id": "override-dr6b",
+  "cad": {
+    "build": "dr6b",
+    "lift": "DR6B"
+  },
+  "name": "Override: DR6B + intake chamber",
+  "description": "Double reverse six-bar robot, drawn from a public DR6B CAD. Same drive, intake and chamber as the DR4B robot, with 12 in links (2 in longer: more reach). Modelled on 8059A. A 3-stage 600 rpm front intake (port 10) carries pieces over the robot into a chamber on a standoff-linkage DR4B at the back (ports 7 and 8, red, 12:84: 14 rpm, motors low). A piston clamp (ADI A) holds them; the chamber floor lets the Pin drop onto a Goal behind the robot. 360 rpm traction drive. Passive rubber-band toggler on the front: driven into a Toggle fast, it turns it two faces. The Preload starts in the chamber. A GPS (port 12, 6\" behind center, facing backward) and an optical sensor looking down into the chamber (port 9) for Skills.",
   "size": {
     "width": 15,
     "length": 15,
@@ -38,13 +41,13 @@
       "type": "motor",
       "port": 7,
       "cartridge": "red",
-      "name": "DR4B L"
+      "name": "DR6B L"
     },
     {
       "type": "motor",
       "port": 8,
       "cartridge": "red",
-      "name": "DR4B R"
+      "name": "DR6B R"
     },
     {
       "type": "motor",
@@ -100,7 +103,7 @@
     },
     {
       "kind": "lift",
-      "name": "DR4B",
+      "name": "DR6B",
       "lift": "dr4b",
       "motors": [
         7,
@@ -115,13 +118,13 @@
         "y": -11,
         "z": 2
       },
-      "length": 10,
+      "length": 12,
       "startAngle": -45
     },
     {
       "kind": "claw",
       "name": "Chamber",
-      "lift": "DR4B",
+      "lift": "DR6B",
       "grip": "piston",
       "adi": "A",
       "preload": "alliance-down"

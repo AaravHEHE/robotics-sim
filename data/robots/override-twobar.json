@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "id": "override-flex",
-  "name": "Override: Flex (Hero Bot) arm + claw",
-  "description": "The official Hero Bot layout: a 2-motor 200 rpm drive on 4\" omnis, a single arm (port 7, 1:5) and a motor-driven claw (port 8, closed past 60 degrees) that starts holding the Preload. 12\" tall, so its chassis reaches the Toggles.",
+  "id": "override-twobar",
+  "name": "Override: 2-bar arm + claw",
+  "description": "Two-bar (single arm) robot, drawn from the LCI two-bar CAD. The official Hero Bot layout: a 2-motor 200 rpm drive on 4\" omnis, a single arm (port 7, 1:5) and a motor-driven claw (port 8, closed past 60 degrees) that starts holding the Preload. 12\" tall, so its chassis reaches the Toggles.",
   "size": {
     "width": 14,
     "length": 14,
@@ -11,8 +11,12 @@
   "mass": 9,
   "drivetrain": {
     "type": "tank",
-    "left": [-1],
-    "right": [2],
+    "left": [
+      -1
+    ],
+    "right": [
+      2
+    ],
     "cartridge": "green",
     "wheelDiameter": 4,
     "wheelRpm": 200,
@@ -43,9 +47,14 @@
       "kind": "lift",
       "name": "Arm",
       "lift": "arm",
-      "motors": [7],
+      "motors": [
+        7
+      ],
       "ratio": 0.2,
-      "range": [0, 95],
+      "range": [
+        0,
+        95
+      ],
       "home": {
         "y": 10,
         "z": 2.5
@@ -58,11 +67,20 @@
       "name": "Claw",
       "lift": "Arm",
       "grip": "motor",
-      "motors": [8],
+      "motors": [
+        8
+      ],
       "ratio": 1,
-      "range": [0, 90],
+      "range": [
+        0,
+        90
+      ],
       "closedAt": 60,
       "preload": "alliance-down"
     }
-  ]
+  ],
+  "cad": {
+    "build": "twobar",
+    "lift": "Arm"
+  }
 }

@@ -6,7 +6,7 @@ import { field, prosProject, robot, simulate } from './helpers.ts';
 
 describe('profile validation catches what would freeze or crash a run', () => {
   const withLift = async (patch: (p: RobotProfile) => void) => {
-    const p = structuredClone(await robot('override-claw-gate'));
+    const p = structuredClone(await robot('override-cascade'));
     patch(p);
     return validateProfile(p);
   };

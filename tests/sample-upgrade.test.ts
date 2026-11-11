@@ -6,9 +6,9 @@ import { repoRoot } from '../scripts/node-toolchain.ts';
 import history from '../src/app/sample-history.json';
 import { isOlderCopy, type SampleHistory } from '../src/app/sample-upgrade.ts';
 
-const file = 'samples/override-ace/src/main.cpp';
+const file = 'samples/override-skills/src/main.cpp';
 const current = { 'src/main.cpp': readFileSync(path.join(repoRoot, file), 'utf8') };
-const h = (history as SampleHistory)['override-ace'];
+const h = (history as SampleHistory)['override-skills'];
 // the versions of the sample in git history (a shallow checkout, as in CI, has only the last)
 const commits = execFileSync('git', ['log', '--format=%H', '--', file], { cwd: repoRoot, encoding: 'utf8' }).trim().split('\n');
 

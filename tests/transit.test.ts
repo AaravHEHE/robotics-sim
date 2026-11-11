@@ -21,7 +21,7 @@ describe('animated transit (viewer)', () => {
   const pose = { x: -55.5, y: -58.6, theta: 270 };
 
   it('a piece rides through the intake: up from the floor, over the deck, into the chamber on the rear DR4B', async () => {
-    const r = await robot('override-dr4b-intake');
+    const r = await robot('override-dr4b');
     const vis = new ManipulatorVisuals(r, new THREE.Group(), true);
     const st = emptyState();
     st.held = { Intake: [{ kind: 'cup', id: 'c1', up: 'clear' }], Chamber: [] };
@@ -42,7 +42,7 @@ describe('animated transit (viewer)', () => {
   });
 
   it('a lying Pin is turned upright as the intake takes it', async () => {
-    const r = await robot('override-claw-gate');
+    const r = await robot('override-cascade');
     const vis = new ManipulatorVisuals(r, new THREE.Group(), true);
     const st = emptyState();
     st.held = { Intake: [{ kind: 'pin', id: 'p1', colors: ['red', 'yellow'] }], Claw: [] };
@@ -57,7 +57,7 @@ describe('animated transit (viewer)', () => {
   });
 
   it('a claw draws in what it closes on', async () => {
-    const r = await robot('override-fourbar-claw');
+    const r = await robot('override-fourbar');
     const vis = new ManipulatorVisuals(r, new THREE.Group(), true);
     const st = emptyState();
     st.held = { Claw: [{ kind: 'cup', id: 'c', up: 'clear' }] };
@@ -75,7 +75,7 @@ describe('animated transit (viewer)', () => {
 describe('transit records (simulator)', () => {
   it('intake pickups record their ride; drops record their fall', async () => {
     const f = await field();
-    const r = await robot('override-claw-gate');
+    const r = await robot('override-cascade');
     // no Preload: one standing in the claw is out in front of the intake and pushes the stack away
     for (const m of r.mechanisms) if (m.kind === 'claw') delete m.preload;
     const world = new World(r, f, { x: -23.548, y: -40, theta: 0 });
@@ -93,7 +93,7 @@ describe('transit records (simulator)', () => {
     const intake = r.mechanisms.find((m): m is IntakeSpec => m.kind === 'intake')!;
     expect(picked!.t1 - picked!.t0).toBe(intake.transferMs ?? 300);
     // the Preload, let go 5" up away from any Goal, falls for sqrt(2 * 5 / 386) s
-    const drop = await robot('override-fourbar-claw');
+    const drop = await robot('override-fourbar');
     const w2 = new World(drop, f, { x: -30, y: -50, theta: 90 });
     w2.adiOut.set('A', true);
     const g2 = await OverrideGame.create(f, 'h2h', w2);

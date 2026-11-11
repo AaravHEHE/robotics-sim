@@ -98,7 +98,7 @@ Read through the built-in browser (not downloaded). Anything marked "not downloa
 | V5 Smart Motor (11 W) size | `scripts/gen-vex-parts.ts` (`v5-motor`) | 2.5 × 2.25 × 1.25 in | 2.82 × 2.26 × 1.30 in (length along the output shaft, then width, then height) | Applied; visual tests pass |
 | V5 Robot Battery size | `scripts/gen-vex-parts.ts` (`v5-battery`) | 4.9 × 2.5 × 1.6 in | 6.31 × 1.82 × 1.18 in (KB) | Applied. The battery straps in `src/app/robot-meshes.ts` now sit where the thinner battery overlaps each crossbar; the fastening check passes for every robot. |
 | 5.5 W motor size | `scripts/gen-vex-parts.ts` (`exp-motor`) | 1.9 × 1.75 × 1.0 in | unresolved (the KB 5.5 W article gives the 11 W body size) | **Not applied**: needs checking against the physical 5.5 W motor. |
-| Flex Hero Bot preset | `data/robots/override-flex.json` | 1 motor per side, 4 in wheels, green cartridge, 200 rpm, 9 lb, 14 × 14 × 12 in | Official BOM: 4 V5 Smart Motors; drive wheel candidates are 2.75 in anti-static traction (×4). Which motors drive which wheels needs the build steps (the PDF). | **Not applied**: needs the PDF (see above) |
+| Flex Hero Bot preset | `data/robots/override-twobar.json` | 1 motor per side, 4 in wheels, green cartridge, 200 rpm, 9 lb, 14 × 14 × 12 in | Official BOM: 4 V5 Smart Motors; drive wheel candidates are 2.75 in anti-static traction (×4). Which motors drive which wheels needs the build steps (the PDF). | **Not applied**: needs the PDF (see above) |
 
 ## Flex build PDF (VEX, 2026-27 Hero Bot): read from the user's copy
 
@@ -112,7 +112,7 @@ What the PDF shows:
 - **Lift:** a chain-and-sprocket lift with red gears (pages 121–140). Not part of the drive.
 - **Sprockets in the BOM:** 30T ×2, 24T ×1, 16T ×1, 6T ×2, plus 123 chain links. The ratio from motor to wheel depends on which sprocket is on the motor and which on the wheels. Not read from the images.
 
-What this means for the preset (`data/robots/override-flex.json`): the motor count (one per side) is consistent with the PDF. The wheel size (4 in for all drive wheels) and the gearing (green cartridge, 200 rpm wheel speed) are not confirmed. The BOM suggests the drive wheels are a mix of 2.75 in traction and 4 in omni, and the chain ratio is unknown. **Not changed**: the gearing needs the sprocket order, which is in the build steps around pages 92–110 at full resolution.
+What this means for the preset (`data/robots/override-twobar.json`): the motor count (one per side) is consistent with the PDF. The wheel size (4 in for all drive wheels) and the gearing (green cartridge, 200 rpm wheel speed) are not confirmed. The BOM suggests the drive wheels are a mix of 2.75 in traction and 4 in omni, and the chain ratio is unknown. **Not changed**: the gearing needs the sprocket order, which is in the build steps around pages 92–110 at full resolution.
 
 ## Cornfield Clash Jr. footage (2026-11-07)
 
