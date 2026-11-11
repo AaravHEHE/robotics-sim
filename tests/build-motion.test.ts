@@ -10,7 +10,7 @@ const spec = (n: string) => JSON.parse(readFileSync(`data/builds/${n}.motion.jso
 const group = (s: MotionSpec, name: string) => s.groups.find((g) => g.name === name)!;
 const center = (a: Assembly, i: number) => a.parts[i].xf!.c;
 
-describe.each(['fourbar', 'twobar', 'cascade', 'continuous'])('%s motion', (name) => {
+describe.each(['fourbar', 'twobar', 'cascade', 'continuous', 'dr4b'])('%s motion', (name) => {
   it('is a valid spec for its build', () => {
     expect(validateMotion(spec(name), asm(name))).toEqual([]);
   });
@@ -88,5 +88,35 @@ describe('slide lifts', () => {
     expect(profileAt([[0, 0], [10, 4]], 5)).toBe(2);
     expect(profileAt([[0, 0], [10, 4]], 20)).toBe(4);
     expect(profileAt([[0, 0], [10, 4]], -3)).toBe(0);
+  });
+});
+
+describe('DR4B', () => {
+  const a = asm('dr4b');
+  const s = spec('dr4b');
+  const links = s.groups.filter((g) => g.name.startsWith('link'));
+
+  it('has eight links, each turning about its rear end by the lift output', () => {
+    expect(links.length).toBe(8);
+    const up = poseBuild(a, s, 20);
+    for (const g of links) {
+      const j = g.joint as Extract<typeof g.joint, { type: 'revolute' }>;
+      const i = g.parts[0];
+      const [y, z] = turnYZ(center(a, i)[1], center(a, i)[2], j.pivot[0], j.pivot[1], -20);
+      expect(center(up, i)[1]).toBeCloseTo(y, 6);
+      expect(center(up, i)[2]).toBeCloseTo(z, 6);
+    }
+  });
+
+  it('keeps the mid platform and the carriage level, each riding the front end of its link set', () => {
+    const up = poseBuild(a, s, 20);
+    for (const name of ['mid platform', 'carriage']) {
+      const g = group(s, name);
+      for (const i of g.parts) expect(up.parts[i].xf!.r).toEqual(a.parts[i].xf!.r);
+      expect(g.parts.length).toBeGreaterThan(3);
+    }
+    // the platform rises with the lower set, which flattens: it goes up
+    const platform = group(s, 'mid platform').parts[0];
+    expect(center(up, platform)[2]).toBeGreaterThan(center(a, platform)[2]);
   });
 });

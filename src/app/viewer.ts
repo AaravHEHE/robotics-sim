@@ -14,7 +14,6 @@ import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
 import { ManipulatorVisuals } from './manipulator-meshes.ts';
 import { loadCadBody, type CadBody } from './parts/cad-body.ts';
-import { liftOffset } from '../sim/lift.ts';
 import { buildBoxRobot, type MechVisual } from './robot-meshes.ts';
 import { drawTape, shared, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
@@ -501,9 +500,9 @@ export class FieldViewer {
     if (!cad || !cad.animated || !ref?.lift) return;
     const lift = this.profile?.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === ref.lift);
     if (!lift) return;
-    const v = read(lift);
-    // arms and bars turn by the output; slides rise by what the spool lets out
-    cad.setOut(lift.lift === 'cascade' || lift.lift === 'piston' ? liftOffset(lift, v).dz : v);
+    // the lift's whole range is the build's whole travel: a quarter of the way up the lift is a quarter of the way up the build
+    const [lo, hi] = lift.range ?? [0, 1];
+    cad.setOut(cad.outAt(hi > lo ? (read(lift) - lo) / (hi - lo) : 0));
   }
 
   private boxRobot(p: RobotProfile): THREE.Group {

@@ -51,8 +51,24 @@ describe('CadBody', () => {
     cascade.setOut(0);
     parts.forEach((o, i) => o.matrix.elements.forEach((v, k) => expect(v).toBeCloseTo(before[i][k], 6)));
 
+    expect(cascade.outAt(0)).toBe(0);
+    expect(cascade.outAt(1)).toBe(6);
+    expect(cascade.outAt(2)).toBe(6); // clamped
+  });
+
+  it('the DR4B body moves too, its links turning and its carriage rising', async () => {
     const dr4b = (await loadCadBody('dr4b'))!;
-    expect(dr4b.animated).toBe(false);
-    dr4b.setOut(30); // nothing to move: no error
+    expect(dr4b.animated).toBe(true);
+    const parts = dr4b.group.children[0].children;
+    const before = parts.map((o) => o.matrix.elements.slice());
+    dr4b.setOut(dr4b.outAt(0.8));
+    expect(parts.filter((o, i) => o.matrix.elements.some((v, k) => Math.abs(v - before[i][k]) > 1e-6)).length).toBeGreaterThan(100);
+  });
+
+  it('a build without a motion spec stays still', async () => {
+    const dr6b = (await loadCadBody('dr6b'))!;
+    expect(dr6b.animated).toBe(false);
+    expect(dr6b.outAt(1)).toBe(0);
+    dr6b.setOut(30); // nothing to move: no error
   });
 });

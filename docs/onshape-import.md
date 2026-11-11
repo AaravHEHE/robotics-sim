@@ -92,6 +92,7 @@ so each lift's moving parts are chosen from the CAD's geometry by a rule in `scr
 | Two-bar | the hanging arm, its 84T gear and shaft hardware turn about the gear's axle | read off the gear |
 | Cascade | stages in 1 in y planes (-1.3 base, -2.2, -3.1, -3.9 carriage) rise together, stage k by k/3 of the carriage rise | nearest stage plane |
 | Continuous | stages (y 1.2 to 5.2) rise one at a time, carriage first | nearest stage plane; checked in render fully extended |
+| DR4B | 8 links turn about their rear ends (clockwise as the lift rises); a mid platform and the carriage ride the front ends of the two link sets and stay level | link endpoints read from the CAD: lower set (rear pivots high, front ends at z 3 and 5.5) carries the 6 in front uprights, upper set (rear pivots low, front ends at z 15.3 and 17.8) the 15 in uprights; checked in render at 0 and 25 degrees |
 
 `tests/build-motion.test.ts` checks the kinematics (arm turn, coupler level and on the right circle, stage ratios, in-turn
 rise, rest pose unchanged).
@@ -99,14 +100,17 @@ rise, rest pose unchanged).
 ## In the app
 
 `RobotProfile.cad` (see [robot-profile.md](robot-profile.md)) draws a robot from a build; the viewer poses it from the
-named lift each frame (`src/app/parts/cad-body.ts`, `Viewer.poseCad`). Claw Gate and ACE use the cascade build and the
+named lift each frame, mapping the lift's whole output range onto the build's whole travel (`src/app/parts/cad-body.ts`, `Viewer.poseCad`). Claw Gate and ACE use the cascade build and the
 8059A-style DR4B preset uses the DR4B build; checked in the running app (the cascade robot is drawn on the field).
 
 ## Not done yet
 
-- **Motion for the 6-bar, DR4B and DR6B.** Their links cross and share joints (the DR4B has eight 14 in links in X
-  pairs between a rear tower and a front carriage), and a rule that assigns them without the CAD's mates needs more
-  analysis and renders than was done. The builds are static poses for now.
+- **Motion for the 6-bar and DR6B.** These two CADs are in-progress prototypes whose link loops the geometry does not
+  fix. The 6-bar's lower mechanism (a tower, links at z 11.5, 15 and 8, a front upright and a mid upright) has three
+  degrees of freedom from the parts that are modelled, so any rule would be a guess; the DR6B has links of different
+  lengths (12.5, 14, 14.5) meeting the same front upright, which a rigid coupler cannot satisfy. They stay static poses.
+  Options: get the real mates (a copy of the document with export or the Onshape API), or drive a simplified link
+  animation from the simulator's own six-bar kinematics.
 - Lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`) have no chassis, so no preset uses them as a robot's body; they
   are in the app's build list for a profile that wants one. Whole-robot builds fit the presets only loosely (the CAD's
   size and claw are not the profile's), so the profile's numbers were not changed.

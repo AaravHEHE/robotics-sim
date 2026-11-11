@@ -152,8 +152,8 @@ A profile can name a CAD build instead of an imported model: `"cad": { "build": 
 build (one of `data/builds`, made from an Onshape CAD: [onshape-import.md](onshape-import.md)) is drawn as the robot's
 body and moves with the named lift mechanism (arms and bars by their output angle, a cascade by the rise its spool lets
 out). It is cosmetic like every model: size, speeds, lifts and claws still come from the profile, held pieces are still
-drawn at the profile's claw, and a model of your own (`model`) takes priority. A build without a motion spec (the
-DR4B, DR6B and 6-bar so far) is drawn still. Builds the app has: `cascade`, `continuous`, `dr4b`, `dr6b`, `sixbar`,
+drawn at the profile's claw, and a model of your own (`model`) takes priority. The lift's whole output range is the build's whole travel. A build without a motion spec (the
+DR6B and 6-bar so far) is drawn still. Builds the app has: `cascade`, `continuous`, `dr4b`, `dr6b`, `sixbar`,
 `fourbar`, `twobar`. The presets Claw Gate and ACE use `cascade`; the 8059A-style DR4B preset uses `dr4b`.
 
 ## A second robot on the field

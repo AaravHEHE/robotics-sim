@@ -17,7 +17,10 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
     build: (await import('../../../data/builds/continuous.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/continuous.motion.json')).default as unknown as MotionSpec,
   }),
-  dr4b: async () => ({ build: (await import('../../../data/builds/dr4b.fixed.build.json')).default as unknown as Assembly }),
+  dr4b: async () => ({
+    build: (await import('../../../data/builds/dr4b.fixed.build.json')).default as unknown as Assembly,
+    motion: (await import('../../../data/builds/dr4b.motion.json')).default as unknown as MotionSpec,
+  }),
   dr6b: async () => ({ build: (await import('../../../data/builds/dr6b.fixed.build.json')).default as unknown as Assembly }),
   sixbar: async () => ({ build: (await import('../../../data/builds/sixbar.fixed.build.json')).default as unknown as Assembly }),
   fourbar: async () => ({
@@ -59,6 +62,11 @@ export class CadBody {
   /** Whether the build moves at all (a build without a motion spec is a static pose). */
   get animated(): boolean {
     return this.moving.length > 0;
+  }
+
+  /** The motion output for a lift that is a fraction `t` (0..1) of the way through its range: the CAD's travel, from its rest pose. */
+  outAt(t: number): number {
+    return this.motion ? Math.max(0, Math.min(1, t)) * this.motion.out.max : 0;
   }
 
   /** Pose the build for the lift's output (degrees for arms, inches of rise for slides). */

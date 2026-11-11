@@ -14,6 +14,19 @@ import { repoRoot } from './node-toolchain.ts';
 type Rule = (asm: Assembly) => Omit<MotionSpec, 'v'>;
 const centers = (asm: Assembly) => asm.parts.map((p) => p.xf!.c);
 
+/** The two ends (y, z) of a channel or angle: its center plus and minus half its length along its axis. */
+function ends(asm: Assembly, i: number): [[number, number], [number, number]] {
+  const p = asm.parts[i];
+  const r = p.xf!.r;
+  const len = p.size ? p.size[0] : (p.length ?? 1) * 0.5;
+  const c = p.xf!.c;
+  const a = [r[0], r[3], r[6]]; // the part's length axis in the robot frame
+  return [
+    [c[1] + (a[1] * len) / 2, c[2] + (a[2] * len) / 2],
+    [c[1] - (a[1] * len) / 2, c[2] - (a[2] * len) / 2],
+  ];
+}
+
 /**
  * A slide lift: stage channels nested one inch apart in y (`planes`, from the fixed base to the
  * carriage). A part belongs to the stage whose plane it is nearest (parts well past either end of
@@ -70,6 +83,42 @@ const rules: Record<string, Rule> = {
       return i === gear || (/^(shaft|collar|spacer|screw|nut)/.test(n) && near(i));
     });
     return { lift: 'arm', out: { unit: 'deg', min: 0, max: 120 }, groups: [{ name: 'arm', parts: arm, joint: { type: 'revolute', pivot, ratio: 1 } }], notes: 'Arm hangs down at rest (out 0); out > 0 swings it forward and up.' };
+  },
+  // The DR4B: a rear tower (y 3.3) and, in front, a mid platform (the 6 in uprights at y -4.3) and the carriage (the
+  // 15 in uprights). Two sets of parallel 14 in links on each side: the lower set (rear pivots high) carries the
+  // mid platform, the upper set (rear pivots low) carries the carriage. Every link turns about its rear end
+  // (clockwise as the lift rises: the lower links flatten, the upper ones steepen) and the platform and the
+  // carriage translate with the front ends, staying level.
+  dr4b(asm) {
+    const c = centers(asm);
+    const idx = asm.parts.map((_, i) => i);
+    const isLink = (i: number) => {
+      const p = asm.parts[i];
+      if (!/^c-channel/.test(p.part) || Math.abs(p.xf!.r[0]) > 0.5) return false;
+      const az = Math.abs(p.xf!.r[6]);
+      return az > 0.15 && az < 0.95;
+    };
+    const rear = (i: number) => (ends(asm, i)[0][0] > ends(asm, i)[1][0] ? ends(asm, i)[0] : ends(asm, i)[1]);
+    const front = (i: number) => (ends(asm, i)[0][0] > ends(asm, i)[1][0] ? ends(asm, i)[1] : ends(asm, i)[0]);
+    const links = idx.filter(isLink);
+    // set A: the front end is lower than the rear end (the rear pivots are high)
+    const setA = links.filter((i) => front(i)[1] < rear(i)[1]);
+    const setB = links.filter((i) => front(i)[1] > rear(i)[1]);
+    const groups: MotionGroup[] = [];
+    const tag = (i: number) => (c[i][0] > 0 ? 'right' : 'left');
+    for (const i of links) groups.push({ name: `link ${asm.parts.length ? i : 0} (${tag(i)} ${setA.includes(i) ? 'lower' : 'upper'} set)`, parts: [i], joint: { type: 'revolute', pivot: rear(i), ratio: -1 } });
+    const refA = setA[0];
+    const refB = setB[0];
+    const used = new Set(links);
+    const verts = idx.filter((i) => /^c-channel/.test(asm.parts[i].part) && Math.abs(asm.parts[i].xf!.r[6]) > 0.95 && c[i][1] < -3.5);
+    const tall = verts.filter((i) => ends(asm, i).some((e) => e[1] > 15)); // the carriage uprights
+    const mid = [...verts.filter((i) => !tall.includes(i))]; // the 6 in uprights and cross pieces
+    const frontParts = idx.filter((i) => !used.has(i) && c[i][1] < -3.0 && c[i][2] >= 3.4 && !/^(wheel|v5-motor|exp-motor|omni|antistatic|traction)/.test(asm.parts[i].part));
+    const midSet = new Set(mid);
+    const carriageParts = frontParts.filter((i) => !midSet.has(i));
+    groups.push({ name: 'mid platform', parts: mid, joint: { type: 'couple', pivot: rear(refA), track: front(refA), ratio: -1 } });
+    groups.push({ name: 'carriage', parts: carriageParts, joint: { type: 'couple', pivot: rear(refB), track: front(refB), ratio: -1 } });
+    return { lift: 'dr4b', out: { unit: 'deg', min: -10, max: 30 }, groups, notes: 'out > 0 raises the carriage; the CAD pose (links at about 53 degrees) is out 0.' };
   },
   // The Team A four-bar: posts and two meshing 84T gears at y = 4.4 (z = 15 and 11.5) carry two
   // arms that run back (-y) to a coupler at y = -8.6. The arms turn about the gears; the coupler
