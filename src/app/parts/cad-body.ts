@@ -21,7 +21,12 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
     build: (await import('../../../data/builds/dr4b.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/dr4b.motion.json')).default as unknown as MotionSpec,
   }),
-  dr6b: async () => ({ build: (await import('../../../data/builds/dr6b.fixed.build.json')).default as unknown as Assembly }),
+  // the DR6B moves from its real mates (scripts/onshape/mates-to-motion.py); its gears are meant to counter-rotate in
+  // pairs (a 1:1 gear relation in the CAD), so it uses the imported build, not the odd-gear copy
+  dr6b: async () => ({
+    build: (await import('../../../data/builds/dr6b.build.json')).default as unknown as Assembly,
+    motion: (await import('../../../data/builds/dr6b.motion.json')).default as unknown as MotionSpec,
+  }),
   sixbar: async () => ({ build: (await import('../../../data/builds/sixbar.fixed.build.json')).default as unknown as Assembly }),
   fourbar: async () => ({
     build: (await import('../../../data/builds/fourbar.fixed.build.json')).default as unknown as Assembly,

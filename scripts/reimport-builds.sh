@@ -8,11 +8,13 @@ cd "$(dirname "$0")/.."
 build() { # <build name> <reduced export> [extra importer flags]
   node scripts/import-onshape.ts "$dir/$2" "data/builds/$1.build.json" ${3:-} | sed -n 1,2p
 }
+build cascade cascade_x.json
+build dr4b dr4b_x.json
 build dr6b dr6b_x.json
 build sixbar sixbar_x.json
 build fourbar fourbar_x.json
 build twobar twobar_x.json --yaw=90
 build continuous cont_x.json
-for n in dr6b sixbar fourbar twobar continuous; do
+for n in cascade dr4b dr6b sixbar fourbar twobar continuous; do
   node scripts/fix-cad-logic.ts "data/builds/$n.build.json" | tail -1
 done

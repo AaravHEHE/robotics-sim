@@ -92,6 +92,7 @@ so each lift's moving parts are chosen from the CAD's geometry by a rule in `scr
 | Two-bar | the hanging arm, its 84T gear and shaft hardware turn about the gear's axle | read off the gear |
 | Cascade | stages in 1 in y planes (-1.3 base, -2.2, -3.1, -3.9 carriage) rise together, stage k by k/3 of the carriage rise | nearest stage plane |
 | Continuous | stages (y 1.2 to 5.2) rise one at a time, carriage first | nearest stage plane; checked in render fully extended |
+| DR6B | the 11 moving rigid bodies follow the linkage solved from the CAD's own mates (`scripts/onshape/mates-to-motion.py`, data in `data/builds/mates/dr6b.mates.json`); the mirrored side follows its partner | 16 revolute/cylindrical mates, a 1:1 gear relation (60T pair, counter-rotating), 1 degree of freedom, driven by `Revolute 2`; the sweep 0 to 45 degrees closes everywhere (it stays closed to 90, where the top arm tilts oddly) |
 | DR4B | 8 links turn about their rear ends (clockwise as the lift rises); a mid platform and the carriage ride the front ends of the two link sets and stay level | link endpoints read from the CAD: lower set (rear pivots high, front ends at z 3 and 5.5) carries the 6 in front uprights, upper set (rear pivots low, front ends at z 15.3 and 17.8) the 15 in uprights; checked in render at 0 and 25 degrees |
 
 `tests/build-motion.test.ts` checks the kinematics (arm turn, coupler level and on the right circle, stage ratios, in-turn
@@ -105,15 +106,33 @@ named lift each frame, mapping the lift's whole output range onto the build's wh
 
 ## Not done yet
 
-- **Motion for the 6-bar and DR6B.** These two CADs are in-progress prototypes whose link loops the geometry does not
-  fix. The 6-bar's lower mechanism (a tower, links at z 11.5, 15 and 8, a front upright and a mid upright) has three
-  degrees of freedom from the parts that are modelled, so any rule would be a guess; the DR6B has links of different
-  lengths (12.5, 14, 14.5) meeting the same front upright, which a rigid coupler cannot satisfy. They stay static poses.
-  Options: get the real mates (a copy of the document with export or the Onshape API), or drive a simplified link
-  animation from the simulator's own six-bar kinematics.
+- **Motion for the 6-bar.** Its mates (190, in the Team A document) leave 8 degrees of freedom at the CAD pose, so the
+  document itself does not say how it moves; it stays a static pose.
 - Lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`) have no chassis, so no preset uses them as a robot's body; they
   are in the app's build list for a profile that wants one. Whole-robot builds fit the presets only loosely (the CAD's
   size and claw are not the profile's), so the profile's numbers were not changed.
 - The custom boxes are boxes, not the real shapes (the intake ramps show as blocks).
 - The sim still has all its other presets, and no "only the seven lift types" cut has been made.
 - Pin physics was not changed.
+
+## Mates (the joint data)
+
+Onshape's API gives the real joints of an assembly (`GET /api/v6/assemblies/d/<doc>/w/<workspace>/e/<element>?includeMateFeatures=true&includeMateConnectors=true`,
+readable for public documents with a signed-in session): occurrences with their transforms and every mate with its type
+and each connector's position and axis on its part. `scripts/onshape/mates-to-motion.py` turns that into a motion spec:
+fastened parts form rigid bodies, revolute and cylindrical mates pin bodies together, a gear relation ties two angles,
+and the linkage is solved by least squares as the drive joint turns. `--list` prints the joints and the degrees of freedom.
+
+What the mates said (2026-11-10):
+
+| Build | Mates | Result |
+|---|---|---|
+| `dr6b` | 11 revolute, 5 cylindrical, 11 fastened, a group, a gear relation | one degree of freedom: used |
+| `sixbar` | 190 | 8 degrees of freedom: not determined, stays still |
+| `fourbar` | 15 (6 joints among 127 separate bodies) | 21 degrees of freedom: the document is mostly unmated, so the geometry rule stays |
+| `dr4b` (public) | 2, plus one sub-assembly | no usable joints: the geometry rule stays |
+| `continuous` | 103 (one driven body) | the stages have no joints: the geometry rule stays |
+| `cascade`, `twobar` | none (parts placed in fixed positions) | the geometry rules stay |
+
+The DR6B's gears are meant to counter-rotate in pairs (a 1:1 gear relation), so the app draws it from the imported
+build, not the odd-gear copy (an idler there would not be in the mechanism).

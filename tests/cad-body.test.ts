@@ -66,9 +66,18 @@ describe('CadBody', () => {
   });
 
   it('a build without a motion spec stays still', async () => {
+    const sixbar = (await loadCadBody('sixbar'))!;
+    expect(sixbar.animated).toBe(false);
+    expect(sixbar.outAt(1)).toBe(0);
+    sixbar.setOut(30); // nothing to move: no error
+  });
+
+  it('the DR6B moves from its mates', async () => {
     const dr6b = (await loadCadBody('dr6b'))!;
-    expect(dr6b.animated).toBe(false);
-    expect(dr6b.outAt(1)).toBe(0);
-    dr6b.setOut(30); // nothing to move: no error
+    expect(dr6b.animated).toBe(true);
+    const parts = dr6b.group.children[0].children;
+    const before = parts.map((o) => o.matrix.elements.slice());
+    dr6b.setOut(dr6b.outAt(1));
+    expect(parts.filter((o, i) => o.matrix.elements.some((v, k) => Math.abs(v - before[i][k]) > 1e-6)).length).toBeGreaterThan(25);
   });
 });

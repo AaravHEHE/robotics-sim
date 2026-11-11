@@ -10,7 +10,7 @@ const spec = (n: string) => JSON.parse(readFileSync(`data/builds/${n}.motion.jso
 const group = (s: MotionSpec, name: string) => s.groups.find((g) => g.name === name)!;
 const center = (a: Assembly, i: number) => a.parts[i].xf!.c;
 
-describe.each(['fourbar', 'twobar', 'cascade', 'continuous', 'dr4b'])('%s motion', (name) => {
+describe.each(['fourbar', 'twobar', 'cascade', 'continuous', 'dr4b', 'dr6b'])('%s motion', (name) => {
   it('is a valid spec for its build', () => {
     expect(validateMotion(spec(name), asm(name))).toEqual([]);
   });
@@ -118,5 +118,38 @@ describe('DR4B', () => {
     // the platform rises with the lower set, which flattens: it goes up
     const platform = group(s, 'mid platform').parts[0];
     expect(center(up, platform)[2]).toBeGreaterThan(center(a, platform)[2]);
+  });
+});
+
+describe('DR6B (solved from the CAD mates)', () => {
+  const a = asm('dr6b');
+  const s = spec('dr6b');
+
+  it('has a track for every moving body, covering the CAD pose', () => {
+    expect(s.groups.length).toBe(11);
+    for (const g of s.groups) {
+      const j = g.joint as Extract<typeof g.joint, { type: 'track' }>;
+      expect(j.type).toBe('track');
+      expect(j.keys[0][0]).toBe(0);
+      expect(j.keys[0].slice(1)).toEqual([0, 0, 0]); // out 0 is the CAD pose
+    }
+  });
+
+  it('lifts: the highest moving part rises as the drive turns', () => {
+    const top = (asm2: Assembly) => Math.max(...s.groups.flatMap((g) => g.parts).map((i) => asm2.parts[i].xf!.c[2]));
+    expect(top(poseBuild(a, s, s.out.max))).toBeGreaterThan(top(a) + 3);
+  });
+
+  it('turns the bodies and the mirrored side the same way', () => {
+    const up = poseBuild(a, s, 30);
+    const angle = (i: number) => {
+      const r = up.parts[i].xf!.r;
+      const o = a.parts[i].xf!.r;
+      // relative turn about x: R_new * R_old^T, read off its y-z block
+      const d = [0, 1, 2].map((row) => [0, 1, 2].map((col) => [0, 1, 2].reduce((acc, k) => acc + r[row * 3 + k] * o[col * 3 + k], 0)));
+      return Math.atan2(d[2][1], d[1][1]);
+    };
+    // every group's parts share one turn
+    for (const g of s.groups) for (const i of g.parts) expect(angle(i)).toBeCloseTo(angle(g.parts[0]), 6);
   });
 });

@@ -5,6 +5,8 @@
 //   revolute  turns about the line through (y, z) parallel to the robot's x axis, by ratio × out degrees;
 //   slide     moves along a direction by ratio × out inches, or by a piecewise-linear profile of
 //             [out, travel] points when stages move in turn (cascade and continuous stages);
+//   track     follows solved poses: [out, turn (deg), shift y, shift z] keys, turning about `about` first (a
+//             linkage solved from the CAD's mates by scripts/onshape/mates-to-motion.py);
 //   couple    translates, without turning, as the point `track` on an arm that turns about `pivot`
 //             does (the coupler of a four-bar, the carriage of a DR4B): ratio × out degrees.
 //
@@ -14,7 +16,8 @@ import type { Assembly, Placed, Rot3 } from './assembly.ts';
 export type Joint =
   | { type: 'revolute'; pivot: [number, number]; ratio: number }
   | { type: 'slide'; dir: [number, number, number]; ratio: number; profile?: [number, number][] }
-  | { type: 'couple'; pivot: [number, number]; track: [number, number]; ratio: number };
+  | { type: 'couple'; pivot: [number, number]; track: [number, number]; ratio: number }
+  | { type: 'track'; about: [number, number]; keys: [number, number, number, number][] };
 
 export interface MotionGroup {
   name: string;
@@ -70,6 +73,20 @@ export function profileAt(pts: [number, number][], out: number): number {
   return pts[pts.length - 1][1];
 }
 
+/** The pose [turn, shift y, shift z] a track gives at `out` (linear between keys, clamped at the ends). */
+export function trackAt(keys: [number, number, number, number][], out: number): [number, number, number] {
+  if (out <= keys[0][0]) return [keys[0][1], keys[0][2], keys[0][3]];
+  for (let i = 1; i < keys.length; i++) {
+    if (out <= keys[i][0]) {
+      const [a, b] = [keys[i - 1], keys[i]];
+      const t = (out - a[0]) / (b[0] - a[0]);
+      return [a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]), a[3] + t * (b[3] - a[3])];
+    }
+  }
+  const k = keys[keys.length - 1];
+  return [k[1], k[2], k[3]];
+}
+
 /** Where a group's parts move for a lift output: a turn about x (maybe) and a shift of the center. */
 function groupMove(g: MotionGroup, out: number): { turn: number; about: [number, number]; shift: [number, number, number] } {
   const j = g.joint;
@@ -79,6 +96,10 @@ function groupMove(g: MotionGroup, out: number): { turn: number; about: [number,
     case 'slide': {
       const d = j.profile ? profileAt(j.profile, out) : j.ratio * out;
       return { turn: 0, about: [0, 0], shift: [j.dir[0] * d, j.dir[1] * d, j.dir[2] * d] };
+    }
+    case 'track': {
+      const [turn, dy, dz] = trackAt(j.keys, out);
+      return { turn, about: j.about, shift: [0, dy, dz] };
     }
     case 'couple': {
       const [ty, tz] = turnYZ(j.track[0], j.track[1], j.pivot[0], j.pivot[1], j.ratio * out);

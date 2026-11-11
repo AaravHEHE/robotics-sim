@@ -201,7 +201,7 @@ for (const q of placed) {
 
 const out = {
   v: 1 as const,
-  source: { importer: 'scripts/import-onshape.ts', input: path.basename(inFile), forward, instances: insts.length, excluded: excluded.length },
+  source: { importer: 'scripts/import-onshape.ts', input: path.basename(inFile), forward, yaw, origin: [x0, y0, floor], instances: insts.length, excluded: excluded.length },
   parts: placed.map((q) => q.p),
 };
 await writeFile(outFile, JSON.stringify(out));
