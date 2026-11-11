@@ -129,8 +129,6 @@ export function removeMechanism(p: RobotProfile, name: string): void {
     return !own || stillUsed(d.port);
   });
   // optical sensors that watched it, and rotation sensors that read it
-  if (p.cad?.lift === from) p.cad.lift = to;
-  if (p.cad?.claw === from) p.cad.claw = to;
   for (const d of p.devices) {
     if (d.type === 'optical' && d.watches === name) delete (d as { watches?: string }).watches;
     if (d.type === 'rotation' && d.mechanism === name) delete d.mechanism;
@@ -146,6 +144,8 @@ export function renameReferences(p: RobotProfile, from: string, to: string): voi
     if (x.kind === 'intake' && x.into === from) r.into = to;
     if (x.kind === 'wrist' && x.claw === from) r.claw = to;
   }
+  if (p.cad?.lift === from) p.cad.lift = to;
+  if (p.cad?.claw === from) p.cad.claw = to;
   for (const d of p.devices) {
     if (d.type === 'optical' && d.watches === from) (d as { watches?: string }).watches = to;
     if (d.type === 'rotation' && d.mechanism === from) d.mechanism = to;
