@@ -178,9 +178,14 @@ and drops the Pin. `scripts/add-banshee.ts` (run last by `scripts/reimport-build
 last feed wheel, 0 to 95 degrees; open = pivoted up). `cad.claw` of the Claw Gate and ACE presets drives it.
 
 - Layout taken from public Onshape CADs of the claw (Caleb Hunter's "Vex Override" Banshee Claw and Full Build; also
-  3488A, jaden jones, Jason Star, Dinesh Lolla): two vertical shafts 3.25 in apart, a 1.625 in flex wheel above and one
-  below the Pin on each (3.3 in apart), a chain sprocket on each shaft, the Pin held between the shafts.
+  3488A, jaden jones, Jason Star, Dinesh Lolla): two horizontal rollers one above the other (3.3 in apart), each a shaft
+  with two 1.625 in flex wheels 3.25 in apart, the Pin held between them (gap about 1.65 in); the top roller is geared to
+  a shaft chained to the bottom one so they counter-rotate. Part axes were checked from the parts' bounding boxes (the
+  flex wheel, gear and sprocket axis is the thin dimension).
+- Video: in the Cornfield stream, 2360A is the black robot with purple channel and red standoffs. In QF 3-1 (red
+  alliance with 8995H, from about 6:35:00; 1080p overhead) it starts at the bottom wall with a Pin held at the front,
+  with horizontal roller bars carrying white flex wheels across its middle. That fits the CAD layout. The camera is
+  too high and the robot too small to see how the rollers pivot.
 - Not verified: the pivot range and where the pivot sits (the CADs hold only the roller block), and the roller spin
-  (the sim does not spin parts). The Cornfield stream is an overhead camera too far away to show the rollers, and the
-  VEX Forum threads could not be fetched, so the video side is open; send a close-up clip or forum text to tighten it.
+  (the sim does not spin parts).
 - 2360A's own CAD was not found; the public ones above are other teams' builds of the same claw.
