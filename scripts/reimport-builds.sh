@@ -24,3 +24,4 @@ for n in cascade dr4b dr6b sixbar fourbar twobar continuous; do
 done
 # the cascade's intake bridge (see docs/onshape-import.md)
 node scripts/fix-cad-logic.ts data/builds/cascade.build.json '--bridge={"part":"custom-box","size":[9.176,3.3,0.12],"pos":[0,0,0],"rot":[0,0,0],"xf":{"c":[0.02,0.39,4.49],"r":[0,1,0,-0.9372,0,0.3487,0.3487,0,0.9372]},"note":"intake bridge from the first-stage rollers (y 1.0, z -11.6 in the CAD) to the second stage (y -7.6, z -8.4): the side ramps ended at y -2.7 and the back plate began at y -7.6, leaving a gap pieces fell through"}' | tail -1
+node scripts/add-banshee.ts

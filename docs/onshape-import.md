@@ -168,3 +168,19 @@ the sim's own open/closed state (`closedness()` in `claw-meshes.ts`: 0 open, 1 c
 extended, like the CAD's extended cylinder). Open is 22 degrees; the motion layer gained a `yaw` joint (about the vertical axis).
 The claw's pivots and tails were read off the geometry (the document has no mates for it), so the stroke match above is the
 check. Held pieces are still drawn at the profile's claw position, not the CAD's.
+
+## Cascade Banshee roller claw
+
+The cascade bots at Cornfield Clash (2360A "Arachnid" among them) use a Banshee claw: the flex-wheel intake feeds a
+Pin through the robot to the back, where it passes between two counter-rotating rollers; the roller block then pivots up
+and drops the Pin. `scripts/add-banshee.ts` (run last by `scripts/reimport-builds.sh`) adds it to
+`cascade.fixed.build.json` and writes `cascade.claw.motion.json` (the block turns about a horizontal axis behind the
+last feed wheel, 0 to 95 degrees; open = pivoted up). `cad.claw` of the Claw Gate and ACE presets drives it.
+
+- Layout taken from public Onshape CADs of the claw (Caleb Hunter's "Vex Override" Banshee Claw and Full Build; also
+  3488A, jaden jones, Jason Star, Dinesh Lolla): two vertical shafts 3.25 in apart, a 1.625 in flex wheel above and one
+  below the Pin on each (3.3 in apart), a chain sprocket on each shaft, the Pin held between the shafts.
+- Not verified: the pivot range and where the pivot sits (the CADs hold only the roller block), and the roller spin
+  (the sim does not spin parts). The Cornfield stream is an overhead camera too far away to show the rollers, and the
+  VEX Forum threads could not be fetched, so the video side is open; send a close-up clip or forum text to tighten it.
+- 2360A's own CAD was not found; the public ones above are other teams' builds of the same claw.

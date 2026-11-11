@@ -60,7 +60,7 @@ describe.each(['cascade', 'dr4b', 'dr6b', 'sixbar', 'fourbar', 'twobar', 'contin
 
 it('the cascade intake bridge spans the gap between the side ramps and the second stage', () => {
   const asm = JSON.parse(readFileSync('data/builds/cascade.fixed.build.json', 'utf8')) as Assembly;
-  const bridge = asm.parts.at(-1)!;
+  const bridge = asm.parts.find((p) => p.part === 'custom-box' && p.size?.[2] === 0.12)!; // the claw's parts (scripts/add-banshee.ts) come after it
   expect(bridge.part).toBe('custom-box');
   const b = bounds({ v: 1, parts: [bridge] }, cat)!;
   // CAD y 1.0 .. -7.6 (the robot's origin is 3.69 in off the CAD's y), rising toward the back

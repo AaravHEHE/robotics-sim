@@ -199,3 +199,20 @@ describe('DR4B claw (a lobster claw: two fingers on hinge screws, a 25 mm cylind
     }
   });
 });
+
+describe('the cascade Banshee roller claw', () => {
+  const casc = JSON.parse(readFileSync('data/builds/cascade.fixed.build.json', 'utf8')) as Assembly;
+  const claw = JSON.parse(readFileSync('data/builds/cascade.claw.motion.json', 'utf8')) as MotionSpec;
+  it('is a valid motion with flex wheels in two rollers', () => {
+    expect(validateMotion(claw, casc)).toEqual([]);
+    expect(claw.groups[0].parts.filter((i) => casc.parts[i].part === 'flex-1_625')).toHaveLength(4);
+  });
+  it('pivots up over the robot to drop the Pin', () => {
+    const wheels = claw.groups[0].parts.filter((i) => casc.parts[i].part === 'flex-1_625');
+    const mean = (a: Assembly, k: number) => wheels.reduce((t, i) => t + a.parts[i].xf!.c[k], 0) / wheels.length;
+    const up = poseBuild(casc, claw, 95);
+    expect(mean(casc, 1)).toBeLessThan(-12); // behind the stage
+    expect(mean(up, 2)).toBeGreaterThan(mean(casc, 2) + 1); // the block's middle has risen
+    expect(mean(up, 1)).toBeGreaterThan(mean(casc, 1)); // and swung toward the robot
+  });
+});

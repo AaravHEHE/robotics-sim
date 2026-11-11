@@ -1,7 +1,11 @@
 {
   "schema": 1,
   "id": "override-claw-gate",
-  "cad": { "build": "cascade", "lift": "Cascade" },
+  "cad": {
+    "build": "cascade",
+    "lift": "Cascade",
+    "claw": "Claw"
+  },
   "name": "Override: Claw Gate (cascade + chain-bar claw + intake), approximate",
   "description": "Approximates the top-ranked \"Claw Gate / Clawscade\" design from 99182E and CPSLO (no reveal of the original was found). A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
   "size": {

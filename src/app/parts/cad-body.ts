@@ -12,6 +12,8 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
   cascade: async () => ({
     build: (await import('../../../data/builds/cascade.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/cascade.motion.json')).default as unknown as MotionSpec,
+    // the Banshee roller claw (scripts/add-banshee.ts): the rollers pivot up to drop the Pin
+    claw: (await import('../../../data/builds/cascade.claw.motion.json')).default as unknown as MotionSpec,
   }),
   continuous: async () => ({
     build: (await import('../../../data/builds/continuous.fixed.build.json')).default as unknown as Assembly,
