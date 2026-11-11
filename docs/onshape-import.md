@@ -189,3 +189,29 @@ last feed wheel, 0 to 95 degrees; open = pivoted up). `cad.claw` of the Claw Gat
 - Not verified: the pivot range and where the pivot sits (the CADs hold only the roller block), and the roller spin
   (the sim does not spin parts).
 - 2360A's own CAD was not found; the public ones above are other teams' builds of the same claw.
+
+## The seven robots, and the rest of the lineup
+
+The app's Override presets are now one per lift type, each linked to its CAD build (`cad` in the profile):
+`override-dr4b`, `override-dr6b`, `override-twobar`, `override-cascade`, `override-continuous`, `override-fourbar`,
+`override-sixbar`. The DR6B and continuous robots reuse the DR4B and cascade physics (their lift kinematics are the same
+family; link length 12 in and four stages are the differences). The retired presets (Banshee, ACE, Toggle bot,
+Midfield pusher) are kept in `tests/fixtures/robots/` for the tests of the roller claw, lobster claw and toggle tools.
+
+| Build | Lift motion | Claw motion |
+|---|---|---|
+| cascade | stages slide (geometry) | Banshee roller block pivots up (`add-banshee.ts`) |
+| continuous | stages slide in turn (geometry) | none |
+| dr4b | links from geometry | lobster claw fingers (geometry) |
+| dr6b | solved from the CAD's mates | none |
+| twobar | arm turns about its gear | none |
+| fourbar | four-bar rule (geometry) | piston claw mounted behind the coupler (`add-claws.ts`) |
+| sixbar | four-bar rule (the CAD mates are under-constrained) | piston claw mounted behind the coupler (`add-claws.ts`) |
+
+Order to rebuild: `scripts/reimport-builds.sh <extracts>`, `node scripts/gen-motion.ts`, `node scripts/add-claws.ts`
+(the reimport script already runs `add-banshee.ts`).
+
+- The 2-bar, continuous and DR6B builds have no claw: none of the public CADs found for them includes one, and the
+  piston claw is only mounted where the preset says it has a rear piston claw.
+- Pin physics: no change. The Pin is built from the official manual's dimensions, and the Banshee CAD's 1.65 in roller
+  gap fits the Pin's narrow end (about 1.4 in), so nothing in the CADs contradicted it.
