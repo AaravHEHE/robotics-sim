@@ -120,6 +120,32 @@ const rules: Record<string, Rule> = {
     groups.push({ name: 'carriage', parts: carriageParts, joint: { type: 'couple', pivot: rear(refB), track: front(refB), ratio: -1 } });
     return { lift: 'dr4b', out: { unit: 'deg', min: -10, max: 30 }, groups, notes: 'out > 0 raises the carriage; the CAD pose (links at about 53 degrees) is out 0.' };
   },
+  // The DR4B's claw (a lobster claw): a fixed crossbar at y -8.1 whose two 1.25 in hinge screws carry a finger arm each
+  // (angles and standoffs at 30 degrees, then a curved finger plate), with a tail that rides on a cylinder end collar.
+  // The 25 mm cylinder (body on one tail, rod on the other) pulls the tails together to open the fingers. Turning each
+  // arm 22 degrees about its hinge moves each tail 0.49 in, 0.98 in together: the 25 mm stroke. The CAD pose is closed
+  // (the cylinder is extended and the tips are 3.75 in apart, around a Cup). out = degrees open, 0 to 22.
+  'dr4b.claw': (asm) => {
+    const c = centers(asm);
+    const idx = asm.parts.map((_, i) => i);
+    const CX = -0.65;
+    const hingeR: [number, number] = [0.6, -8.2];
+    const hingeL: [number, number] = [-1.9, -8.1];
+    const fixedNear = (i: number, h: [number, number]) => Math.hypot(c[i][0] - h[0], c[i][1] - h[1]) < 0.45;
+    const skip = /^(piston|c-channel|gear|shaft|v5|exp)/;
+    const side = (right: boolean) =>
+      idx.filter((i) => c[i][1] <= -6.95 && c[i][2] > 3.4 && c[i][2] < 9.5 && !skip.test(asm.parts[i].part) && (right ? c[i][0] > CX + 0.9 : c[i][0] < CX - 0.9) && !fixedNear(i, right ? hingeR : hingeL));
+    const cyl = idx.filter((i) => asm.parts[i].part === 'piston-25' && c[i][1] > -7.3 && c[i][1] < -6.8);
+    const body = cyl.filter((i) => c[i][0] > -1.0); // the cylinder body and the head at its right end
+    const rod = cyl.filter((i) => c[i][0] <= -1.0 && !body.includes(i));
+    const groups: MotionGroup[] = [
+      { name: 'right finger', parts: side(true), joint: { type: 'yaw', pivot: hingeR, ratio: 1 } },
+      { name: 'left finger', parts: side(false), joint: { type: 'yaw', pivot: hingeL, ratio: -1 } },
+      { name: 'cylinder body', parts: body, joint: { type: 'slide', dir: [1, 0, 0], ratio: 1, profile: [[0, 0], [22, -0.49]] } },
+      { name: 'cylinder rod', parts: rod, joint: { type: 'slide', dir: [1, 0, 0], ratio: 1, profile: [[0, 0], [22, 0.49]] } },
+    ].filter((g) => g.parts.length > 0) as MotionGroup[];
+    return { lift: 'claw', out: { unit: 'deg', min: 0, max: 22 }, groups, notes: 'out = degrees open (0 = the CAD pose, closed). Hinges at the 1.25 in screws of the crossbar.' };
+  },
   // The Team A four-bar: posts and two meshing 84T gears at y = 4.4 (z = 15 and 11.5) carry two
   // arms that run back (-y) to a coupler at y = -8.6. The arms turn about the gears; the coupler
   // translates with the top arm's end and stays level.
@@ -142,7 +168,7 @@ const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys
 for (const name of names) {
   const rule = rules[name];
   if (!rule) throw new Error(`no rule for "${name}" (have: ${Object.keys(rules).join(', ')})`);
-  const file = path.join(repoRoot, `data/builds/${name}.fixed.build.json`);
+  const file = path.join(repoRoot, `data/builds/${name.split('.')[0]}.fixed.build.json`);
   const asm = JSON.parse(await readFile(file, 'utf8')) as Assembly;
   const spec: MotionSpec = { v: 1, ...rule(asm) };
   await writeFile(path.join(repoRoot, `data/builds/${name}.motion.json`), JSON.stringify(spec));

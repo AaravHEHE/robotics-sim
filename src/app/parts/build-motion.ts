@@ -3,6 +3,7 @@
 // output, in the robot frame (x right, y forward, z up, inches). Pure: no three.js, no DOM.
 //
 //   revolute  turns about the line through (y, z) parallel to the robot's x axis, by ratio × out degrees;
+//   yaw       turns about the vertical axis through (x, y), by ratio × out degrees (a claw's finger on its hinge post);
 //   slide     moves along a direction by ratio × out inches, or by a piecewise-linear profile of
 //             [out, travel] points when stages move in turn (cascade and continuous stages);
 //   track     follows solved poses: [out, turn (deg), shift y, shift z] keys, turning about `about` first (a
@@ -15,6 +16,7 @@ import type { Assembly, Placed, Rot3 } from './assembly.ts';
 
 export type Joint =
   | { type: 'revolute'; pivot: [number, number]; ratio: number }
+  | { type: 'yaw'; pivot: [number, number]; ratio: number }
   | { type: 'slide'; dir: [number, number, number]; ratio: number; profile?: [number, number][] }
   | { type: 'couple'; pivot: [number, number]; track: [number, number]; ratio: number }
   | { type: 'track'; about: [number, number]; keys: [number, number, number, number][] };
@@ -39,7 +41,7 @@ export interface MotionSpec {
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
-/** The point (y, z) turned about (py, pz) by `deg` degrees (counterclockwise seen from +x). */
+/** A point (a, b) in a plane turned about (pa, pb) by `deg` degrees, counterclockwise (y-z seen from +x, x-y seen from above). */
 export function turnYZ(y: number, z: number, py: number, pz: number, deg: number): [number, number] {
   const c = Math.cos(rad(deg));
   const s = Math.sin(rad(deg));
@@ -53,6 +55,13 @@ function rotX(deg: number): Rot3 {
   const c = Math.cos(rad(deg));
   const s = Math.sin(rad(deg));
   return [1, 0, 0, 0, c, -s, 0, s, c];
+}
+
+/** Rotation of `deg` about the robot z axis (counterclockwise from above), as a row-major 3×3. */
+function rotZ(deg: number): Rot3 {
+  const c = Math.cos(rad(deg));
+  const s = Math.sin(rad(deg));
+  return [c, -s, 0, s, c, 0, 0, 0, 1];
 }
 
 function mul(a: Rot3, b: Rot3): Rot3 {
@@ -88,9 +97,11 @@ export function trackAt(keys: [number, number, number, number][], out: number): 
 }
 
 /** Where a group's parts move for a lift output: a turn about x (maybe) and a shift of the center. */
-function groupMove(g: MotionGroup, out: number): { turn: number; about: [number, number]; shift: [number, number, number] } {
+function groupMove(g: MotionGroup, out: number): { turn: number; about: [number, number]; shift: [number, number, number]; axis?: 'z' } {
   const j = g.joint;
   switch (j.type) {
+    case 'yaw':
+      return { turn: j.ratio * out, about: j.pivot, shift: [0, 0, 0], axis: 'z' };
     case 'revolute':
       return { turn: j.ratio * out, about: j.pivot, shift: [0, 0, 0] };
     case 'slide': {
@@ -120,6 +131,13 @@ export function poseBuild(asm: Assembly, spec: MotionSpec, out: number): Assembl
     for (const i of g.parts) {
       const p = parts[i];
       if (!p?.xf) continue;
+      if (m.axis === 'z') {
+        // about the vertical axis through (x, y): the center turns in the x-y plane and the part turns with it
+        const [x, y] = turnYZ(p.xf.c[0], p.xf.c[1], m.about[0], m.about[1], m.turn);
+        p.xf.c = [x, y, p.xf.c[2]];
+        if (m.turn !== 0) p.xf.r = mul(rotZ(m.turn), p.xf.r as Rot3).map((v) => Math.round(v * 1e9) / 1e9) as Rot3;
+        continue;
+      }
       const [y, z] = turnYZ(p.xf.c[1], p.xf.c[2], m.about[0], m.about[1], m.turn);
       p.xf.c = [p.xf.c[0] + m.shift[0], y + m.shift[1], z + m.shift[2]];
       if (m.turn !== 0) p.xf.r = mul(rotX(m.turn), p.xf.r as Rot3).map((v) => Math.round(v * 1e9) / 1e9) as Rot3;

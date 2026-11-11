@@ -14,6 +14,7 @@ describe('profiles with a CAD build', () => {
 
   it('some presets draw from a CAD, and every one is a valid profile naming a build the app has', () => {
     expect(withCad.map((p) => p.id).sort()).toEqual(['override-ace', 'override-claw-gate', 'override-dr4b-intake']);
+    expect(presets.find((p) => p.id === 'override-dr4b-intake')!.cad!.claw).toBe('Chamber');
     for (const p of withCad) {
       expect(validateProfile(p)).toEqual([]);
       expect(CAD_BUILD_NAMES).toContain(p.cad!.build);
@@ -24,6 +25,7 @@ describe('profiles with a CAD build', () => {
     const p = withCad[0];
     expect(validateProfile({ ...p, cad: { build: 'cascade', lift: 'Nope' } }).join(' ')).toMatch(/cad\.lift/);
     expect(validateProfile({ ...p, cad: { build: '' } }).join(' ')).toMatch(/cad\.build/);
+    expect(validateProfile({ ...p, cad: { build: 'cascade', claw: 'Nope' } }).join(' ')).toMatch(/cad\.claw/);
   });
 });
 
@@ -63,6 +65,26 @@ describe('CadBody', () => {
     const before = parts.map((o) => o.matrix.elements.slice());
     dr4b.setOut(dr4b.outAt(0.8));
     expect(parts.filter((o, i) => o.matrix.elements.some((v, k) => Math.abs(v - before[i][k]) > 1e-6)).length).toBeGreaterThan(100);
+  });
+
+  it('the DR4B body opens and closes its claw, composed with the lift', async () => {
+    const dr4b = (await loadCadBody('dr4b'))!;
+    expect(dr4b.hasClaw).toBe(true);
+    const parts = dr4b.group.children[0].children;
+    const snap = () => parts.map((o) => o.matrix.elements.slice());
+    dr4b.setClaw(1); // closed: the CAD pose
+    const closed = snap();
+    dr4b.setClaw(0); // open
+    const open = snap();
+    const changed = open.filter((m, i) => m.some((v, k) => Math.abs(v - closed[i][k]) > 1e-6)).length;
+    expect(changed).toBeGreaterThan(50); // two fingers of 29 parts and the cylinder
+    dr4b.setClaw(1);
+    snap().forEach((m, i) => m.forEach((v, k) => expect(v).toBeCloseTo(closed[i][k], 6)));
+    // raising the lift carries the open claw along (the claw's parts are in the carriage)
+    dr4b.setClaw(0);
+    dr4b.setOut(dr4b.outAt(0.8));
+    const raised = snap();
+    expect(raised.filter((m, i) => m.some((v, k) => Math.abs(v - open[i][k]) > 1e-6)).length).toBeGreaterThan(100);
   });
 
   it('a build without a motion spec stays still', async () => {

@@ -8,7 +8,7 @@ import { CATALOG } from './catalog.ts';
 import { placeObject, partObject } from './geometry.ts';
 
 /** The CAD builds the app knows, loaded when a robot asks for one (they are large). */
-const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpec }>> = {
+const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpec; claw?: MotionSpec }>> = {
   cascade: async () => ({
     build: (await import('../../../data/builds/cascade.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/cascade.motion.json')).default as unknown as MotionSpec,
@@ -20,6 +20,7 @@ const BUILDS: Record<string, () => Promise<{ build: Assembly; motion?: MotionSpe
   dr4b: async () => ({
     build: (await import('../../../data/builds/dr4b.fixed.build.json')).default as unknown as Assembly,
     motion: (await import('../../../data/builds/dr4b.motion.json')).default as unknown as MotionSpec,
+    claw: (await import('../../../data/builds/dr4b.claw.motion.json')).default as unknown as MotionSpec,
   }),
   // the DR6B moves from its real mates (scripts/onshape/mates-to-motion.py); its gears are meant to counter-rotate in
   // pairs (a 1:1 gear relation in the CAD), so it uses the imported build, not the odd-gear copy
@@ -48,11 +49,15 @@ export class CadBody {
   private readonly moving: number[];
   private readonly build: Assembly;
   private readonly motion?: MotionSpec;
-  private last = NaN;
+  private readonly claw?: MotionSpec;
+  private liftOut = 0;
+  private clawOut = 0;
+  private shown = '';
 
-  constructor(build: Assembly, motion?: MotionSpec) {
+  constructor(build: Assembly, motion?: MotionSpec, claw?: MotionSpec) {
     this.build = build;
     this.motion = motion;
+    this.claw = claw;
     const inner = new THREE.Group();
     inner.rotation.x = -Math.PI / 2; // robot frame (x right, y forward, z up) into three.js
     this.group.add(inner);
@@ -62,12 +67,18 @@ export class CadBody {
       this.objects.push(o);
       inner.add(o);
     }
-    this.moving = [...new Set(motion?.groups.flatMap((g) => g.parts) ?? [])];
+    const groups = [...(motion?.groups ?? []), ...(claw?.groups ?? [])];
+    this.moving = [...new Set(groups.flatMap((g) => g.parts))];
   }
 
   /** Whether the build moves at all (a build without a motion spec is a static pose). */
   get animated(): boolean {
     return this.moving.length > 0;
+  }
+
+  /** Whether the build has a claw that opens and closes. */
+  get hasClaw(): boolean {
+    return !!this.claw?.groups.length;
   }
 
   /** The motion output for a lift that is a fraction `t` (0..1) of the way through its range: the CAD's travel, from its rest pose. */
@@ -78,11 +89,27 @@ export class CadBody {
   /** Pose the build for the lift's output (degrees for arms, inches of rise for slides). */
   setOut(out: number): void {
     const m = this.motion;
-    if (!m || !this.moving.length) return;
-    const o = Math.max(m.out.min, Math.min(m.out.max, out));
-    if (o === this.last) return;
-    this.last = o;
-    const posed = poseBuild(this.build, m, o);
+    if (!m) return;
+    this.liftOut = Math.max(m.out.min, Math.min(m.out.max, out));
+    this.apply();
+  }
+
+  /** Open or close the claw: 0 = open, 1 = closed (the sim's closedness). The CAD pose is closed. */
+  setClaw(closed: number): void {
+    const c = this.claw;
+    if (!c) return;
+    this.clawOut = (1 - Math.max(0, Math.min(1, closed))) * c.out.max;
+    this.apply();
+  }
+
+  /** Put every moving part where the lift and the claw now have it (the claw first, in the build's own frame, then the lift carries it). */
+  private apply(): void {
+    const key = `${this.liftOut}|${this.clawOut}`;
+    if (key === this.shown || !this.moving.length) return;
+    this.shown = key;
+    let posed = this.build;
+    if (this.claw) posed = poseBuild(posed, this.claw, this.clawOut);
+    if (this.motion) posed = poseBuild(posed, this.motion, this.liftOut);
     for (const i of this.moving) {
       const def = CATALOG.parts.find((d) => d.id === posed.parts[i].part);
       if (def) placeObject(this.objects[i], def, posed.parts[i]);
@@ -94,6 +121,6 @@ export class CadBody {
 export async function loadCadBody(name: string): Promise<CadBody | null> {
   const load = BUILDS[name];
   if (!load) return null;
-  const { build, motion } = await load();
-  return new CadBody(build, motion);
+  const { build, motion, claw } = await load();
+  return new CadBody(build, motion, claw);
 }

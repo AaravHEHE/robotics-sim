@@ -92,6 +92,7 @@ so each lift's moving parts are chosen from the CAD's geometry by a rule in `scr
 | Two-bar | the hanging arm, its 84T gear and shaft hardware turn about the gear's axle | read off the gear |
 | Cascade | stages in 1 in y planes (-1.3 base, -2.2, -3.1, -3.9 carriage) rise together, stage k by k/3 of the carriage rise | nearest stage plane |
 | Continuous | stages (y 1.2 to 5.2) rise one at a time, carriage first | nearest stage plane; checked in render fully extended |
+| DR4B claw (`dr4b.claw.motion.json`) | two fingers turn about the vertical axis through the 1.25 in hinge screws of the crossbar (right +, left -), 0 to 22 degrees open; the 25 mm cylinder's body and rod slide 0.49 in each; the CAD pose is closed | hinge screws, symmetric 29-part fingers, cylinder stroke: 22 degrees moves each tail 0.49 in, 0.98 in together, the 25 mm stroke; no mates in the document, so read from geometry; checked in render closed and open |
 | DR6B | the 11 moving rigid bodies follow the linkage solved from the CAD's own mates (`scripts/onshape/mates-to-motion.py`, data in `data/builds/mates/dr6b.mates.json`); the mirrored side follows its partner | 16 revolute/cylindrical mates, a 1:1 gear relation (60T pair, counter-rotating), 1 degree of freedom, driven by `Revolute 2`; the sweep 0 to 45 degrees closes everywhere (it stays closed to 90, where the top arm tilts oddly) |
 | DR4B | 8 links turn about their rear ends (clockwise as the lift rises); a mid platform and the carriage ride the front ends of the two link sets and stay level | link endpoints read from the CAD: lower set (rear pivots high, front ends at z 3 and 5.5) carries the 6 in front uprights, upper set (rear pivots low, front ends at z 15.3 and 17.8) the 15 in uprights; checked in render at 0 and 25 degrees |
 
@@ -158,3 +159,12 @@ mechanical claw, 64 instances), `roller claw - inno` (121), and full DR4B robots
 `8K1C BOT`, 255). "VEX V5 Override - Lift Arm and Rotating Claw" (Ken Liu, 24 instances) and "VURC Override Claw & Mini
 Arm" (James) are smaller. The two "Vex Override Claw" documents (18 and 22 copies) hold one part each. Only `claw new` is
 imported so far; it has no mates, so it is a static pose (its jaws open along x, about 0.5 in each side for the 25 mm stroke).
+
+### The DR4B claw opens and closes
+
+`scripts/gen-motion.ts dr4b.claw` writes `data/builds/dr4b.claw.motion.json`; the app poses the claw first (in the build's own
+frame) and then carries it with the lift. The DR4B preset names its `Chamber` claw (`cad.claw`), and the CAD fingers follow
+the sim's own open/closed state (`closedness()` in `claw-meshes.ts`: 0 open, 1 closed; the piston claw is closed while
+extended, like the CAD's extended cylinder). Open is 22 degrees; the motion layer gained a `yaw` joint (about the vertical axis).
+The claw's pivots and tails were read off the geometry (the document has no mates for it), so the stroke match above is the
+check. Held pieces are still drawn at the profile's claw position, not the CAD's.

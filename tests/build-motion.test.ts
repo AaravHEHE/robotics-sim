@@ -153,3 +153,49 @@ describe('DR6B (solved from the CAD mates)', () => {
     for (const g of s.groups) for (const i of g.parts) expect(angle(i)).toBeCloseTo(angle(g.parts[0]), 6);
   });
 });
+
+describe('DR4B claw (a lobster claw: two fingers on hinge screws, a 25 mm cylinder)', () => {
+  const a = asm('dr4b');
+  const s = spec('dr4b.claw');
+  const finger = (name: string) => group(s, name).parts;
+  const plates = (g: string) => finger(g).filter((i) => a.parts[i].part === 'custom-mesh');
+
+  it('is a valid spec, with a finger each side of the same size', () => {
+    expect(validateMotion(s, a)).toEqual([]);
+    expect(finger('right finger').length).toBe(finger('left finger').length);
+    expect(plates('right finger').length).toBe(2);
+    expect(plates('left finger').length).toBe(2);
+  });
+
+  it('is the CAD pose (closed) at 0 and opens both fingers symmetrically', () => {
+    const open = poseBuild(a, s, 22);
+    const x0 = (g: string) => plates(g).reduce((acc, i) => acc + center(a, i)[0], 0) / 2;
+    const x1 = (g: string) => plates(g).reduce((acc, i) => acc + center(open, i)[0], 0) / 2;
+    poseBuild(a, s, 0).parts.forEach((p, i) => p.xf!.c.forEach((v, k) => expect(v).toBeCloseTo(a.parts[i].xf!.c[k], 6)));
+    const gap0 = x0('right finger') - x0('left finger');
+    const gap1 = x1('right finger') - x1('left finger');
+    expect(gap1).toBeGreaterThan(gap0 + 1.0); // the tips open by more than an inch (a Cup is 3.15 in across, the closed gap 3.7)
+    // symmetric about the claw's axis
+    expect(x1('right finger') - x0('right finger')).toBeCloseTo(x0('left finger') - x1('left finger'), 1);
+  });
+
+  it('keeps the crossbar hinges still, and the cylinder travels its 25 mm stroke (1 in) between the tails', () => {
+    const open = poseBuild(a, s, 22);
+    const moved = new Set(s.groups.flatMap((g) => g.parts));
+    for (const i of [131, 195]) expect(moved.has(i)).toBe(false); // the 1.25 in hinge screws
+    const body = group(s, 'cylinder body').parts[0];
+    const rod = group(s, 'cylinder rod').parts[0];
+    const dx = (i: number) => center(open, i)[0] - center(a, i)[0];
+    expect(dx(body)).toBeLessThan(0);
+    expect(dx(rod)).toBeGreaterThan(0);
+    expect(dx(rod) - dx(body)).toBeCloseTo(0.98, 2);
+  });
+
+  it('turns the fingers about the vertical axis (they stay level)', () => {
+    const open = poseBuild(a, s, 22);
+    for (const i of plates('right finger')) {
+      expect(center(open, i)[2]).toBeCloseTo(center(a, i)[2], 6);
+      expect(open.parts[i].xf!.r[8]).toBeCloseTo(a.parts[i].xf!.r[8], 6);
+    }
+  });
+});

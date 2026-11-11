@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { FieldDef } from '../sim/field.ts';
-import { isPneumatic, type LiftSpec, type MechanismSpec, type RobotProfile } from '../sim/profile.ts';
+import { isPneumatic, type ClawSpec, type LiftSpec, type MechanismSpec, type RobotProfile } from '../sim/profile.ts';
 import { PhysicsOverlay, readoutText } from './physics-overlay.ts';
 import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
@@ -14,6 +14,7 @@ import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
 import { ManipulatorVisuals } from './manipulator-meshes.ts';
 import { loadCadBody, type CadBody } from './parts/cad-body.ts';
+import { closedness } from './claw-meshes.ts';
 import { buildBoxRobot, type MechVisual } from './robot-meshes.ts';
 import { drawTape, shared, goalMesh, loaderMesh, piecesGroup, placeNode, toggleMesh } from './override-meshes.ts';
 
@@ -497,7 +498,10 @@ export class FieldViewer {
   private poseCad(read: (m: MechanismSpec) => number): void {
     const cad = this.cadBody;
     const ref = this.profile?.cad;
-    if (!cad || !cad.animated || !ref?.lift) return;
+    if (!cad || !cad.animated || !ref) return;
+    const claw = ref.claw ? this.profile?.mechanisms.find((m): m is ClawSpec => m.kind === 'claw' && m.name === ref.claw) : undefined;
+    if (claw && cad.hasClaw) cad.setClaw(closedness(claw, read(claw)));
+    if (!ref.lift) return;
     const lift = this.profile?.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === ref.lift);
     if (!lift) return;
     // the lift's whole range is the build's whole travel: a quarter of the way up the lift is a quarter of the way up the build

@@ -109,6 +109,7 @@ export function removeMechanism(p: RobotProfile, name: string): void {
   const removed: Array<(typeof p.mechanisms)[number]> = [m];
   p.mechanisms = p.mechanisms.filter((x) => x !== m);
   if (p.cad?.lift === name) delete p.cad.lift; // the CAD body no longer has a lift to follow
+  if (p.cad?.claw === name) delete p.cad.claw;
   for (const x of p.mechanisms) {
     const r = x as unknown as Record<string, unknown>;
     if (x.kind === 'claw' && x.lift === name) {
