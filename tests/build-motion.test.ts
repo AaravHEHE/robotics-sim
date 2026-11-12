@@ -207,12 +207,12 @@ describe('the cascade Banshee roller claw', () => {
     expect(validateMotion(claw, casc)).toEqual([]);
     expect(claw.groups[0].parts.filter((i) => casc.parts[i].part === 'flex-1_625')).toHaveLength(4);
   });
-  it('pivots up over the robot to drop the Pin', () => {
+  it('swings back and up about its top hinge to drop the Pin', () => {
     const wheels = claw.groups[0].parts.filter((i) => casc.parts[i].part === 'flex-1_625');
     const mean = (a: Assembly, k: number) => wheels.reduce((t, i) => t + a.parts[i].xf!.c[k], 0) / wheels.length;
-    const up = poseBuild(casc, claw, 95);
+    const up = poseBuild(casc, claw, 90);
     expect(mean(casc, 1)).toBeLessThan(-12); // behind the stage
     expect(mean(up, 2)).toBeGreaterThan(mean(casc, 2) + 1); // the block's middle has risen
-    expect(mean(up, 1)).toBeGreaterThan(mean(casc, 1)); // and swung toward the robot
+    expect(mean(up, 1)).toBeLessThan(mean(casc, 1)); // swung back about the top hinge: the Pin now points down
   });
 });

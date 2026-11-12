@@ -1,10 +1,10 @@
 #include "main.h"
 
-// Mechanism test for the "Override: Claw Gate (cascade + chain-bar claw + intake)" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: Cascade + chain-bar claw + intake" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the cascade to three heights, the chain bar over the top and back, the claw drops and re-grabs the Preload, and the intake spins. Each check prints PASS or FAIL with what it measured
+// its range: the cascade to three heights, the chain bar over the top and back, the claw drops the Preload and the intake brings it back up into it. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
@@ -116,22 +116,26 @@ void mechanismTest() {
     chainBar.move_absolute(deg * 3, 200);
     checkNear("chain bar to %g deg", deg, settle(chainBar, deg * 3, 9) / 3, 3);
   }
-  printf("-- claw: lets go of the Preload, then picks it up off the floor --\n");
+  printf("-- claw: lets go of the Preload, then the intake brings it back up into the claw --\n");
   claw.retract();
   pros::delay(400);  // the Preload falls over in front of the robot
   check("claw open", !claw.is_extended(), claw.is_extended());
-  chainBar.move_absolute(-25 * 3, 200);  // down to the floor in front
-  settle(chainBar, -75, 9);
-  claw.extend();
-  pros::delay(300);
-  check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
-  chainBar.move_absolute(0, 200);
-  settle(chainBar, 0, 9);
+  // the claw sits inside the robot and only gets pieces through the intake: run it and
+  // creep up to the Pin lying in front; with the cascade and chain bar down it hands the Pin up
   printf("-- intake --\n");
   intake.move(127);
   pros::delay(400);
   check("intake spinning in (rpm)", intake.get_actual_velocity() > 500, intake.get_actual_velocity());
+  chainBar.move_absolute(-25 * 3, 200);  // the claw down at the intake's hand-off
+  settle(chainBar, -75, 9);
+  const double crept = drive(3.5, 40);  // the Pin lies just past the intake's mouth
+  pros::delay(600);
+  claw.extend();
+  pros::delay(300);
+  check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
   intake.brake();
+  chainBar.move_absolute(0, 200);
+  drive(-crept);
 }
 
 void initialize() {
@@ -144,7 +148,7 @@ void initialize() {
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: Claw Gate (cascade + chain-bar claw + intake)\n");
+  printf("Mechanism test: Override: Cascade + chain-bar claw + intake\n");
   driveTest();
   mechanismTest();
   driveBack();

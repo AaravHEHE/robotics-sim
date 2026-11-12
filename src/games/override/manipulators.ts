@@ -480,6 +480,11 @@ export class Manipulators {
     const cands: Cand[] = [];
     const ok = (pieces: Piece[]) => pieces.length > 0 && fits(c.spec.capacity, held, pieces) && stackOnto(held, pieces) !== null;
 
+    // a claw an intake feeds (a Banshee's rollers, a DR4B's chamber) takes pieces only from that intake (and from
+    // staging): it sits inside the robot, so it can't reach the floor, a Loader or a Goal; a claw without an intake clamps
+    // around what is in front of it
+    const fed = this.intakes.some((i) => i.into === c.spec.name);
+
     for (const s of upright ? this.stagings : []) {
       const items = state.held[s.name];
       const d = dhypot(e.robot.x - (s.at.x ?? 0), e.robot.y - s.at.y);
@@ -488,7 +493,7 @@ export class Manipulators {
         cands.push({ d, pieces: items, from: { x: sx, y: sy, z: s.at.z }, take: () => this.receive(c, state.held[s.name].splice(0), e.robot.z - s.at.z) });
       }
     }
-    if (e.z <= LOW_REACH) {
+    if (e.z <= LOW_REACH && !fed) {
       for (const l of upright ? field.loaders ?? [] : []) {
         const items = state.loaders[l.id];
         const [mx, my] = loaderMouth(field, l);
@@ -507,7 +512,7 @@ export class Manipulators {
         }
       }
     }
-    for (const g of upright ? field.goals ?? [] : []) {
+    for (const g of upright && !fed ? field.goals ?? [] : []) {
       const pieces = state.goals[g.id];
       const d = dhypot(e.x - g.x, e.y - g.y);
       // Placed pieces come off a Goal only when the claw is centered on them (deliberately)
@@ -518,7 +523,7 @@ export class Manipulators {
         cands.push({ d: d + reach, pieces: pieces.slice(slot.index), from: { x: g.x, y: g.y, z: slot.bottom }, take: () => this.takeFromGoal(g, slot.index, (ps) => this.receive(c, ps, e.z - slot.bottom)) });
       }
     }
-    for (const s of upright ? state.floor : []) {
+    for (const s of upright && !fed ? state.floor : []) {
       const d = dhypot(e.x - s.x, e.y - s.y);
       if (d > reach || !this.between(e, s.x, s.y, reach)) continue;
       const slot = slotAt(s.pieces, 0, false, e.z);
@@ -801,7 +806,11 @@ export class Manipulators {
     }
     if (acc.lying && acc.pins) {
       for (const l of state.lying) {
-        if (!this.inZone(spec, l.x, l.y, PIN.coneDiameter / 2)) continue;
+        // a lying Pin is caught by whichever part of it reaches the mouth first (usually an end), not only its middle
+        const [zx, zy] = toField(this.world.pose, { x: spec.zone.x, y: spec.zone.y });
+        const [a, b] = pinEnds(l);
+        const [cx, cy] = closestOnSegment([zx, zy], a, b);
+        if (!this.inZone(spec, cx, cy, PIN.coneDiameter / 2)) continue;
         const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
         if (!accepted([pin])) continue;
         let got: Piece[] = [];

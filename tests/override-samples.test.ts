@@ -50,7 +50,7 @@ describe('Override sample autons', () => {
  */
 const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean }> = {
   'test-twobar': { checks: 13, holder: 'Claw', regrab: true },
-  'test-dr4b': { checks: 18, holder: 'Chamber', regrab: true },
+  'test-dr4b': { checks: 19 },
   'test-cascade': { checks: 17, holder: 'Claw', regrab: true },
   'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true },
   'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },

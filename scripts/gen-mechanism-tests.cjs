@@ -43,12 +43,14 @@ double settle(M& m, double target, double tol, int ms = 2500) {
 }
 `;
 
-const driveCode = (inPerDeg, gearsNote) => `
+const driveCode = (inPerDeg, gearsNote, rear) => `
 // ---------------- drivetrain ----------------
 // ${gearsNote}
 constexpr double IN_PER_DEG = ${inPerDeg};
 // From the start up the lane to an open spot where the robot can turn a full circle
-constexpr double LANE = 24.5;
+${rear ? `// (the robot starts 3" off the wall: the Preload standing in the rear claw is inside the
+// field; 20" up, the Preload's 12.6" turning circle stays clear of Goal R1)
+constexpr double LANE = 20;` : 'constexpr double LANE = 24.5;'}
 
 // Drive straight \`inches\` (P loop on the encoders, heading held with the IMU). Returns the
 // distance the encoders measured.
@@ -213,9 +215,10 @@ void mechanismTest() {
 }`,
   },
   'test-dr4b': {
+    rear: true,
     robot: 'override-dr4b',
     name: 'Override: DR4B + intake chamber (8059A-style)',
-    intro: ': the GPS and chamber sensor are read, the DR4B lifts the Preload to three heights, the clamp lets go and grabs again, and the intake spins both ways',
+    intro: ': the GPS and chamber sensor are read, the DR4B lifts the Preload to three heights, the intake spins both ways, and the clamp lets go of the Preload',
     devices: `pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
@@ -230,18 +233,11 @@ pros::Gps gps(12, 0, -6 * 0.0254);       // 6" behind the center, facing backwar
     mech: `void mechanismTest() {
   printf("-- sensors --\\n");
   const pros::gps_status_s_t g = gps.get_position_and_orientation();
-  // the start is (-37, -60.7); LANE inches up the lane is (-37, -36.2)
+  // the start is (-37, -57.6); LANE inches up the lane is (-37, -37.6)
   checkNear("GPS x %g in", -37, g.x / 0.0254, 1.5);
-  checkNear("GPS y %g in", -60.705 + LANE, g.y / 0.0254, 1.5);
+  checkNear("GPS y %g in", -57.6 + LANE, g.y / 0.0254, 1.5);
   check("chamber eye sees the Preload", chamberEye.get_proximity() > 50, chamberEye.get_proximity());
 ${liftTest('DR4B (12:84)', 'lift', 7, [30, 60, 90, 0])}
-  printf("-- chamber clamp: lets go of the Preload, then grabs it again --\\n");
-  clamp.retract();
-  pros::delay(400);  // it drops out behind the robot
-  check("clamp open", !clamp.is_extended(), clamp.is_extended());
-  clamp.extend();
-  pros::delay(300);
-  check("clamp closed", clamp.is_extended(), clamp.is_extended());
   printf("-- intake --\\n");
   intake.move(127);
   pros::delay(400);
@@ -250,12 +246,24 @@ ${liftTest('DR4B (12:84)', 'lift', 7, [30, 60, 90, 0])}
   pros::delay(400);
   check("intake spinning out (rpm)", intake.get_actual_velocity() < -500, intake.get_actual_velocity());
   intake.brake();
+  printf("-- chamber clamp: lets go of the Preload --\\n");
+  // the chamber is inside the robot and only the front intake can fill it again, so this just lets
+  // go: back of the robot up the lane first, so the Preload drops clear of the way back to the start
+  turnTo(540);
+  clamp.retract();
+  pros::delay(400);
+  check("clamp open", !clamp.is_extended(), clamp.is_extended());
+  check("chamber eye: the Preload dropped out", chamberEye.get_proximity() < 50, chamberEye.get_proximity());
+  clamp.extend();
+  pros::delay(300);
+  check("clamp closed", clamp.is_extended(), clamp.is_extended());
+  turnTo(360);
 }`,
   },
   'test-cascade': {
     robot: 'override-cascade',
-    name: 'Override: Claw Gate (cascade + chain-bar claw + intake)',
-    intro: ': the cascade to three heights, the chain bar over the top and back, the claw drops and re-grabs the Preload, and the intake spins',
+    name: 'Override: Cascade + chain-bar claw + intake',
+    intro: ': the cascade to three heights, the chain bar over the top and back, the claw drops the Preload and the intake brings it back up into it',
     devices: `${blueDrive}
 pros::MotorGroup cascade({7, 8}, pros::MotorGears::blue, pros::MotorUnits::degrees);  // 1:3 to the spool
 pros::Motor chainBar(9, pros::MotorGears::green, pros::MotorUnits::degrees);           // 1:3
@@ -276,22 +284,26 @@ pros::adi::Pneumatics claw('A', true);  // extended = closed (on the Preload)`,
     chainBar.move_absolute(deg * 3, 200);
     checkNear("chain bar to %g deg", deg, settle(chainBar, deg * 3, 9) / 3, 3);
   }
-  printf("-- claw: lets go of the Preload, then picks it up off the floor --\\n");
+  printf("-- claw: lets go of the Preload, then the intake brings it back up into the claw --\\n");
   claw.retract();
   pros::delay(400);  // the Preload falls over in front of the robot
   check("claw open", !claw.is_extended(), claw.is_extended());
-  chainBar.move_absolute(-25 * 3, 200);  // down to the floor in front
-  settle(chainBar, -75, 9);
-  claw.extend();
-  pros::delay(300);
-  check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
-  chainBar.move_absolute(0, 200);
-  settle(chainBar, 0, 9);
+  // the claw sits inside the robot and only gets pieces through the intake: run it and
+  // creep up to the Pin lying in front; with the cascade and chain bar down it hands the Pin up
   printf("-- intake --\\n");
   intake.move(127);
   pros::delay(400);
   check("intake spinning in (rpm)", intake.get_actual_velocity() > 500, intake.get_actual_velocity());
+  chainBar.move_absolute(-25 * 3, 200);  // the claw down at the intake's hand-off
+  settle(chainBar, -75, 9);
+  const double crept = drive(3.5, 40);  // the Pin lies just past the intake's mouth
+  pros::delay(600);
+  claw.extend();
+  pros::delay(300);
+  check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
   intake.brake();
+  chainBar.move_absolute(0, 200);
+  drive(-crept);
 }`,
   },
   'test-ace': {
@@ -359,6 +371,7 @@ ${liftTest('6-bar (1:5)', 'lift', 5, [30, 60, 90, 0])}
 }`,
   },
   'test-workhorse': {
+    rear: true,
     robot: 'override-fourbar',
     name: 'Override: 4-bar + rear piston claw + front Toggle bumper',
     intro: ': the rear 4-bar to three heights, and the rear claw drops and re-grabs the Preload behind the robot',
@@ -464,13 +477,14 @@ void mechanismTest() {
 };
 
 for (const [id, r] of Object.entries(robots)) {
+  if (!fs.existsSync(path.join('data/robots', r.robot + '.json'))) continue; // a retired preset (tests/fixtures/robots)
   const dir = path.join('samples', id);
   fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'include'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'include', 'main.h'), mainH);
   const src = `${header(r.name, r.intro)}
 ${r.devices}
-${checks}${driveCode(r.gearing[0], r.gearing[1])}
+${checks}${driveCode(r.gearing[0], r.gearing[1], r.rear)}
 // ---------------- mechanisms ----------------
 ${r.mech}
 

@@ -4,7 +4,7 @@
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the GPS and chamber sensor are read, the DR4B lifts the Preload to three heights, the clamp lets go and grabs again, and the intake spins both ways. Each check prints PASS or FAIL with what it measured
+// its range: the GPS and chamber sensor are read, the DR4B lifts the Preload to three heights, the intake spins both ways, and the clamp lets go of the Preload. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
 pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
@@ -120,13 +120,6 @@ void mechanismTest() {
     lift.move_absolute(deg * 7, 200);
     checkNear("DR4B to %g deg", deg, settle(lift, deg * 7, 21.0) / 7, 3);
   }
-  printf("-- chamber clamp: lets go of the Preload, then grabs it again --\n");
-  clamp.retract();
-  pros::delay(400);  // it drops out behind the robot
-  check("clamp open", !clamp.is_extended(), clamp.is_extended());
-  clamp.extend();
-  pros::delay(300);
-  check("clamp closed", clamp.is_extended(), clamp.is_extended());
   printf("-- intake --\n");
   intake.move(127);
   pros::delay(400);
@@ -135,6 +128,18 @@ void mechanismTest() {
   pros::delay(400);
   check("intake spinning out (rpm)", intake.get_actual_velocity() < -500, intake.get_actual_velocity());
   intake.brake();
+  printf("-- chamber clamp: lets go of the Preload --\n");
+  // the chamber is inside the robot and only the front intake can fill it again, so this just lets
+  // go: back of the robot up the lane first, so the Preload drops clear of the way back to the start
+  turnTo(540);
+  clamp.retract();
+  pros::delay(400);
+  check("clamp open", !clamp.is_extended(), clamp.is_extended());
+  check("chamber eye: the Preload dropped out", chamberEye.get_proximity() < 50, chamberEye.get_proximity());
+  clamp.extend();
+  pros::delay(300);
+  check("clamp closed", clamp.is_extended(), clamp.is_extended());
+  turnTo(360);
 }
 
 void initialize() {
