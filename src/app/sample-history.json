@@ -15,12 +15,21 @@
  "override-skills": {
   "src/main.cpp": [
    "1aek8uk0ssh",
+   "1hz5ujg59hd",
    "1q7rs1mspzc",
    "1vgp0asjggv",
    "1wfxoyl15yr",
    "930kjyrxt9",
    "cc11zgua73",
    "myb92jjkbj"
+  ]
+ },
+ "override-twobar": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ],
+  "src/main.cpp": [
+   "287u54hht89"
   ]
  },
  "override-workhorse-toggle": {
@@ -35,15 +44,73 @@
    "d3ve3uk8xt"
   ]
  },
+ "skills-cascade": {
+  "src/main.cpp": [
+   "1z3mp9rzs1c"
+  ]
+ },
+ "skills-continuous": {
+  "src/main.cpp": [
+   "n6jyvd0fhk"
+  ]
+ },
+ "skills-dr6b": {
+  "src/main.cpp": [
+   "2f5490nrg3w"
+  ]
+ },
+ "skills-fourbar": {
+  "include/main.h": [
+   "2dwq1pnzf4s"
+  ],
+  "src/main.cpp": [
+   "22gopz1edhg"
+  ]
+ },
+ "skills-sixbar": {
+  "include/main.h": [
+   "2dwq1pnzf4s"
+  ],
+  "src/main.cpp": [
+   "qj1npu4s82"
+  ]
+ },
+ "skills-twobar": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ],
+  "src/main.cpp": [
+   "11vnb1bjsqa"
+  ]
+ },
  "test-cascade": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ],
   "src/main.cpp": [
    "19widaflim5",
    "22q2trnrkti"
   ]
  },
  "test-dr4b": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ],
   "src/main.cpp": [
    "28ml0k4xsxa"
+  ]
+ },
+ "test-sixbar": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ]
+ },
+ "test-twobar": {
+  "include/main.h": [
+   "9k0nrwqdqf"
+  ],
+  "src/main.cpp": [
+   "1841a08h4hj"
   ]
  },
  "test-workhorse": {
