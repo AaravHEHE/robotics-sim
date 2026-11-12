@@ -12,19 +12,19 @@ import { build } from './helpers.ts';
 
 /** Score, Toggles and Pins Placed on Goals (counting the ones on the field at the start). */
 const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?: Record<string, string> }> = {
-  'override-twobar': { red: 35, blue: 0, pins: 6, toggles: { red1: 'red' } },
+  'override-twobar': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-cascade': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-dr4b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-sixbar': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   // 60 s Skills (the Midfield Goal's Pins count while the robot is parked beside it)
-  'override-skills': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'skills-twobar': { red: 28, blue: 0, pins: 2, toggles: { red1: 'red' } },
-  'skills-fourbar': { red: 43, blue: 0, pins: 4, toggles: { red1: 'red' } },
-  'skills-sixbar': { red: 43, blue: 0, pins: 4, toggles: { red1: 'red' } },
-  'skills-cascade': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'skills-continuous': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
-  'skills-dr6b': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-skills': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-twobar': { red: 78, blue: 0, pins: 6, toggles: { red1: 'red' } },
+  'skills-fourbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
+  'skills-sixbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
+  'skills-cascade': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-continuous': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-dr6b': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
 };
 
 describe('Override sample autons', () => {
@@ -56,7 +56,7 @@ describe('Override sample autons', () => {
  * pieces really moved the way the program says (its checks can't see them).
  */
 const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean }> = {
-  'test-twobar': { checks: 13, holder: 'Claw', regrab: true },
+  'test-twobar': { checks: 18, holder: 'Roller claw', regrab: true },
   'test-dr4b': { checks: 19 },
   'test-cascade': { checks: 17, holder: 'Claw', regrab: true },
   'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true },

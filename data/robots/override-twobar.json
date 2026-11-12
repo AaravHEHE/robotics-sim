@@ -1,27 +1,31 @@
 {
   "schema": 1,
   "id": "override-twobar",
-  "name": "Override: 2-bar arm + claw",
-  "description": "Two-bar (single arm) robot, drawn from the LCI two-bar CAD. The official Hero Bot layout: a 2-motor 200 rpm drive on 4\" omnis, a single arm (port 7, 1:5) and a motor-driven claw (port 8, closed past 60 degrees) that starts holding the Preload. 12\" tall, so its chassis reaches the Toggles.",
+  "name": "Override: 2-bar arm + wrist + roller claw (Banshee-style)",
+  "description": "Two-bar (single arm) robot, drawn from the LCI two-bar CAD, built like the Banshee 2-bar robots at Override events: a flex-wheel intake feeds a roller claw on the arm, and a wrist keeps the claw level as the arm swings. Modelled on the Banshee design (Joseph973). A 200 rpm floor intake (port 10) brings pieces up to an arm-mounted roller claw (port 9: two flex-wheel rollers that hold a Pin, banded for Cups). The arm (port 7, 1:5) folds back over the intake to take them, then swings forward to set them down; a 12:48 geared wrist (port 8) keeps the claw upright as the arm moves. It reaches Goals up to about three Pins high (it has to go up and over the stack). Passive front Toggle bumper. Starts holding the Preload.",
   "size": {
-    "width": 14,
-    "length": 14,
-    "height": 12
+    "width": 15,
+    "length": 15,
+    "height": 14
   },
-  "mass": 9,
+  "mass": 15,
   "drivetrain": {
     "type": "tank",
     "left": [
-      -1
+      -1,
+      -2,
+      -3
     ],
     "right": [
-      2
+      4,
+      5,
+      6
     ],
-    "cartridge": "green",
-    "wheelDiameter": 4,
-    "wheelRpm": 200,
-    "trackWidth": 11,
-    "maxAccel": 90
+    "cartridge": "blue",
+    "wheelDiameter": 3.25,
+    "wheelRpm": 450,
+    "trackWidth": 11.5,
+    "maxAccel": 180
   },
   "devices": [
     {
@@ -39,10 +43,43 @@
       "type": "motor",
       "port": 8,
       "cartridge": "green",
-      "name": "Claw"
+      "name": "Wrist"
+    },
+    {
+      "type": "motor",
+      "port": 9,
+      "cartridge": "green",
+      "name": "Roller claw"
+    },
+    {
+      "type": "motor",
+      "port": 10,
+      "cartridge": "green",
+      "name": "Intake"
     }
   ],
   "mechanisms": [
+    {
+      "kind": "intake",
+      "name": "Intake",
+      "motors": [
+        10
+      ],
+      "ratio": 1,
+      "zone": {
+        "x": 0,
+        "y": 8.25,
+        "width": 8,
+        "length": 1.5
+      },
+      "into": "Roller claw",
+      "handoff": {
+        "y": 6.3,
+        "z": 1
+      },
+      "transferMs": 350,
+      "rollerDiameter": 2.75
+    },
     {
       "kind": "lift",
       "name": "Arm",
@@ -53,30 +90,51 @@
       "ratio": 0.2,
       "range": [
         0,
-        95
+        120
       ],
       "home": {
-        "y": 10,
-        "z": 2.5
+        "y": 6.3,
+        "z": 1
       },
-      "length": 9,
-      "startAngle": -15
+      "length": 11,
+      "startAngle": -55
     },
     {
       "kind": "claw",
-      "name": "Claw",
+      "name": "Roller claw",
       "lift": "Arm",
-      "grip": "motor",
+      "grip": "roller",
+      "motors": [
+        9
+      ],
+      "ratio": 1,
+      "preload": "alliance-down"
+    },
+    {
+      "kind": "wrist",
+      "name": "Wrist",
+      "claw": "Roller claw",
       "motors": [
         8
       ],
-      "ratio": 1,
+      "ratio": 0.25,
       "range": [
-        0,
-        90
-      ],
-      "closedAt": 60,
-      "preload": "alliance-down"
+        -180,
+        180
+      ]
+    },
+    {
+      "kind": "toggleTool",
+      "name": "Toggle bumper",
+      "tool": "bumper",
+      "box": {
+        "x": 0,
+        "y": 7.75,
+        "width": 12,
+        "length": 0.5
+      },
+      "bottom": 11,
+      "top": 13.5
     }
   ],
   "cad": {

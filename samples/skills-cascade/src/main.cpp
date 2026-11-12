@@ -15,9 +15,11 @@
 //  1. A 3-Pin stack on red Goal R1: the Preload, then the Cup + yellow Pin stacks at
 //     (-47, -47) and (-23.5, -23.5).
 //  2. The Red 1 Toggle to red: R1's yellow halves score.
-//  3. Match Loads from the south red Loader: the first (a red/yellow Pin) onto red Goal R2, the
-//     rest onto the center Goal.
-//  4. Park in the Midfield beside the center Goal: everything on it scores.
+//  3. A lone red/yellow Pin off the floor onto neutral Goal N_R1 (both halves score).
+//  4. Match Loads from the south red Loader: the first (a red/yellow Pin) onto red Goal R2, two
+//     onto the center Goal.
+//  5. A lone red/yellow Pin off the floor on top of the center Goal, then stay beside it in the
+//     Midfield: everything on it scores.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -38,6 +40,7 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors
 
 constexpr double R1_X = -47.09, R1_Y = -23.55;  // red Goal R1
 constexpr double R2_X = -23.55, R2_Y = -47.09;  // red Goal R2
+constexpr double NR1_X = -47.09, NR1_Y = 23.55;  // neutral Goal N_R1 (2.5" taller)
 constexpr double LOADER_X = -64.96, LOADER_Y = -58.76;  // the south red Loader's bottom opening
 
 // Cascade spool degrees for a held stack to clear what is on the Goal (each 100 deg raises the
@@ -47,6 +50,8 @@ constexpr double EMPTY = 90, ON_ONE = 70, ON_TWO = 275;
 // loaded stacks already there is carried in 95 deg higher still, its Pin over the Cup on top, then
 // lowered 150 deg into that Cup before the claw lets go.
 constexpr double C_EMPTY = EMPTY + 153, LAYER = 197;
+// A lone Pin over the empty 5.77" neutral Goal.
+constexpr double N_EMPTY = EMPTY + 25;
 
 // Chain bar: 0 = straight out front (the claw 11" ahead, 6" up), -25 = down in front of
 // the intake where it takes stacks, 90 = straight up (out of the way).
@@ -126,6 +131,26 @@ void placeOn(double x, double y, double spool, double lowerTo = -1) {
   pros::delay(150);
 }
 
+// Drive the intake onto a Pin lying on the floor: the robot ends at (rx, ry) facing `heading`, the
+// intake's mouth on the Pin's near end; a short straight run in with the intake going, then the
+// intake hands it up into the lowered claw.
+void intakeLying(double rx, double ry, double heading, double runIn = 6) {
+  ready();
+  const double h = heading * M_PI / 180;
+  const double sx = rx - std::sin(h) * runIn, sy = ry - std::cos(h) * runIn;
+  const lemlib::Pose at = chassis.getPose();
+  if (std::hypot(sx - at.x, sy - at.y) > 1.5) approach(sx, sy, 0);  // (already there: just turn)
+  chassis.turnToHeading(heading, 700);
+  chassis.waitUntilDone();
+  intake.move(127);
+  chassis.moveToPoint(rx, ry, 1200, {.maxSpeed = 60});
+  chassis.waitUntilDone();
+  pros::delay(450);  // up the funnel into the claw
+  claw.extend();
+  pros::delay(200);
+  intake.brake();
+}
+
 // Hit the Toggle ahead at full speed (two faces), then let go of it.
 void ramToggle() {
   leftMotors.move(127);
@@ -174,18 +199,31 @@ void autonomous() {
   chassis.waitUntilDone();
   ramToggle();
 
-  // 3. Down the lane x = -58.3 (between R1 and the Cups along the wall) to the south Loader. The
-  //    first loaded stack holds a red/yellow Pin: onto R2 (its red half scores in Red 2). The rest
-  //    go onto the center Goal C, where every visible half scores while the robot is in the
-  //    Midfield, so the robot finishes parked beside it.
-  chassis.moveToPoint(-58.3, -2, 800, {.forwards = false});
-  chassis.turnToHeading(180, 700);
-  chassis.moveToPoint(-58.3, -40, 1500);
+  // 3. A lone red/yellow Pin onto the empty neutral Goal N_R1: alone, both its halves show (red in a
+  //    red Quadrant, yellow Owned through the red Toggle). It comes from the cross at (-47, 47):
+  //    up the lane x = -59 past N_R1, then in on the south Pin from the west-south-west.
+  chassis.moveToPoint(-58.3, 5, 900, {.forwards = false});
+  approach(-58, 33.5, 0);  // straight up the 17" gap between the wall Cups and N_R1, to where it can turn
+  intakeLying(-54.5, 35.5, 60, 4);
+  backOff(4);
+  placeOn(NR1_X, NR1_Y, N_EMPTY, EMPTY + 10);  // in just over its top, then down onto it
+  backOff(5);
+
+  // 4. Down the lane to the south Loader. The first loaded stack holds a red/yellow Pin: onto R2
+  //    (its red half scores in Red 2). The next ones (as many as time allows, up to three) go onto the center Goal C, where every visible
+  //    half scores while the robot is in the Midfield.
+  chainBarTo(90);
+  cascadeTo(0);
+  approach(-58.3, 33.5, 0);
+  approach(-58.3, -2, 0);
+  approach(-58.3, -40, 0);
   approach(-50, -58.76, 0);
   takeMatchLoad();
   placeOn(R2_X, R2_Y, EMPTY);
   backOff(5);
-  for (int n = 0; n < 5 && pros::millis() < 50000; n++) {
+  int loads = 0;
+  for (; loads < 3 && pros::millis() < 40000; loads++) {
+    const int n = loads;
     approach(-50, -58.76, 0);
     takeMatchLoad();
     // over the Goal and n loaded stacks already on it, then lowered into the Cup on top
@@ -193,10 +231,15 @@ void autonomous() {
     placeOn(0, 0, over, n > 0 ? over - 150 : -1);
     backOff(5);
   }
-  // 4. Park in the Midfield, beside C.
-  chainBarTo(90);
-  cascadeTo(0);
-  approach(0, 0, 13);
+
+  // 5. A lone red/yellow Pin on top of C (both halves score in the Midfield): the west Pin of the
+  //    cross at (23.5, -23.5), taken from the north-west, then carried in over the Cup on top of C
+  //    and lowered into it.
+  intakeLying(10.07, -17.17, 135);
+  backOff(3);
+  placeOn(0, 0, C_EMPTY + loads * LAYER + 95, C_EMPTY + loads * LAYER - 55);
+
+  // 6. Stay beside C, in the Midfield.
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

@@ -1,17 +1,19 @@
 #include "main.h"
 
-// Mechanism test for the "Override: Flex (Hero Bot) arm + claw" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: Banshee (intake + arm + roller claw)" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
-// its range: the arm to three heights, then the claw lets go of the Preload and picks it up again. Each check prints PASS or FAIL with what it measured
+// its range: the arm to three angles with the wrist keeping the claw upright, the roller claw rolls the Preload out and back in, and the intake spins. Each check prints PASS or FAIL with what it measured
 // in the Console; the last line adds them up. Everything should PASS.
 
-pros::MotorGroup leftDrive({-1}, pros::MotorGears::green, pros::MotorUnits::degrees);
-pros::MotorGroup rightDrive({2}, pros::MotorGears::green, pros::MotorUnits::degrees);
+pros::MotorGroup leftDrive({-1, -2, -3}, pros::MotorGears::blue, pros::MotorUnits::degrees);
+pros::MotorGroup rightDrive({4, 5, 6}, pros::MotorGears::blue, pros::MotorUnits::degrees);
 pros::Imu imu(11);
-pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);   // 1:5 to the arm
-pros::Motor claw(8, pros::MotorGears::green, pros::MotorUnits::degrees);  // closed past 60°
+pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);     // 1:5 to the arm
+pros::Motor wrist(8, pros::MotorGears::green, pros::MotorUnits::degrees);   // 12:48 to the claw
+pros::Motor rollers(9, pros::MotorGears::green);                            // roller claw
+pros::Motor intake(10, pros::MotorGears::green);
 
 // ---------------- checks ----------------
 int passed = 0, failed = 0;
@@ -40,8 +42,8 @@ double settle(M& m, double target, double tol, int ms = 2500) {
 }
 
 // ---------------- drivetrain ----------------
-// 4" wheels, direct drive (200 rpm)
-constexpr double IN_PER_DEG = 4.0 * M_PI / 360.0;
+// 3.25" wheels geared 36:48 (450 rpm from 600 rpm motors)
+constexpr double IN_PER_DEG = 3.25 * M_PI / 360.0 * (450.0 / 600.0);
 // From the start up the lane to an open spot where the robot can turn a full circle
 constexpr double LANE = 24.5;
 
@@ -103,19 +105,36 @@ void driveBack() {
 }
 
 // ---------------- mechanisms ----------------
+// The claw turns with the arm, so the wrist turns back by the same angle to keep it upright.
+void armTo(double deg) {
+  arm.move_absolute(deg * 5, 200);
+  wrist.move_absolute(-deg * 4, 200);
+}
+
 void mechanismTest() {
-  printf("-- arm (1:5) --\n");
+  printf("-- arm (1:5) with the wrist (12:48) keeping the claw upright --\n");
   for (double deg : {30.0, 60.0, 90.0, 0.0}) {
-    arm.move_absolute(deg * 5, 200);
-    checkNear("arm to %g deg", deg, settle(arm, deg * 5, 15.0) / 5, 3);
+    armTo(deg);
+    checkNear("arm to %g deg", deg, settle(arm, deg * 5, 15) / 5, 3);
+    checkNear("wrist at %g deg (claw upright)", -deg, settle(wrist, -deg * 4, 12) / 4, 3);
   }
-  // An arm claw tilts with the arm: only near the bottom can it set a Pin down or pick one up.
-  printf("-- claw: lets go of the Preload, then picks it up again --\n");
-  claw.move_absolute(0, 100);
-  check("claw open (deg)", settle(claw, 0, 5) < 10, claw.get_position());
-  pros::delay(300);  // the Preload falls over in front of the robot
-  claw.move_absolute(90, 100);
-  check("claw closed on the Pin (deg)", settle(claw, 90, 5) > 60, claw.get_position());
+  printf("-- roller claw: out, then back in --\n");
+  rollers.move(-127);  // spit the Preload out
+  pros::delay(300);
+  check("rollers spinning out (rpm)", rollers.get_actual_velocity() < -150, rollers.get_actual_velocity());
+  pros::delay(300);
+  rollers.brake();
+  pros::delay(300);
+  rollers.move(127);   // pull it back in from the floor in front
+  pros::delay(300);
+  check("rollers spinning in (rpm)", rollers.get_actual_velocity() > 150, rollers.get_actual_velocity());
+  pros::delay(500);
+  rollers.brake();
+  printf("-- intake --\n");
+  intake.move(127);
+  pros::delay(400);
+  check("intake spinning in (rpm)", intake.get_actual_velocity() > 150, intake.get_actual_velocity());
+  intake.brake();
 }
 
 void initialize() {
@@ -124,11 +143,11 @@ void initialize() {
   leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
   rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
   arm.set_brake_mode(pros::MotorBrake::hold);
-  claw.move_absolute(90, 100);  // squeeze the Preload
+  wrist.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: Flex (Hero Bot) arm + claw\n");
+  printf("Mechanism test: Override: Banshee (intake + arm + roller claw)\n");
   driveTest();
   mechanismTest();
   driveBack();

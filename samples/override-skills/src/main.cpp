@@ -13,8 +13,10 @@
 //     auton), then the Red 1 Toggle to red at speed.
 //  2. A loaded stack (red/yellow Pin) from the south red Loader, straight up the intake into the
 //     chamber, backed onto Goal R2: its red half scores in Red 2.
-//  3. The rest of the Match Loads onto the center Goal C, backed onto it one at a time.
-//  4. Finish beside C, in the Midfield: everything on C scores.
+//  3. A lone red/yellow Pin off the floor onto neutral Goal N_R1 (both halves score).
+//  4. More Match Loads onto the center Goal C, backed onto it one at a time, then a lone Pin off the
+//     floor on top of them.
+//  5. Finish beside C, in the Midfield: everything on C scores.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -47,6 +49,8 @@ void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 7, 100); }
 // starting 45 degrees down; with the lift down a held Pin's bottom is at the floor.
 double barFor(double bottom) { return std::asin(bottom / 20 - 0.70711) * 180 / M_PI + 45; }
 constexpr double C_TOP = 8.77;  // the center Goal's top
+constexpr double N_TOP = 5.77;  // a neutral Goal's top
+constexpr double NR1_X = -47.09, NR1_Y = 23.55;  // neutral Goal N_R1
 
 // Turn the back of the robot to (x, y) and back up until the chamber is over it. The DR4B
 // must be up first: a stack still rising would hit the Goal or the Pins on it from the side.
@@ -101,6 +105,37 @@ void takeMatchLoad(double x, double y) {
   intake.brake();
   for (int t = 0; t < 1000 && chamberEye.get_proximity() < 50; t += 10) pros::delay(10);
   clamp.extend();
+}
+
+// Run a Pin lying on the floor up the intake into the chamber: the robot ends at (rx, ry) facing
+// `heading` with the intake's mouth on the Pin's near end, after a short straight run in.
+void intakeLying(double rx, double ry, double heading, double runIn = 6) {
+  liftTo(0);
+  clamp.retract();
+  const double h = heading * M_PI / 180;
+  const double sx = rx - std::sin(h) * runIn, sy = ry - std::cos(h) * runIn;
+  const lemlib::Pose at = chassis.getPose();
+  if (std::hypot(sx - at.x, sy - at.y) > 1.5) approach(sx, sy, 0);  // (already there: just turn)
+  chassis.turnToHeading(heading, 800);
+  chassis.waitUntilDone();
+  intake.move(127);
+  chassis.moveToPoint(rx, ry, 1200, {.maxSpeed = 60});
+  chassis.waitUntilDone();
+  for (int t = 0; t < 1000 && chamberEye.get_proximity() < 50; t += 10) pros::delay(10);
+  clamp.extend();
+  intake.brake();
+}
+
+// Back the chamber over (x, y) at bar `over`, lower it to `down` (if given) and let go.
+void dropOn(double x, double y, double over, double down = -1) {
+  liftTo(over);
+  backInto(x, y);
+  if (down >= 0) {
+    liftTo(down);
+    for (int t = 0; t < 600 && std::fabs(lift.get_position(0) - down * 7) > 7; t += 10) pros::delay(10);
+  }
+  clamp.retract();
+  pros::delay(150);
 }
 
 void initialize() {
@@ -173,24 +208,33 @@ void autonomous() {
   chassis.waitUntilDone();
   ramToggle();
 
-  // 5. Down the lane x = -58.3 (between R1 and the Cups along the wall) to the south red
-  //    Loader, intake running.
-  backTo(-58.3, -2);
-  chassis.turnToHeading(180, 800);
-  chassis.moveToPoint(-58.3, -40, 1500);
+  // 5. A lone red/yellow Pin onto the empty neutral Goal N_R1 (both its halves score: red in a red
+  //    Quadrant, yellow through the red Toggle), from the cross at (-47, 47): up the lane x = -59
+  //    past N_R1, in on the cross's south Pin from the west-south-west.
+  pullAway(-4);  // straight back off the Toggle: turning beside it, a corner would catch it
+  approach(-58.3, 12, 0);
+  approach(-58, 33.5, 0);  // straight up the 17" gap between the wall Cups and N_R1, to where it can turn
+  intakeLying(-54.5, 35.5, 60, 4);
+  // (no backing off: the chamber, 11" behind, would carry the Pin into the wall Cups)
+  dropOn(NR1_X, NR1_Y, barFor(N_TOP + 0.3), barFor(3.5));
+
+  // 6. Down the lane x = -59 (between R1 and the Cups along the wall) to the south red Loader. The
+  //    first loaded stack (a red/yellow Pin) onto R2; then as many as time allows onto the center
+  //    Goal C, where every visible half scores while the robot is in the Midfield.
+  pullAway(4);
+  liftTo(0);
+  approach(-58.3, 33.5, 0);
+  approach(-58.3, -2, 0);
+  approach(-58.3, -40, 0);
   approach(-50, -58.76, 0);
   chassis.turnToHeading(270, 800);
   chassis.waitUntilDone();
   takeMatchLoad(-64.96, -58.76);  // the Loader's bottom opening
-  liftTo(ONE_PIN);
   pullAway(-3);
-  backInto(-23.55, -47.09);     // R2
-  clamp.retract();
-  pros::delay(150);
-
-  // 6. The rest of the Match Loads onto the center Goal C, backing the chamber over it: every
-  //    visible half there scores while the robot is in the Midfield, so it finishes beside C.
-  for (int n = 0; n < 5 && pros::millis() < 50000; n++) {
+  dropOn(-23.55, -47.09, ONE_PIN);  // R2
+  int loads = 0;
+  for (; loads < 3 && pros::millis() < 41000; loads++) {
+    const int n = loads;
     pullAway(4);
     liftTo(0);
     approach(-50, -58.76, 0);
@@ -200,18 +244,16 @@ void autonomous() {
     pullAway(-3);
     // over the Goal and the n loaded stacks on it (their Cup tops), then down into the top Cup
     // (n loaded stacks put the top Cup's rim 7.15n" over the Goal; a Pin let into it rests 3.2" lower)
-    const double over = n == 0 ? barFor(C_TOP + 0.4) : barFor(C_TOP + 7.15 * n + 1.0);
-    liftTo(over);
-    backInto(0, 0);
-    if (n > 0) {
-      const double down = barFor(C_TOP + 7.15 * n - 2.5);
-      liftTo(down);
-      for (int t = 0; t < 600 && std::fabs(lift.get_position(0) - down * 7) > 7; t += 10) pros::delay(10);
-    }
-    clamp.retract();
-    pros::delay(150);
+    if (n == 0) dropOn(0, 0, barFor(C_TOP + 0.4));
+    else dropOn(0, 0, barFor(C_TOP + 7.15 * n + 1.0), barFor(C_TOP + 7.15 * n - 2.5));
   }
+
+  // 7. A lone red/yellow Pin on top of C: the west Pin of the cross at (23.5, -23.5), taken from the
+  //    north-west. Then it stays beside C, in the Midfield.
   pullAway(4);
+  intakeLying(10.07, -17.17, 135);
+  dropOn(0, 0, barFor(C_TOP + 7.15 * loads + 1.0), barFor(C_TOP + 7.15 * loads - 2.5));
+  pullAway(3);
   liftTo(0);
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }

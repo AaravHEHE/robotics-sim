@@ -1,142 +1,134 @@
 #include "main.h"
+#include "lemlib/api.hpp" // IWYU pragma: keep
 
-// V5RC Override: Flex, the official Hero Bot (plain PROS).
-// Robot: "Override: Flex (Hero Bot) arm + claw". Start: Red 1 (left wall, south).
+// V5RC Override: Banshee (LemLib). Robot: "Override: 2-bar arm + wrist + roller claw". Start: Red 1 (left wall, south).
 //
-//  1. Lift the Preload clear of the 3.25" Goal and drop it (red half down) into red Goal
-//     R1: 5 points for the red half.
-//  2. Press the Red 1 Toggle twice with the front of the chassis (the Flex is 12" tall,
-//     tall enough to reach a Toggle on top of the wall): yellow -> blue -> red. Now the
-//     Preload's yellow half and the yellow Pin on neutral Goal N_R1 are Owned by red.
+// The Banshee's floor intake brings a whole standing stack (a Cup with a Pin in it) up to
+// the roller claw, which waits folded back over the intake. The arm then swings forward and
+// up, with the geared wrist keeping the claw upright, and the rollers spit the stack out
+// onto the Goal: the Cup nests over the Pin already there.
 //
-// The Flex's claw is on a single-pivot arm, so it tilts as the arm rises: past 20° it can't
-// set a stack down level. That limits it to about 3" of lift: enough for the Preload over
-// an empty alliance Goal, not enough to bring a Cup over the Pin standing in it.
+//  1. Roll the Preload (red half down) into red Goal R1.
+//  2. Intake the Cup + yellow Pin at (-47, -47) and stack it on the Preload.
+//  3. Intake the Cup + yellow Pin at (-23.5, -23.5) and stack it on top: a 3-Pin stack.
+//  4. Ram the Red 1 Toggle fast: the bumper flips it two faces, yellow -> red, so red Owns
+//     every visible yellow half in Red 1 (including the Pin on neutral Goal N_R1).
 //
-// Field headings: 0° faces the top wall, clockwise positive (the GPS / LemLib convention).
-// The robot starts facing 90° (into the field from the left wall); the IMU starts at 0.
+// setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
+// +y toward the top wall, headings clockwise from +y).
 
-pros::MotorGroup leftDrive({-1}, pros::MotorGears::green, pros::MotorUnits::degrees);
-pros::MotorGroup rightDrive({2}, pros::MotorGears::green, pros::MotorUnits::degrees);
-pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);   // 1:5 to the arm
-pros::Motor claw(8, pros::MotorGears::green, pros::MotorUnits::degrees);  // closed past 60°
+pros::MotorGroup leftMotors({-1, -2, -3}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({4, 5, 6}, pros::MotorGearset::blue);
 pros::Imu imu(11);
+pros::Motor arm(7, pros::MotorGearset::green, pros::MotorUnits::degrees);    // 1:5 to the arm
+pros::Motor wrist(8, pros::MotorGearset::green, pros::MotorUnits::degrees);  // 12:48 to the claw
+pros::Motor rollers(9, pros::MotorGearset::green);                           // roller claw
+pros::Motor intake(10, pros::MotorGearset::green);
 
-// 4" wheels, direct drive
-constexpr double IN_PER_MOTOR_DEG = 4.0 * M_PI / 360.0;
-constexpr double START_HEADING = 90.0;
+lemlib::Drivetrain drivetrain(&leftMotors, &rightMotors, 11.5, lemlib::Omniwheel::NEW_325, 450, 2);
+lemlib::ControllerSettings linearController(10, 0, 3, 3, 1, 100, 3, 500, 20);
+lemlib::ControllerSettings angularController(2, 0, 10, 3, 1, 100, 3, 500, 0);
+lemlib::OdomSensors sensors(nullptr, nullptr, nullptr, nullptr, &imu);
+lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors);
 
-double fieldHeading() { return START_HEADING + imu.get_rotation(); }
+// Red Goal R1 and the two stacks this auton builds onto it.
+constexpr double R1_X = -47.09, R1_Y = -23.55;
 
-// Where the robot is on the field (inches), kept up to date by drive(): a simple
-// dead-reckoning odometry, good enough because turns happen in place.
-double robotX = -60.7, robotY = -37;
+// Arm angles (degrees from folded back over the intake): the claw takes stacks from the
+// intake at 0; at 25 it carries a Pin just over an empty Goal (its bottom 3.5" up), at 45 a
+// Cup just over a 1-Pin stack (7.1" up, over the Pin's 6.8" top), at 83 a Cup just over a
+// 2-Pin stack (14.2" up, over its 13.9" top). The claw is then 10.5", 10.8" and 9.7" ahead of
+// the robot center: carried any lower, the stack would hit what is already on the Goal.
+constexpr double FOLDED = 0, ONE_PIN = 25, ON_ONE = 45, ON_TWO = 83;
 
-// Drive straight using motor encoders: a P loop on the remaining distance (so the robot
-// slows down before the target instead of skidding past it), holding the heading with
-// the IMU. Gives up after `timeoutMs` (e.g. when a wall stops the robot).
-void drive(double inches, int maxSpeed = 127, int timeoutMs = 2500) {
-  leftDrive.tare_position_all();
-  rightDrive.tare_position_all();
-  const double heading = imu.get_rotation();
-  const std::uint32_t end = pros::millis() + timeoutMs;
-  int settled = 0;
-  while (pros::millis() < end && settled < 3) {
-    const double traveled = (leftDrive.get_position() + rightDrive.get_position()) / 2 * IN_PER_MOTOR_DEG;
-    const double error = inches - traveled;
-    settled = std::fabs(error) < 0.5 ? settled + 1 : 0;
-    const double power = std::clamp(error * 14.0, -double(maxSpeed), double(maxSpeed));
-    const double correction = (heading - imu.get_rotation()) * 2.0;
-    leftDrive.move(power + correction);
-    rightDrive.move(power - correction);
-    pros::delay(10);
-  }
-  leftDrive.brake();
-  rightDrive.brake();
-  pros::delay(20);
-  const double traveled = (leftDrive.get_position() + rightDrive.get_position()) / 2 * IN_PER_MOTOR_DEG;
-  const double h = fieldHeading() * M_PI / 180;
-  robotX += traveled * std::sin(h);
-  robotY += traveled * std::cos(h);
+// The claw turns with the arm, so the wrist turns back by the same angle to keep it upright.
+void armTo(double deg) {
+  arm.move_absolute(deg * 5, 200);
+  wrist.move_absolute(-deg * 4, 200);
 }
 
-// Turn in place to a field heading (degrees, clockwise from the top wall): a PD loop.
-// The D term uses the IMU's gyro rate, so the robot eases into the target instead of
-// swinging past it, and the turn ends only once the robot is on target AND has stopped.
-void turnTo(double target, int maxSpeed = 127) {
-  constexpr double kP = 4.0, kD = 0.3;
-  const std::uint32_t end = pros::millis() + 2000;
-  while (pros::millis() < end) {
-    const double error = std::remainder(target - fieldHeading(), 360.0);
-    const double rate = -imu.get_gyro_rate().z;  // deg/s, clockwise positive like the heading
-    if (std::fabs(error) < 1.0 && std::fabs(rate) < 5.0) break;
-    const double power = std::clamp(error * kP - rate * kD, -double(maxSpeed), double(maxSpeed));
-    leftDrive.move(power);
-    rightDrive.move(-power);
-    pros::delay(10);
-  }
-  leftDrive.brake();
-  rightDrive.brake();
-  pros::delay(20);
+// Face (x, y), drive straight at it and stop `standoff` inches short, still facing it.
+void approach(double x, double y, double standoff, float maxSpeed = 127) {
+  chassis.turnToPoint(x, y, 700);
+  chassis.waitUntilDone();
+  const lemlib::Pose p = chassis.getPose();
+  const double dx = x - p.x, dy = y - p.y, d = std::hypot(dx, dy);
+  chassis.moveToPoint(x - dx / d * standoff, y - dy / d * standoff, 1500, {.maxSpeed = maxSpeed});
+  chassis.waitUntilDone();
 }
 
-
-// Turn to face the field point (x, y), then drive at it and stop `standoff` inches short.
-void goTo(double x, double y, double standoff, int maxSpeed = 127) {
-  const double dx = x - robotX, dy = y - robotY;
-  turnTo(std::atan2(dx, dy) * 180 / M_PI);
-  drive(std::hypot(dx, dy) - standoff, maxSpeed);
+// Back straight away from whatever is ahead, far enough to turn freely.
+void backOff(double inches) {
+  const lemlib::Pose p = chassis.getPose();
+  const double h = p.theta * M_PI / 180;
+  chassis.moveToPoint(p.x - std::sin(h) * inches, p.y - std::cos(h) * inches, 800, {.forwards = false});
+  chassis.waitUntilDone();
 }
 
-// Push into whatever is ahead (a wall) at a fixed power for a moment, then back off.
-void press(int ms = 800) {
-  leftDrive.move(80);
-  rightDrive.move(80);
+// Spit what the roller claw holds out of its mouth: the bottom piece first.
+void rollOut(int ms) {
+  rollers.move(-127);
   pros::delay(ms);
-  leftDrive.move(-70);
-  rightDrive.move(-70);
-  pros::delay(250);
-  leftDrive.brake();
-  rightDrive.brake();
-  pros::delay(100);
+  rollers.brake();
 }
 
 void initialize() {
   pros::lcd::initialize();
-  imu.reset(true);  // blocks ~2 s while the IMU calibrates
-  leftDrive.set_brake_mode_all(pros::MotorBrake::hold);
-  rightDrive.set_brake_mode_all(pros::MotorBrake::hold);
-  claw.move_absolute(90, 100);  // grip the Preload
+  chassis.calibrate();
+  arm.set_brake_mode(pros::MotorBrake::hold);
+  wrist.set_brake_mode(pros::MotorBrake::hold);
 }
 
 void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  // 1. Preload into R1 (-47.1, -23.5). First 2" out from the wall: turning in place right
-  //    against it would swing a corner into it. Raise the arm to 19.8° (just under the most it can tilt
-  //    and still set the Pin down level): the Pin's bottom is then 3.1" up, just over the
-  //    Goal top. Then straight at R1, stopping 10.27" from the Goal's center so the claw
-  //    (10.27" ahead with the arm up) is over it.
-  drive(2);
-  arm.move_absolute(19.8 * 5, 100);
-  goTo(-47.09, -23.55, 10.27);
-  claw.move_absolute(0, 100);  // open: the Pin drops into the Goal
-  pros::delay(300);
-  arm.move_absolute(0, 100);
+  chassis.setPose(-60.7, -37, 90);  // Red 1 (south) start
+  // 3" out from the wall first: turning in place right against it swings a corner into it
+  chassis.moveToPoint(-57.7, -37, 600);
 
-  // 2. Back off, then up the lane x = -58 to the Red 1 Toggle (left wall, y = 0).
-  drive(-6);
-  goTo(-58, -36, 0);
-  turnTo(0);
-  drive(-5 - robotY);
-  turnTo(270);
-  // fold the arm up: the claw, low out in front, would hit the wall before the chassis
-  // reaches the Toggle (straight up it is over the robot)
-  arm.move_absolute(95 * 5, 100);
-  pros::delay(300);
-  press();  // yellow -> blue
-  press();  // blue -> red
+  // 1. Preload into R1.
+  armTo(ONE_PIN);
+  approach(R1_X, R1_Y, 10.5);
+  rollOut(300);
+
+  // 2. Fold the arm back over the intake and run the intake through the stack at (-47, -47).
+  backOff(6);
+  armTo(FOLDED);
+  intake.move(127);
+  approach(-47.09, -47.09, 9.5, 90);
+  pros::delay(450);  // up the intake and into the claw
+  armTo(ON_ONE);
+  approach(R1_X, R1_Y, 10.82);
+  rollOut(500);      // the Cup, then its Pin
+
+  // 3. Same with the stack at (-23.5, -23.5), east of R1, then onto the top of the stack.
+  backOff(6);
+  armTo(FOLDED);
+  approach(-23.55, -23.55, 9.5, 90);
+  pros::delay(450);
+  intake.brake();
+  armTo(ON_TWO);
+  // the chassis can't get much closer than 10.6" (the corners of the Goal's base): the claw
+  // stops 1" short of the Goal's center, close enough for the Cup to drop over the Pin
+  approach(R1_X, R1_Y, 10.65);
+  rollOut(500);
+
+  // 4. Up the field to the Red 1 Toggle and hit it at full speed: two faces, to red.
+  backOff(6);
+  armTo(FOLDED);
+  chassis.turnToPoint(-40, -2, 600);
+  chassis.moveToPoint(-40, -2, 1200);
+  chassis.turnToHeading(270, 700);
+  chassis.waitUntilDone();
+  leftMotors.move(127);
+  rightMotors.move(127);
+  pros::delay(700);
+  leftMotors.move(-60);
+  rightMotors.move(-60);
+  pros::delay(250);
+  leftMotors.brake();
+  rightMotors.brake();
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

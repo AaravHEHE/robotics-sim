@@ -147,31 +147,7 @@ const liftTest = (label, motor, ratio, targets, tol = 3) => `  printf("-- ${labe
 const robots = {
   'test-twobar': {
     robot: 'override-twobar',
-    name: 'Override: Flex (Hero Bot) arm + claw',
-    intro: ': the arm to three heights, then the claw lets go of the Preload and picks it up again',
-    devices: `pros::MotorGroup leftDrive({-1}, pros::MotorGears::green, pros::MotorUnits::degrees);
-pros::MotorGroup rightDrive({2}, pros::MotorGears::green, pros::MotorUnits::degrees);
-pros::Imu imu(11);
-pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);   // 1:5 to the arm
-pros::Motor claw(8, pros::MotorGears::green, pros::MotorUnits::degrees);  // closed past 60°`,
-    gearing: ['4.0 * M_PI / 360.0', '4" wheels, direct drive (200 rpm)'],
-    init: `${initDrive}
-  arm.set_brake_mode(pros::MotorBrake::hold);
-  claw.move_absolute(90, 100);  // squeeze the Preload`,
-    mech: `void mechanismTest() {
-${liftTest('arm (1:5)', 'arm', 5, [30, 60, 90, 0])}
-  // An arm claw tilts with the arm: only near the bottom can it set a Pin down or pick one up.
-  printf("-- claw: lets go of the Preload, then picks it up again --\\n");
-  claw.move_absolute(0, 100);
-  check("claw open (deg)", settle(claw, 0, 5) < 10, claw.get_position());
-  pros::delay(300);  // the Preload falls over in front of the robot
-  claw.move_absolute(90, 100);
-  check("claw closed on the Pin (deg)", settle(claw, 90, 5) > 60, claw.get_position());
-}`,
-  },
-  'test-banshee': {
-    robot: 'override-banshee',
-    name: 'Override: Banshee (intake + arm + roller claw)',
+    name: 'Override: 2-bar arm + wrist + roller claw (Banshee-style)',
     intro: ': the arm to three angles with the wrist keeping the claw upright, the roller claw rolls the Preload out and back in, and the intake spins',
     devices: `${blueDrive}
 pros::Motor arm(7, pros::MotorGears::green, pros::MotorUnits::degrees);     // 1:5 to the arm

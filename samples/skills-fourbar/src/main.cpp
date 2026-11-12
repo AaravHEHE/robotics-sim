@@ -1,232 +1,191 @@
 #include "main.h"
+#include "lemlib/api.hpp" // IWYU pragma: keep
 
-// V5RC Override: Autonomous Coding Skills, 60 s (EZ-Template).
+// V5RC Override: Autonomous Coding Skills, 60 s (LemLib).
 // Robot: "Override: 4-bar + rear piston claw + front Toggle bumper". Start: Red 1 (left wall,
-// south). The claw is on the back of the robot and the Toggle bumper on the front, so it
-// scores reversing into Goals and presses Toggles driving forward:
-//  1. Back up to red Goal R1 and drop the Preload (red half down) in.
-//  2. Back onto the Cup + yellow Pin standing at (-47, -47), grab it, and stack it on the
-//     Preload.
-//  3. Press the Red 1 Toggle twice with the front bumper: yellow -> blue -> red. Now every
-//     visible yellow half in Red 1 is Owned by red.
-//  4. Match Loads from the south red Loader: the rear claw (no intake) clamps round the loaded
-//     stack in the Loader's bottom opening. The first (a red/yellow Pin) goes onto red Goal R2,
-//     the next onto the center Goal C, where every visible half scores while the robot is in the
-//     Midfield. A third would have to go 15.9" up, onto the Cup on C: the 4-bar only gets there
-//     with the claw pulled in 6" closer, so it stops at two.
-//  5. It finishes beside C, in the Midfield (+8).
+// south), 3.1" off the wall: the Preload standing in the rear claw must be inside the field.
 //
-// Skills field: every Goal starts empty; Match Loads come in only through the red Loaders, as
-// loaded stacks (a Pin with a Cup over it).
+// Skills field: every Goal starts empty; Match Loads come in only through the red Loaders, as loaded
+// stacks (a Pin with a Cup over it). Red halves score in red Quadrants, yellow halves where that
+// Quadrant's Toggle is red, every half on the center Goal while the robot is in the Midfield.
 //
-// Turning in place sweeps the robot's corners 10.6" around its center, so it only turns
-// where that circle is clear of the Goals and the diagonal stack.
+// The claw is on the back of the robot and the Toggle bumper on the front, so it scores reversing
+// into Goals and presses Toggles driving forward. With no intake, the claw clamps round whatever it
+// takes: a stack, a loaded stack in a Loader's opening, or just the Pin out of a Cup (closing above
+// the Cup's rim, so the Cup stays where it is).
 //
-// Positions are field coordinates in inches (origin at the center, +y toward the top wall);
-// odom_xyt_set() tells EZ-Template where the robot starts.
+//  1. The Preload into red Goal R1, then the Cup + yellow Pin at (-47, -47) stacked on it.
+//  2. The Red 1 Toggle pressed twice to red: R1's yellow halves are Owned.
+//  3. A Match Load (a red/yellow Pin under a Cup) from the south red Loader onto red Goal R2.
+//  4. The yellow/yellow Pin out of the Cup at (-23.5, -23.5) on top of it, and the Red 2 Toggle
+//     pressed to red: both its halves are Owned.
+//  5. The yellow/yellow Pin out of the Cup at (23.5, 23.5) onto the center Goal C, and the robot
+//     stays beside it, in the Midfield: both its halves score.
+//
+// 4-bar heights (bar degrees, 1:5 from the motor): the claw is 3" up and 11" behind with the bar
+// down, z = 3 + 12 (sin(bar - 30) + 0.5), reach = 11 + 12 (cos(bar - 30) - 0.866).
+//
+// setPose() puts LemLib's odometry in field coordinates (inches, origin at the center, +y toward
+// the top wall, headings clockwise from +y).
 
-ez::Drive chassis(
-    {-1, -2, -3},  // left drive ports (negative = reversed)
-    {4, 5, 6},     // right drive ports
-    11,            // IMU port
-    3.25,          // wheel diameter
-    450);          // wheel rpm (600 rpm motors geared 36:48)
-
-pros::Motor lift(7, pros::MotorGears::green, pros::MotorUnits::degrees);  // 4-bar, 1:5, reaching out the back
+pros::MotorGroup leftMotors({-1, -2, -3}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({4, 5, 6}, pros::MotorGearset::blue);
+pros::Imu imu(11);
+pros::Motor lift(7, pros::MotorGearset::green, pros::MotorUnits::degrees);  // 4-bar, 1:5, out the back
 pros::adi::Pneumatics claw('A', true);  // extended = closed, holding the Preload
 
-const int DRIVE_SPEED = 110;
-const int TURN_SPEED = 90;
+lemlib::Drivetrain drivetrain(&leftMotors, &rightMotors, 11.5, lemlib::Omniwheel::NEW_325, 450, 2);
+lemlib::ControllerSettings linearController(10, 0, 3, 3, 1, 100, 3, 500, 20);
+lemlib::ControllerSettings angularController(2, 0, 10, 3, 1, 100, 3, 500, 0);
+lemlib::OdomSensors sensors(nullptr, nullptr, nullptr, nullptr, &imu);
+lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors);
 
-// The 4-bar is geared 1:5, so the bar turns a fifth of the motor.
 void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 5, 200); }
 
-void default_constants() {
-  chassis.pid_drive_constants_set(20.0, 0.0, 100.0);
-  chassis.pid_heading_constants_set(11.0, 0.0, 20.0);
-  chassis.pid_turn_constants_set(3.0, 0.05, 20.0, 15.0);
-  chassis.pid_swing_constants_set(6.0, 0.0, 65.0);
-  chassis.pid_odom_angular_constants_set(6.5, 0.0, 52.5);
-  chassis.pid_odom_boomerang_constants_set(5.8, 0.0, 32.5);
-  chassis.pid_turn_exit_condition_set(90_ms, 3_deg, 250_ms, 7_deg, 500_ms, 500_ms);
-  chassis.pid_drive_exit_condition_set(90_ms, 1_in, 250_ms, 3_in, 500_ms, 500_ms);
-  chassis.pid_odom_turn_exit_condition_set(90_ms, 3_deg, 250_ms, 7_deg, 500_ms, 750_ms);
-  chassis.pid_odom_drive_exit_condition_set(90_ms, 1_in, 250_ms, 3_in, 500_ms, 750_ms);
-  chassis.slew_drive_constants_set(3_in, 70);
-  chassis.odom_look_ahead_set(7_in);
-  chassis.pid_angle_behavior_set(ez::shortest);
+// Turn to face (x, y) (or turn the back to it) and drive straight there.
+void goTo(double x, double y, bool reverse = false, float maxSpeed = 127) {
+  chassis.turnToPoint(x, y, 800, {.forwards = !reverse});
+  chassis.moveToPoint(x, y, 2000, {.forwards = !reverse, .maxSpeed = maxSpeed});
+  chassis.waitUntilDone();
 }
 
-// Turn to face (x, y) (or turn the back to it) and drive straight there: EZ-Template's own
-// odometry gives where the robot is.
-void goTo(double x, double y, bool reverse, int speed) {
-  const double dx = x - chassis.odom_x_get(), dy = y - chassis.odom_y_get();
-  const double heading = std::atan2(dx, dy) * 180 / M_PI + (reverse ? 180 : 0);
-  chassis.pid_turn_set(heading, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_drive_set((reverse ? -1 : 1) * std::hypot(dx, dy), speed);
-  chassis.pid_wait();
+// Face `heading`, then drive straight (back) to (x, y): to line the claw up exactly.
+void along(double heading, double x, double y, bool reverse, float maxSpeed = 60) {
+  chassis.turnToHeading(heading, 800);
+  chassis.moveToPoint(x, y, 1500, {.forwards = !reverse, .maxSpeed = maxSpeed});
+  chassis.waitUntilDone();
 }
 
-// From the Toggle (or a Goal), round to a spot east of the south Loader, face east and reverse
-// until the rear claw is in the Loader's bottom opening; clamp the loaded stack there.
-void takeMatchLoad() {
-  liftTo(0);
-  claw.retract();
-  // from the north, down the lane x = -59 first (between R1 and the Cups on the wall): straight from the Toggle would clip R1
-  if (chassis.odom_y_get() > -36) {
-    goTo(-59, -8, false, DRIVE_SPEED);
-    goTo(-59, -36, false, DRIVE_SPEED);
-  }
-  goTo(-50, -58.76, false, DRIVE_SPEED);
-  chassis.pid_turn_set(90_deg, TURN_SPEED);
-  chassis.pid_wait();
-  goTo(-53.2, -58.76, true, 50);
+void grab() {
   claw.extend();
-  pros::delay(250);
+  pros::delay(200);
+}
+
+void letGo() {
+  claw.retract();
+  pros::delay(200);
+}
+
+// Press the Toggle ahead twice with the front bumper (yellow -> blue -> red). The wall stops the
+// robot, so plain power for a set time; power 58 is about 35 in/s, one face per press.
+void pressToggle() {
+  for (int i = 0; i < 2; i++) {
+    leftMotors.move(58);
+    rightMotors.move(58);
+    pros::delay(700);
+    leftMotors.move(-60);  // let go: a Toggle a robot still touches does not count
+    rightMotors.move(-60);
+    pros::delay(250);
+  }
+  leftMotors.brake();
+  rightMotors.brake();
 }
 
 void initialize() {
-  pros::delay(500);
-  default_constants();
-  chassis.initialize();
+  pros::lcd::initialize();
+  lift.set_brake_mode(pros::MotorBrake::hold);
+  chassis.calibrate();
 }
 
 void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  chassis.pid_targets_reset();
-  chassis.drive_imu_reset();
-  chassis.drive_sensor_reset();
-  // Red 1 (south), 3.1" off the wall: the Preload standing in the rear claw must be inside the field
-  chassis.odom_xyt_set(-57.6_in, -37_in, 90_deg);
-  chassis.drive_brake_set(MOTOR_BRAKE_HOLD);
+  chassis.setPose(-57.6, -37, 90);
 
-  // 1. Preload into R1 (-47.1, -23.5). Out along y = -37 to a spot on R1's diagonal, turn
-  //    the back toward R1 and reverse until the claw (12.35" behind with the bar at 18°) is
-  //    over it, without touching it. At 18° the Pin's bottom is 3.5" up, clear of the 3.25"
-  //    Goal: any lower and it would hit the Goal instead of going over it.
+  // 1. Preload into R1 (-47.1, -23.5): out along y = -37 to a spot on R1's diagonal, the back toward
+  //    R1, and reverse until the claw (12.35" behind with the bar at 18) is over it. At 18 the Pin's
+  //    bottom is 3.5" up, clear of the 3.25" Goal.
   liftTo(18);
-  chassis.pid_odom_set({{-33.64_in, -37_in}, fwd, DRIVE_SPEED});
-  chassis.pid_wait();
-  chassis.pid_turn_set(135_deg, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_odom_set({{-38.36_in, -32.28_in}, rev, 70});
-  chassis.pid_wait();
-  claw.retract();  // let go: the Pin drops into the Goal
-  pros::delay(200);
+  chassis.moveToPoint(-33.64, -37, 1500);
+  along(135, -38.36, -32.28, true, 70);
+  letGo();
   liftTo(0);
-  chassis.pid_odom_set({{-33.64_in, -37_in}, fwd, DRIVE_SPEED});  // straight back out
-  chassis.pid_wait();
-
-  // 2. Across to the line through the diagonal stack at (-47.1, -47.1), turn the back
-  //    toward it, and reverse onto it. (Face each waypoint before driving to it.)
-  chassis.pid_turn_set(274.3_deg, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_odom_set({{-59.11_in, -35.07_in}, fwd, DRIVE_SPEED});
-  chassis.pid_wait();
-  chassis.pid_turn_set(315_deg, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_odom_set({{-54.87_in, -39.31_in}, rev, 60});
-  chassis.pid_wait();
-  claw.extend();  // closes around the Cup (and the Pin standing in it)
-  pros::delay(200);
-
-  // Raise it and stack it on the Preload, reversing into R1 along its other diagonal: the
-  // Cup nests over the Pin's top. At 36° the Cup's bottom is 7.25" up, over the Preload's
-  // 6.8" top, and the bar reaches a little further back (12.5").
+  chassis.moveToPoint(-33.64, -37, 1000);
+  // The Cup + yellow Pin at (-47.1, -47.1): reverse onto it along the diagonal, raise it (bar 36: the
+  // Cup's bottom 7.25" up, over the Preload's 6.8" top) and reverse it onto R1 along its other diagonal.
+  goTo(-59.11, -35.07);
+  along(315, -54.87, -39.31, true);
+  grab();
   liftTo(36);
-  chassis.pid_turn_set(321.6_deg, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_odom_set({{-58.4_in, -34.86_in}, fwd, DRIVE_SPEED});
-  chassis.pid_wait();
-  chassis.pid_turn_set(225_deg, TURN_SPEED);
-  chassis.pid_wait();
-  chassis.pid_odom_set({{-55.93_in, -32.39_in}, rev, 60});
-  chassis.pid_wait();
+  goTo(-58.4, -34.86);
+  along(225, -55.93, -32.39, true);
   pros::delay(200);
-  claw.retract();
-  pros::delay(200);
-  chassis.pid_odom_set({{-58.4_in, -34.86_in}, fwd, DRIVE_SPEED});
-  chassis.pid_wait();
+  letGo();
+  chassis.moveToPoint(-58.4, -34.86, 1000);
   liftTo(0);
 
-  // 2b. The Cup + yellow Pin at (-23.5, -23.5) stands on the only clear way to the center Goal
-  //     (every other line to it passes a stack in the Midfield's corners). It can't go on R1 as a
-  //     third Pin: 14.3" up, the 4-bar pulls the claw in to 9.3" behind the robot, so the robot's back
-  //     would hit R1 first. So the claw takes it (backing onto it along the diagonal, facing
-  //     south-west, the claw 11" behind), turns to face south-east (the claw swinging round to the
-  //     north-west of where it stood, clear of every route still to come) and sets it down standing.
-  goTo(-40, -40, false, DRIVE_SPEED);
-  chassis.pid_turn_set(225_deg, TURN_SPEED);
-  chassis.pid_wait();
-  goTo(-31.33, -31.33, true, 60);
-  claw.extend();
-  pros::delay(200);
-  liftTo(5);
-  chassis.pid_turn_set(135_deg, TURN_SPEED);
-  chassis.pid_wait();
+  // 2. Up the lane x = -58.5 to the Red 1 Toggle (left wall, y = 0) and press it twice.
+  goTo(-58.5, -5);
+  chassis.turnToHeading(270, 800);
+  chassis.waitUntilDone();
+  pressToggle();
+
+  // 3. Back off east, down the lane to the south Loader, face east and reverse until the claw (11"
+  //    behind with the bar down) is in its bottom opening (-64.96, -58.76); the claw takes the loaded
+  //    stack. Then up the row of R2 (-23.55, -47.09), facing west, and reverse it on (bar 18).
+  chassis.moveToPoint(-54, -5, 800, {.forwards = false});
+  goTo(-59, -9);  // (straight from the Toggle the robot would clip R1)
+  goTo(-59, -36);
+  goTo(-50, -58.76);
+  along(90, -53.2, -58.76, true, 50);
+  grab();
+  liftTo(18);
+  goTo(-46, -47.09);
+  along(270, -35.9, -47.09, true);
+  letGo();
+
+  // 4. The yellow/yellow Pin out of the Cup at (-23.55, -23.55) on top of it: the claw closing above
+  //    the Cup's rim (bar 25.2: 8" up, 12.56" behind), so the Cup stays put. Round by the north of R2
+  //    to the Midfield side of that Cup, face north-east and reverse the claw onto the Pin. Then back
+  //    round and reverse onto R2 from the west, the Pin carried over the Cup there (bar 62.6: its
+  //    bottom 10.7" up, the claw 10.7" behind) and lowered into it (bar 56).
   liftTo(0);
-  pros::delay(250);
-  claw.retract();
-  pros::delay(200);
+  chassis.moveToPoint(-44, -47.09, 1000);
+  goTo(-36, -34);
+  goTo(-12, -34);
+  goTo(-12, -12);
+  liftTo(25.2);
+  along(45, -14.67, -14.67, true, 50);
+  grab();
+  liftTo(62.6);
+  pros::delay(500);  // up and clear of the Cup before turning
+  goTo(-12, -34);
+  goTo(-36, -34);
+  goTo(-46, -47.09);
+  along(270, -34.26, -47.09, true, 50);
+  liftTo(56);
+  pros::delay(400);
+  letGo();
 
-  // 3. Back round the south of R1 and up the lane x = -59 to the Red 1 Toggle on the left wall
-  //    (centered on y = 0).
-  goTo(-40, -40, false, DRIVE_SPEED);
-  goTo(-59, -36, false, DRIVE_SPEED);
-  goTo(-59, -5, false, DRIVE_SPEED);
-  chassis.pid_turn_set(270_deg, TURN_SPEED);
-  chassis.pid_wait();
+  // The Red 2 Toggle (bottom wall, x = 0) pressed twice to red: the yellow halves on R2 are Owned.
+  liftTo(0);
+  chassis.moveToPoint(-44, -47.09, 1000);
+  goTo(-36, -34);
+  goTo(-12, -34);
+  goTo(0, -52);
+  chassis.turnToHeading(180, 800);
+  chassis.waitUntilDone();
+  pressToggle();
 
-  // Two presses with the front bumper. The wall stops the robot, so these use plain power
-  // for a set time rather than a PID drive (which would never reach its target). Power 58
-  // is about 35 in/s: a Toggle hit faster than 40 in/s turns two faces at once.
-  chassis.drive_mode_set(ez::DISABLE);
-  for (int i = 0; i < 2; i++) {
-    chassis.drive_set(58, 58);
-    pros::delay(700);
-    // The wall stops the wheels while they still turn, so odometry drifts here. Pressed against
-    // the Toggle the robot's center is always 8.2" off the wall's face, on y = -5: start odometry
-    // again from there (the heading, from the IMU, is still right), then back off.
-    if (i == 1) {
-      chassis.odom_x_set(-62_in);
-      chassis.odom_y_set(-5_in);
-    }
-    chassis.drive_set(-60, -60);
-    pros::delay(250);
-  }
-  chassis.drive_set(0, 0);
-  pros::delay(200);
-
-  // 4. Back down the lane to the south Loader. The rear claw takes a loaded stack from its bottom
-  //    opening (-64.96, -58.76): facing east, reversing until the claw (11" behind with the bar
-  //    down) is in it.
-  takeMatchLoad();
-  liftTo(18);  // the Pin's bottom 3.5" up, clear of R2's 3.25" top
-  // Up to a spot 22" west of R2 on its row, face west and reverse until the claw (12.35" behind)
-  // is over R2 (-23.55, -47.09).
-  goTo(-46, -47.09, false, DRIVE_SPEED);
-  chassis.pid_turn_set(270_deg, TURN_SPEED);
-  chassis.pid_wait();
-  goTo(-35.9, -47.09, true, 60);
-  claw.retract();
-  pros::delay(200);
-  goTo(-46, -47.09, false, DRIVE_SPEED);
-
-  // The next loaded stack onto the center Goal C (8.77" tall): bar at 44.5 (the Pin's bottom 9"
-  // up, the claw 12.2" behind). Along the diagonal the stack at (-23.5, -23.5) used to block:
-  // facing south-west, reverse until the claw is over C.
-  takeMatchLoad();
-  liftTo(44.5);
-  goTo(-20, -20, false, DRIVE_SPEED);
-  chassis.pid_turn_set(225_deg, TURN_SPEED);
-  chassis.pid_wait();
-  goTo(-8.63, -8.63, true, 50);
-  claw.retract();
-  pros::delay(200);
-  // 5. Stays here, inside the Midfield.
+  // 5. The yellow/yellow Pin out of the Cup at (23.55, 23.55) onto the center Goal C. Round the west
+  //    and north of C (every other way passes a stack in the Midfield's corners or a cross), face
+  //    south-west and reverse the claw onto the Pin (bar 25.2); turn round (facing north-east, away
+  //    from C), raise it over C's 8.77" top (bar 53.9: its bottom 9.1" up, the claw 11.58" behind) and
+  //    reverse the claw over C.
+  chassis.moveToPoint(0, -46, 800, {.forwards = false});
+  goTo(-12, -40);
+  goTo(-12, -12);
+  goTo(-12, 12);
+  goTo(11.5, 11.5);
+  liftTo(25.2);
+  along(225, 14.67, 14.67, true, 50);
+  grab();
+  liftTo(53.9);
+  pros::delay(500);  // up and clear of the Cup before turning
+  along(45, 8.19, 8.19, true, 50);
+  letGo();
+  // It stays here, inside the Midfield.
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 

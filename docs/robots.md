@@ -58,15 +58,13 @@ Cup + Pin over 1 Pin, 270 over 2 Pins, 140 over the yellow Pin on a short neutra
 Cup + Pin on it, carries a second stack with the chain bar up while it rams the Red 1 Toggle, then
 raises the cascade and sets the stack on neutral Goal N_R1. 55, AWP.
 
-## 2-bar arm + claw (Hero Bot physics): `override-twobar`
+## 2-bar arm + wrist + roller claw (Banshee-style): `override-twobar`
 
-14 × 14 × 12, one green motor per side on 4" wheels (about 42 in/s). Arm (port 7, 1:5) with a motor
-claw (port 8, closed past 60°). The arm tilts the claw with it, so it can set a stack down only below
-about 20° of arm.
-**Auton** (`override-twobar`, plain PROS with dead reckoning): arm at 19.8° (the Preload's bottom just
-over the Goal top, the claw just under the tilt limit), Preload into R1, then presses the Red 1
-Toggle twice (too slow for a two-face hit). 35. It can't stack: a Cup has to clear the Placed Pin's
-6.8" top, and at that arm angle the claw is tilted too far to set it down.
+A single arm (a 2-bar) like the Banshee robots at Override events (Joseph973's reveal): 15 x 15 x 14, 6-motor 450 rpm
+drive, a flex-wheel intake (port 10) feeding a roller claw (port 9) on an 11 in arm (port 7, 1:5), with a 12:48 wrist (port
+8) that turns the claw back by the arm's angle so it stays upright. It replaced the Flex Hero Bot physics, whose claw tilted
+with the arm and could only set a Pin on an empty Goal. **Auton** (`override-twobar`, LemLib): a 3-Pin stack on R1 and the
+Red 1 Toggle rammed to red, 55.
 
 ## 6-bar + wrist claw: `override-sixbar`
 
@@ -100,23 +98,27 @@ Cup + Pin and stacks it on, then presses the Red 1 Toggle. 45.
 One per robot, each starting at Red 1 (south) on the Skills field: every Goal starts empty, and the Match Loads (3
 red/yellow Pins, 4 blue/yellow Pins, 7 Cups) come in only through the red Loaders as loaded stacks (a Pin with a Cup over
 it). Red halves score in red Quadrants, yellow halves where that Quadrant's Toggle is red, and every half on the center
-Goal while the robot is in the Midfield (RSC3). A loaded stack's Cup hides its Pin's top half, so each load scores its
-bottom half: 5 for a red half on a red Goal, 5 for any half on the center Goal.
+Goal while the robot is in the Midfield (RSC3).
+
+What scores most per trip: a Cup hides the half of the Pin it covers, so a loaded stack scores only its bottom half (5),
+while a lone Pin (a lying cross Pin, or a yellow Pin pulled out of its Cup by a claw) set on an empty Goal or on top of a
+stack scores both halves: 15 for a red/yellow Pin in a red Quadrant with its Toggle red, 20 for a yellow/yellow Pin, and on
+the center Goal both halves while the robot is parked beside it.
 
 | Sample | Robot | Score | What it does |
 |---|---|---|---|
-| `override-skills` | DR4B | 68 | 3-Pin stack on R1, Red 1 Toggle, the red load backed onto R2, 4 loads stacked on the center Goal, parked beside it |
-| `skills-dr6b` | DR6B | 68 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
-| `skills-cascade` | Cascade | 68 | 3-Pin stack on R1, Red 1 Toggle, loads through the intake (the chain bar up at the Loader, down to hand them to the claw): the red one on R2, 4 on the center Goal |
-| `skills-continuous` | Continuous | 68 | the cascade route with the four-stage lift (3/4 of the spool angles) |
-| `skills-fourbar` | 4-bar | 43 | 2-Pin stack on R1, the diagonal stack moved off the only clear line to the center Goal, Red 1 Toggle, a load on R2 and one on the center Goal |
-| `skills-sixbar` | 6-bar | 43 | the same plan with the front claw and wrist |
-| `skills-twobar` | 2-bar | 28 | Preload on R1, Red 1 Toggle, a load clamped out of the Loader onto R2, parked |
+| `override-skills` | DR4B | 93 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, the red load on R2, 3 loads on the center Goal with a lone Pin on top, parked |
+| `skills-dr6b` | DR6B | 93 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
+| `skills-cascade` | Cascade | 93 | the same plan through the intake (the chain bar up at the Loader, down to hand each load to the claw) |
+| `skills-continuous` | Continuous | 93 | the cascade route with the four-stage lift (3/4 of the spool angles) |
+| `skills-twobar` | 2-bar | 78 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, a load on R2, a lone Pin on the center Goal, parked |
+| `skills-fourbar` | 4-bar | 78 | 2-Pin stack on R1, Red 1 Toggle, a load on R2 with the yellow Pin from the Cup at (-23.5, -23.5) on top, Red 2 Toggle, the yellow Pin from the Cup at (23.5, 23.5) on the center Goal, parked |
+| `skills-sixbar` | 6-bar | 78 | the same plan with the front claw and wrist |
 
-Why the arm robots stop short: a 4-bar or 6-bar pulls its claw in as it rises, so to reach the Cup on top of a load on the
-center Goal (15.9 in up) the claw is closer to the robot than the robot's half length plus the Goal's radius, and the robot
-hits the Goal first. The 2-bar's claw tilts with its arm and can only set a Pin on an empty 3.25 in Goal. Each sample's
-golden score is in `tests/override-samples.test.ts`.
+The 4-bar and 6-bar pull their claws in as they rise, so they can't reach the Cup on top of a load on the center Goal (the
+robot would hit the Goal first); their extra points come from the yellow Pins in the two free-standing diagonal Cups, which a claw lifts out without moving the Cup (the wall Cups stand too close together to reach the middle one cleanly). The 4-bar and 6-bar routes use
+LemLib rather than EZ-Template: EZ-Template's wheel odometry drifts whenever the robot touches a wall or a Cup, and these
+routes run between Cups with an inch to spare. Each sample's golden score is in `tests/override-samples.test.ts`.
 
 ## What every auton has in common
 
