@@ -86,6 +86,38 @@ Like the DR4B it starts 3" off the wall, so the Preload behind it is inside the 
 **Auton** (`override-workhorse-toggle`, EZ-Template): backs the Preload into R1, backs onto a
 Cup + Pin and stacks it on, then presses the Red 1 Toggle. 45.
 
+## How each robot picks pieces up
+
+- **A robot with an intake** takes every piece through it: from the floor (a lying Pin is caught by whichever end
+  reaches the intake's mouth first), from a standing stack, or from a Loader's bottom opening. The intake hands the piece
+  to its claw (or chamber) when the claw is down and open at the hand-off. The claw sits inside the robot and does not
+  reach the floor, a Loader or a Goal itself (`src/games/override/manipulators.ts`, `grab`).
+- **A robot without an intake** clamps its claw around what is in front of it: a standing stack, a lying Pin, a loaded
+  stack in a Loader's opening, or the pieces placed on a Goal.
+
+## 60 s Skills autons
+
+One per robot, each starting at Red 1 (south) on the Skills field: every Goal starts empty, and the Match Loads (3
+red/yellow Pins, 4 blue/yellow Pins, 7 Cups) come in only through the red Loaders as loaded stacks (a Pin with a Cup over
+it). Red halves score in red Quadrants, yellow halves where that Quadrant's Toggle is red, and every half on the center
+Goal while the robot is in the Midfield (RSC3). A loaded stack's Cup hides its Pin's top half, so each load scores its
+bottom half: 5 for a red half on a red Goal, 5 for any half on the center Goal.
+
+| Sample | Robot | Score | What it does |
+|---|---|---|---|
+| `override-skills` | DR4B | 68 | 3-Pin stack on R1, Red 1 Toggle, the red load backed onto R2, 4 loads stacked on the center Goal, parked beside it |
+| `skills-dr6b` | DR6B | 68 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
+| `skills-cascade` | Cascade | 68 | 3-Pin stack on R1, Red 1 Toggle, loads through the intake (the chain bar up at the Loader, down to hand them to the claw): the red one on R2, 4 on the center Goal |
+| `skills-continuous` | Continuous | 68 | the cascade route with the four-stage lift (3/4 of the spool angles) |
+| `skills-fourbar` | 4-bar | 43 | 2-Pin stack on R1, the diagonal stack moved off the only clear line to the center Goal, Red 1 Toggle, a load on R2 and one on the center Goal |
+| `skills-sixbar` | 6-bar | 43 | the same plan with the front claw and wrist |
+| `skills-twobar` | 2-bar | 28 | Preload on R1, Red 1 Toggle, a load clamped out of the Loader onto R2, parked |
+
+Why the arm robots stop short: a 4-bar or 6-bar pulls its claw in as it rises, so to reach the Cup on top of a load on the
+center Goal (15.9 in up) the claw is closer to the robot than the robot's half length plus the Goal's radius, and the robot
+hits the Goal first. The 2-bar's claw tilts with its arm and can only set a Pin on an empty 3.25 in Goal. Each sample's
+golden score is in `tests/override-samples.test.ts`.
+
 ## What every auton has in common
 
 - Starts by moving 2–3" away from the wall: turning in place right against it swings a corner into it

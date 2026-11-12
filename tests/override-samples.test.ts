@@ -17,7 +17,14 @@ const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?
   'override-dr4b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-sixbar': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
-  'override-skills': { red: 48, blue: 0, pins: 4, toggles: { red1: 'red', red2: 'red' } },
+  // 60 s Skills (the Midfield Goal's Pins count while the robot is parked beside it)
+  'override-skills': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'skills-twobar': { red: 28, blue: 0, pins: 2, toggles: { red1: 'red' } },
+  'skills-fourbar': { red: 43, blue: 0, pins: 4, toggles: { red1: 'red' } },
+  'skills-sixbar': { red: 43, blue: 0, pins: 4, toggles: { red1: 'red' } },
+  'skills-cascade': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'skills-continuous': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'skills-dr6b': { red: 68, blue: 0, pins: 8, toggles: { red1: 'red' } },
 };
 
 describe('Override sample autons', () => {

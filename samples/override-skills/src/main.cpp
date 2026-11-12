@@ -11,10 +11,10 @@
 //
 //  1. The 3-Pin stack on Goal R1 from the Preload and two floor stacks (as in the 15 s
 //     auton), then the Red 1 Toggle to red at speed.
-//  2. A loaded stack from the south red Loader, straight up the intake into the chamber,
-//     backed onto Goal R2.
-//  3. The Red 2 Toggle to red: the yellow Pin on neutral Goal N_R2 scores.
-//  4. Park in the Midfield: the yellow Pin on the center Goal scores.
+//  2. A loaded stack (red/yellow Pin) from the south red Loader, straight up the intake into the
+//     chamber, backed onto Goal R2: its red half scores in Red 2.
+//  3. The rest of the Match Loads onto the center Goal C, backed onto it one at a time.
+//  4. Finish beside C, in the Midfield: everything on C scores.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -43,6 +43,10 @@ constexpr double R1_X = -47.09, R1_Y = -23.55;  // red Goal R1
 // top 13.9"). Any lower and the stack would hit the Goal or the Pins on it.
 constexpr double ONE_PIN = 13, ON_ONE = 25, ON_TWO = 45.5;
 void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 7, 100); }
+// The bar angle that puts the bottom of what the chamber holds `bottom` inches up: two 10" links
+// starting 45 degrees down; with the lift down a held Pin's bottom is at the floor.
+double barFor(double bottom) { return std::asin(bottom / 20 - 0.70711) * 180 / M_PI + 45; }
+constexpr double C_TOP = 8.77;  // the center Goal's top
 
 // Turn the back of the robot to (x, y) and back up until the chamber is over it. The DR4B
 // must be up first: a stack still rising would hit the Goal or the Pins on it from the side.
@@ -184,19 +188,31 @@ void autonomous() {
   clamp.retract();
   pros::delay(150);
 
-  // 6. North round the west side of R2, east along y = -36, then hit the Red 2 Toggle
-  //    (bottom wall, x = 0) after a run-up.
+  // 6. The rest of the Match Loads onto the center Goal C, backing the chamber over it: every
+  //    visible half there scores while the robot is in the Midfield, so it finishes beside C.
+  for (int n = 0; n < 5 && pros::millis() < 50000; n++) {
+    pullAway(4);
+    liftTo(0);
+    approach(-50, -58.76, 0);
+    chassis.turnToHeading(270, 800);
+    chassis.waitUntilDone();
+    takeMatchLoad(-64.96, -58.76);
+    pullAway(-3);
+    // over the Goal and the n loaded stacks on it (their Cup tops), then down into the top Cup
+    // (n loaded stacks put the top Cup's rim 7.15n" over the Goal; a Pin let into it rests 3.2" lower)
+    const double over = n == 0 ? barFor(C_TOP + 0.4) : barFor(C_TOP + 7.15 * n + 1.0);
+    liftTo(over);
+    backInto(0, 0);
+    if (n > 0) {
+      const double down = barFor(C_TOP + 7.15 * n - 2.5);
+      liftTo(down);
+      for (int t = 0; t < 600 && std::fabs(lift.get_position(0) - down * 7) > 7; t += 10) pros::delay(10);
+    }
+    clamp.retract();
+    pros::delay(150);
+  }
   pullAway(4);
   liftTo(0);
-  approach(-38, -36, 0);
-  approach(-4, -36, 0);
-  chassis.turnToHeading(180, 800);
-  chassis.waitUntilDone();
-  ramToggle();
-
-  // 7. Park in the Midfield, clear of the stack at (0, -23.5).
-  chassis.moveToPoint(-4, -46, 1500, {.forwards = false});
-  approach(-12, -12, 0);
   printf("Autonomous finished at %u ms\n", static_cast<unsigned>(pros::millis()));
 }
 
