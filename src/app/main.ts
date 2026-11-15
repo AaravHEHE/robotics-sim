@@ -242,7 +242,10 @@ $<HTMLSelectElement>('robot-select').onchange = async (e) => {
 /** The auton and the mechanism test written for a robot preset. */
 function samplesFor(robotId: string): { auton?: SampleMeta; test?: SampleMeta } {
   return {
-    auton: SAMPLES.find((x) => x.robot === robotId && x.kind !== 'test'),
+    // the 15 s match auton first; the 60 s Skills run only when there is no match auton
+    auton:
+      SAMPLES.find((x) => x.robot === robotId && x.kind !== 'test' && (x.autonMs ?? 15000) < 60000) ??
+      SAMPLES.find((x) => x.robot === robotId && x.kind !== 'test'),
     test: SAMPLES.find((x) => x.robot === robotId && x.kind === 'test'),
   };
 }

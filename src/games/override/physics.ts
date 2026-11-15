@@ -382,7 +382,10 @@ export class FloorPhysics {
     if (!b) return false;
     // a narrow-phase pair also exists for overlapping bounding boxes: require a contact point
     let touching = false;
-    for (const r of [this.robot, ...[...this.carried.values()].map((h) => h.body)]) {
+    // a carried stack passing over the piece (or sitting on it) computes contacts it never
+    // pushes on (the contact filter), so it doesn't count as touching it
+    const carriers = [...this.carried.values()].filter((h) => this.blocks(h.c, id)).map((h) => h.body);
+    for (const r of [this.robot, ...carriers]) {
       for (let i = 0; i < b.numColliders() && !touching; i++) {
         for (let j = 0; j < r.numColliders() && !touching; j++) {
           this.world.contactPair(b.collider(i), r.collider(j), (m) => {
@@ -399,6 +402,7 @@ export class FloorPhysics {
     const b = this.bodies.get(id);
     if (!b) return null;
     for (const h of this.carried.values()) {
+      if (!this.blocks(h.c, id)) continue; // passing over it: no push
       let touching = false;
       for (let i = 0; i < b.numColliders() && !touching; i++) {
         for (let j = 0; j < h.body.numColliders() && !touching; j++) {
