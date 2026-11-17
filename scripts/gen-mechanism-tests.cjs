@@ -366,6 +366,10 @@ ${liftTest('4-bar (1:5)', 'lift', 5, [30, 60, 100, 0])}
   claw.extend();
   pros::delay(300);
   check("claw closed on the Pin", claw.is_extended(), claw.is_extended());
+  // it took the Pin lying, so it holds it on its side, sticking out behind the claw: carry it up
+  // over the wall for the drive back to the start
+  lift.move_absolute(60 * 5, 200);
+  settle(lift, 60 * 5, 15);
   // The Toggle bumper is fixed: it is tested by driving into a Toggle (see the auton sample).
 }`,
   },

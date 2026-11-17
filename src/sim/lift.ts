@@ -79,19 +79,21 @@ export function clawTilt(profile: RobotProfile, claw: ClawSpec, valueOf: (m: Mec
  * a single-pivot arm turns it with the arm, a motor wrist turns it too (less 180° once the
  * held stack has been flipped over). A held stack hangs along it, below the grip point.
  */
-export function clawPitch(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, flipped = false): number {
+export function clawPitch(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, flipped: boolean | number = false): number {
   const lift = claw.lift ? profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === claw.lift) : undefined;
   let pitch = lift?.lift === 'arm' ? valueOf(lift) * (lift.facing === 'rear' ? -1 : 1) : 0;
   const wrist = profile.mechanisms.find((m) => m.kind === 'wrist' && m.claw === claw.name);
-  if (wrist && !wrist.adi) pitch += valueOf(wrist) - (flipped ? 180 : 0);
-  return pitch;
+  if (wrist && !wrist.adi) pitch += valueOf(wrist);
+  // how the held stack sits in the claw: upside down (flipped, 180), or a Pin taken lying, held on
+  // its side along the robot (90 more: it hangs back from the grip point until the claw tips over)
+  return pitch - (typeof flipped === 'number' ? flipped : flipped ? 180 : 0);
 }
 
 /**
  * Where a held stack's bottom is (robot frame) when it is gripped `grip` in above its bottom:
  * along the claw's pitch below the grip point.
  */
-export function heldBottom(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, grip: number, flipped = false): Point3 {
+export function heldBottom(profile: RobotProfile, claw: ClawSpec, valueOf: (m: MechanismSpec) => number, grip: number, flipped: boolean | number = false): Point3 {
   const e = clawEffector(profile, claw, valueOf);
   const p = clawPitch(profile, claw, valueOf, flipped);
   return { x: e.x, y: e.y + grip * dsinDeg(p), z: e.z - grip * dcosDeg(p) };

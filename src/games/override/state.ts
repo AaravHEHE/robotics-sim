@@ -68,6 +68,11 @@ export interface OverrideState {
   transit: Record<string, Transit>;
   /** Claw name -> its wrist has turned what it holds upside down. */
   flipped: Record<string, boolean>;
+  /**
+   * Claws holding a Pin they took lying, on its side: 'along' the robot (a wrist tipping the claw
+   * 90° stands it up) or 'across' it (it can't be stood up). Absent: held upright.
+   */
+  sideways: Record<string, 'along' | 'across'>;
 }
 
 /** Initial state for a layout ("h2h" or "skills"). Ids are deterministic per call, and each call has its own. */
@@ -90,6 +95,7 @@ export function initialState(field: FieldDef, layoutId: string): OverrideState {
     grip: {},
     transit: {},
     flipped: {},
+    sideways: {},
   };
   if (!layout) return state;
   for (const it of layout.items) {

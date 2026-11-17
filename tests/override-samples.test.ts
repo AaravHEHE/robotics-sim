@@ -58,12 +58,12 @@ describe('Override sample autons', () => {
  * Mechanism tests: every check the program makes prints PASS (and how many), and the
  * pieces really moved the way the program says (its checks can't see them).
  */
-const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean }> = {
+const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean; flips?: boolean; fromTray?: boolean; sideways?: boolean }> = {
   'test-twobar': { checks: 18, holder: 'Roller claw', regrab: true },
   'test-dr4b': { checks: 19 },
   'test-cascade': { checks: 17, holder: 'Claw', regrab: true },
-  'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true },
-  'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },
+  'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true, sideways: true },
+  'test-workhorse': { checks: 13, holder: 'Claw', regrab: true, sideways: true },
   'test-continuous': { checks: 17, holder: 'Claw', regrab: true },
   'test-dr6b': { checks: 19 },
 };
@@ -115,6 +115,9 @@ describe('Override mechanism tests', () => {
         const fall = snaps.map((st) => st.transit[dropped!.id]).find((tr) => tr);
         expect(fall?.tip).toBeDefined();
         expect(fall!.t1 - fall!.t0).toBeGreaterThan(300);
+        // a claw with no intake closes across the lying Pin and holds it on its side; one an
+        // intake feeds gets it stood up
+        expect(end.sideways?.[want.holder!]).toBe(want.sideways ? 'along' : undefined);
       }
       if (want.fromTray) {
         expect(snaps[0].held.Stage.map((p) => p.id)).toEqual(['preload']);

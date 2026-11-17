@@ -1041,15 +1041,27 @@ export class ManipulatorVisuals {
     const pitch = clawPitch(this.profile, c.spec, v, !!state?.flipped?.[c.spec.name]);
     c.pivot.rotation.set(pitch * DEG, 0, 0);
     c.build?.update(v(c.spec), state?.held[c.spec.name] ?? [], state?.grip[c.spec.name] ?? 0);
-    c.stack.position.set(0, -(state?.grip[c.spec.name] ?? 0), 0);
+    const grip = state?.grip[c.spec.name] ?? 0;
+    c.stack.position.set(0, -grip, 0);
     c.stack.quaternion.identity();
+    // a Pin the claw closed on lying is held on its side across the grip point: along the robot
+    // (bottom end back, top forward) or across it (bottom end left)
+    const side = state?.sideways?.[c.spec.name];
+    if (side === 'along') {
+      c.stack.rotation.set(-Math.PI / 2, 0, 0);
+      c.stack.position.set(0, 0, grip);
+    } else if (side === 'across') {
+      c.stack.rotation.set(0, 0, -Math.PI / 2);
+      c.stack.position.set(-grip, 0, 0);
+    }
+    const rest = c.stack.quaternion.clone();
     // drawing in what it just closed on
     const tr = state?.transit?.[`claw:${c.spec.name}`];
     if (tr && t < tr.t1) {
       const k = ease(progress(tr, t));
       const start = c.pivot.worldToLocal(c.pivot.parent!.localToWorld(fromField(pose, tr.from.x, tr.from.y, tr.from.z)));
       c.stack.position.lerp(start, 1 - k);
-      if (tr.lying !== undefined) c.stack.quaternion.copy(lyingQuat(pose, tr.lying)).slerp(new THREE.Quaternion(), k);
+      if (tr.lying !== undefined) c.stack.quaternion.copy(lyingQuat(pose, tr.lying)).slerp(rest, k);
     }
   }
 

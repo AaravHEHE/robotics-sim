@@ -7,7 +7,7 @@
 
 import { dcos, dcosDeg, dhypot, dsin, dsinDeg } from '../../sim/dmath.ts';
 import type { Alliance, FieldDef, GoalDef, LoaderDef, Vec2 } from '../../sim/field.ts';
-import { clawEffector, clawPitch, clawTilt, heldBottom, toField, toRobot, type Point3 } from '../../sim/lift.ts';
+import { baseOffset, clawEffector, clawPitch, clawTilt, heldBottom, liftPosition, toField, toRobot, type Point3 } from '../../sim/lift.ts';
 import { box, CARRY_CLEARANCE, NEST_CAPTURE, octagon, satMtv } from '../../sim/world.ts';
 import { isMotorized, isPneumatic, type Capacity, type ClawSpec, type IntakeSpec, type LiftSpec, type MechanismSpec, type PreloadOrientation, type RobotProfile, type StagingSpec, type ToggleToolSpec, type WristSpec } from '../../sim/profile.ts';
 import type { Attachment, World } from '../../sim/world.ts';
@@ -242,6 +242,8 @@ interface ClawRuntime {
   /** Height of the held stack's bottom below the grip point. */
   grip: number;
   flipped: boolean;
+  /** A Pin it closed on lying, held on its side (see OverrideState.sideways); null: upright. */
+  side: 'along' | 'across' | null;
   /**
    * The held pieces were fed in by an intake while the claw was open: they rest in the
    * open claw (it hasn't closed on them yet) and fall out if it is raised before closing.
@@ -269,7 +271,7 @@ export class Manipulators {
     this.world = world;
     this.profile = world.profile;
     const of = <K extends MechanismSpec['kind']>(k: K) => this.profile.mechanisms.filter((m): m is Extract<MechanismSpec, { kind: K }> => m.kind === k);
-    this.claws = of('claw').map((spec) => ({ spec, closed: false, grip: 0, flipped: false, cradled: false }));
+    this.claws = of('claw').map((spec) => ({ spec, closed: false, grip: 0, flipped: false, side: null, cradled: false }));
     this.intakes = of('intake');
     this.stagings = of('staging');
     this.wrists = of('wrist');
@@ -383,10 +385,88 @@ export class Manipulators {
       out.push({ id: `jaws:${c.spec.name}`, slot: `jaws:${c.spec.name}`, x: e.x, y: e.y, r: JAW_HALF_WIDTH, bottom: e.z - GRIP_MARGIN, fixedOnly: true, drivenBy });
       const held = this.ops.state.held[c.spec.name];
       if (!held?.length) continue;
-      const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, c.flipped);
+      if (c.side && this.effTilt(c) > 45) {
+        // a Pin held on its side: lying across the grip point, as long as itself, a collar high
+        out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, slot: `claw:${c.spec.name}`, nest: 'pin', x: e.x, y: e.y, r: PIN.length / 2, bottom: e.z - PIN.collarDiameter / 2, height: PIN.collarDiameter, drivenBy });
+        continue;
+      }
+      const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, this.offsetOf(c));
       out.push({ id: `claw:${c.spec.name}:${held.map((p) => p.id).join(',')}`, slot: `claw:${c.spec.name}`, nest: held[0].kind, x: b.x, y: b.y, r: stackRadius(held), bottom: b.z, height: stackTop(held, 0, false), drivenBy });
     }
+    out.push(...this.barAttachments());
     return out;
+  }
+
+  /**
+   * The lifts' bars and links, as solid parts (robot frame): small discs along each side's bars
+   * (always there, so one swung out into a Goal is not taken for something picked up touching it). Like open jaws they run only into fixed things
+   * (Goal bodies, Loaders, walls): the robot stops against them, and a lift swinging its bars
+   * into one stalls there. Cascades and continuous lifts stand inside the drive base.
+   */
+  private barAttachments(): Attachment[] {
+    const out: Attachment[] = [];
+    const v = (m: MechanismSpec) => this.world.mechanismState(m);
+    const { width: W, length: Lr } = this.profile.size;
+    const bx = Math.min(W / 2 - 1.5, this.profile.drivetrain.trackWidth / 2 - 1.2);
+    for (const m of this.profile.mechanisms) {
+      if (m.kind !== 'lift' || !m.length) continue;
+      const L = m.length;
+      const a0 = m.startAngle ?? 0;
+      const a = a0 + v(m);
+      const o = baseOffset(this.profile, m, v);
+      const e = liftPosition(this.profile, m, v);
+      const pts: Array<{ y: number; z: number }> = [];
+      if (m.lift === 'arm' || m.lift === 'fourbar' || m.lift === 'sixbar' || m.lift === 'chainbar') {
+        const dir = m.facing === 'rear' ? -1 : 1;
+        const rise = m.lift === 'sixbar' ? 2 : 1;
+        const p0 = { y: m.home.y - dir * L * dcosDeg(a0) + o.y, z: m.home.z - rise * L * dsinDeg(a0) + o.z };
+        for (const t of [0.3, 0.55, 0.8]) pts.push({ y: p0.y + (e.y - p0.y) * t, z: p0.z + (e.z - p0.z) * t });
+      } else if (m.lift === 'dr4b' || m.lift === 'dr6b') {
+        const sets = m.lift === 'dr6b' ? 3 : 2;
+        const outward = m.home.y < 0 ? -1 : 1;
+        // where the fixed stage hangs (as drawn: see chassisLayout's liftPivot), and which way the
+        // elbows stick out (a DR4B's toward the robot's middle, a DR6B's away from it)
+        const p0 =
+          sets === 3
+            ? { y: m.home.y - outward * L * dcosDeg(a0), z: m.home.z - 3 * L * dsinDeg(a0) }
+            : { y: m.home.y < 0 ? -Lr / 2 + 1.75 : Lr / 2 - 1.75, z: m.home.z - 2 * L * dsinDeg(a0) };
+        const zig = sets === 3 ? outward : -outward;
+        const joint = (k: number) => ({ y: p0.y + (k % 2 ? zig * L * dcosDeg(a) : 0), z: p0.z + k * L * dsinDeg(a) });
+        for (let k = 0; k < sets; k++) {
+          const j0 = joint(k);
+          const j1 = joint(k + 1);
+          pts.push({ y: (j0.y + j1.y) / 2, z: (j0.z + j1.z) / 2 }, j1);
+        }
+      } else continue;
+      const drivenBy = { motors: [...(m.motors ?? []), ...(m.base ? (this.profile.mechanisms.find((x): x is LiftSpec => x.kind === 'lift' && x.name === m.base)?.motors ?? []) : [])].map((p) => Math.abs(p)), pistons: [] };
+      pts.forEach((p, i) => {
+        for (const s of [-1, 1]) {
+          // only where it could touch something this step or the next few (checking every bar
+          // against every Goal each millisecond would slow the run down several times)
+          if (!this.nearFixed(s * bx, p.y, p.z - 0.6)) continue;
+          const id = `bar:${m.name}:${i}:${s}`;
+          out.push({ id, slot: id, x: s * bx, y: p.y, r: 0.6, bottom: p.z - 0.6, fixedOnly: true, drivenBy });
+        }
+      });
+    }
+    return out;
+  }
+
+  /** Bounding boxes and tops of the fixed field elements (computed once). */
+  private fixedBoxes: Array<{ x0: number; x1: number; y0: number; y1: number; top: number }> | null = null;
+
+  /** Is a point of the robot (robot frame) within 4" of a wall, Goal or Loader, and below its top? */
+  private nearFixed(x: number, y: number, bottom: number): boolean {
+    const M = 4;
+    const [fx, fy] = toField(this.world.pose, { x, y });
+    const half = this.ops.field.perimeter.inside / 2;
+    if (bottom < this.ops.field.perimeter.wallHeight && (Math.abs(fx) > half - M || Math.abs(fy) > half - M)) return true;
+    this.fixedBoxes ??= this.world.obstacles.map((ob) => {
+      const xs = ob.poly.map((q) => q[0]);
+      const ys = ob.poly.map((q) => q[1]);
+      return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), top: ob.body?.top ?? ob.top ?? Infinity };
+    });
+    return this.fixedBoxes.some((b) => bottom < b.top && fx > b.x0 - M && fx < b.x1 + M && fy > b.y0 - M && fy < b.y1 + M);
   }
 
   /** The motors and solenoids that move a claw: its lift, and the lifts that lift carries on. */
@@ -428,6 +508,30 @@ export class Manipulators {
   /** How far a claw is tilted from upright (degrees). */
   tilt(spec: ClawSpec): number {
     return clawTilt(this.profile, spec, (m) => this.world.mechanismState(m));
+  }
+
+  private setSide(c: ClawRuntime, side: 'along' | 'across' | null): void {
+    c.side = side;
+    const s = (this.ops.state.sideways ??= {});
+    if (side) s[c.spec.name] = side;
+    else delete s[c.spec.name];
+  }
+
+  /** How the held stack sits in the claw (degrees, see clawPitch): upside down, and/or on its side. */
+  private offsetOf(c: ClawRuntime): number {
+    return (c.side === 'along' ? 90 : 0) + (c.flipped ? 180 : 0);
+  }
+
+  /**
+   * How far what the claw holds is tilted from upright (degrees, 0..90): the claw's tilt, or for a
+   * Pin held on its side, how far the claw is from tipped over 90° (across the robot: never upright).
+   */
+  private effTilt(c: ClawRuntime): number {
+    if (c.side === 'across') return 90;
+    if (!c.side) return this.tilt(c.spec);
+    const p = clawPitch(this.profile, c.spec, (m) => this.world.mechanismState(m), this.offsetOf(c));
+    const a = ((p % 180) + 180) % 180;
+    return Math.min(a, 180 - a);
   }
 
   private stepClaw(c: ClawRuntime): void {
@@ -507,10 +611,30 @@ export class Manipulators {
         const d = distToSegment([e.x, e.y], a, b);
         // the point of the Pin nearest the grip point must be between the jaws
         const [cx, cy] = closestOnSegment([e.x, e.y], a, b);
-        const pin: Piece = { kind: 'pin', id: l.id, colors: this.uprightColors(l) };
-        if (d <= reach && this.between(e, cx, cy, reach) && ok([pin])) {
-          const lying = pin.colors[0] === l.colors[0] ? l.heading : l.heading + 180;
-          cands.push({ d, pieces: [pin], from: { x: l.x, y: l.y, z: 0 }, lying, take: () => this.takeLying(l, (p) => this.receive(c, [p], e.z)) });
+        // the claw closes across it and holds it on its side, the way it lies: along the robot (its
+        // bottom the end toward the back: tipping the claw forward 90° stands it on that end) or
+        // across it (its bottom the left end)
+        const rel = (l.heading - this.world.pose.theta) * RAD;
+        const side = Math.abs(dcos(rel)) >= Math.SQRT1_2 ? 'along' : 'across';
+        const keep = side === 'along' ? dcos(rel) > 0 : dsin(rel) > 0;
+        const colors: [PinColor, PinColor] = keep ? [l.colors[0], l.colors[1]] : [l.colors[1], l.colors[0]];
+        const pin: Piece = { kind: 'pin', id: l.id, colors };
+        if (d <= reach && this.between(e, cx, cy, reach) && !held.length && ok([pin])) {
+          const lying = keep ? l.heading : l.heading + 180;
+          cands.push({
+            d,
+            pieces: [pin],
+            from: { x: l.x, y: l.y, z: 0 },
+            lying,
+            take: () =>
+              this.takeLying(l, () => {
+                this.ops.state.held[c.spec.name] = [pin];
+                c.grip = PIN.length / 2;
+                c.flipped = false;
+                this.ops.state.flipped[c.spec.name] = false;
+                this.setSide(c, side);
+              }),
+          });
         }
       }
     }
@@ -575,7 +699,7 @@ export class Manipulators {
 
   /** Where the bottom of what a claw holds is: field position and height. */
   private heldAt(c: ClawRuntime): { x: number; y: number; z: number } {
-    const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, c.flipped);
+    const b = heldBottom(this.profile, c.spec, (m) => this.world.mechanismState(m), c.grip, this.offsetOf(c));
     const [x, y] = toField(this.world.pose, b);
     return { x, y, z: b.z };
   }
@@ -603,7 +727,7 @@ export class Manipulators {
     };
     const first = held[0];
     const slots = layoutStack(held, 0, false);
-    const upright = this.tilt(c.spec) <= MAX_TILT;
+    const upright = this.effTilt(c) <= MAX_TILT;
     // what stays in the claw stays where it is in the world, held by its new bottom piece; if
     // that is now out of the rollers' reach above them, nothing holds it: it was resting on
     // what went out (a Pin sitting in a Cup), and goes with it
@@ -613,7 +737,11 @@ export class Manipulators {
       else c.grip = grip;
     }
     const pieces = held.splice(0, count);
-    if (!held.length) c.grip = 0;
+    const sideways = c.side;
+    if (!held.length) {
+      c.grip = 0;
+      this.setSide(c, null);
+    }
     /** Where the stack lands on `existing` (its bottom), or null if it doesn't get there. */
     const what = first.kind === 'pin' ? 'Pin' : 'Cup';
     const inches = (v: number) => `${v.toFixed(1)}″`;
@@ -621,6 +749,7 @@ export class Manipulators {
     const landing = (rest: number, top: number) => (b.z < top - CARRY_CLEARANCE ? { x: b.x, y: b.y } : drifted(b.z - rest));
     /** Where the stack lands on `existing` (its bottom), or why it doesn't get there. */
     const landsOn = (existing: Piece[], base: number, onGoal: boolean, x: number, y: number): number | string => {
+      if (!upright && c.side) return `the Pin was held on its side (the claw took it lying${c.side === 'along' ? ': tip the claw 90° with the wrist to stand it up' : ', across the robot'})`;
       if (!upright) return `the claw was tilted ${Math.round(this.tilt(c.spec))}° (at most ${MAX_TILT}° sets a stack down)`;
       // a stack alternates Pin, Cup, Pin...
       const rest = nestRest(existing, base, onGoal, first.kind);
@@ -678,6 +807,16 @@ export class Manipulators {
     }
     // say why it fell instead of landing on the Goal it was let go at: autons can be fixed from it
     if (missed) this.ops.note(missed);
+    if (sideways && pieces.length === 1 && this.effTilt(c) > MAX_TILT) {
+      // a Pin let go on its side falls flat the way it was held (it doesn't land on its end)
+      // (it falls from the grip point, its middle, carried on by the robot's speed)
+      const e = this.effector(c.spec);
+      const d = drifted(e.z);
+      const ground = { x: e.x + d.x - b.x, y: e.y + d.y - b.y };
+      this.dropAt(pieces, ground.x, ground.y, e.z - PIN.collarDiameter / 2, sideways === 'along' ? this.world.pose.theta : this.world.pose.theta + 90, true);
+      this.ops.changed();
+      return;
+    }
     const ground = drifted(b.z);
     this.dropAt(pieces, ground.x, ground.y, b.z);
     this.ops.changed();
@@ -691,7 +830,10 @@ export class Manipulators {
     // arm's angle keeps it upright), the same sum clawTilt uses
     const lift = this.profile.mechanisms.find((m): m is LiftSpec => m.kind === 'lift' && m.name === c.spec.lift);
     const arm = lift?.lift === 'arm' ? this.world.mechanismState(lift) : 0;
-    const a = (((v + arm) % 360) + 360) % 360;
+    // (a Pin held on its side along the robot is upright with the claw tipped 90°: it turns
+    // over 90° later; one held across it never stands up)
+    if (c.side === 'across') return;
+    const a = (((v + arm - (c.side === 'along' ? 90 : 0)) % 360) + 360) % 360;
     const band = c.flipped ? -WRIST_HYSTERESIS : WRIST_HYSTERESIS;
     const flipped = w.adi ? v >= 0.5 : a > 90 + band && a < 270 - band;
     if (flipped === c.flipped) return;
@@ -884,7 +1026,7 @@ export class Manipulators {
    * Drop pieces to the floor at (x, y), let go with their bottom `z` inches up: a lone Pin
    * falls over; anything else stands.
    */
-  private dropAt(pieces: Piece[], x: number, y: number, z = 0): void {
+  private dropAt(pieces: Piece[], x: number, y: number, z = 0, prefer?: number, flat = false): void {
     const lone = pieces.length === 1 && pieces[0].kind === 'pin';
     const top = lone ? PIN.collarDiameter : layoutStack(pieces, 0, false).at(-1)!.top;
     // it lands beside the robot (with room for the robot's next 10 ms of travel), what a claw
@@ -936,7 +1078,7 @@ export class Manipulators {
     // A lone Pin falls over along the robot's heading, or across it where there is no room
     // (between the robot and a Goal). Where something is already lying there, it ends up in
     // the nearest free spot instead: rings of starting points 1.5" apart, out to 12".
-    const headings = lone ? [pose.theta, pose.theta + 90] : [pose.theta];
+    const headings = prefer !== undefined ? [prefer, prefer + 90] : lone ? [pose.theta, pose.theta + 90] : [pose.theta];
     let best = settle(headings[0], x, y);
     search: for (let ring = 0; ring <= 8 && best.into > 0; ring++) {
       const n = ring === 0 ? 1 : 12;
@@ -959,7 +1101,8 @@ export class Manipulators {
     // then tips over onto its side
     const fall = z > 0.25 ? 1000 * Math.sqrt((2 * z) / GRAVITY) : 0;
     if (fall > 0 || lone || dhypot(px - x, py - y) > 0.25) {
-      this.setTransit(id, { from: { x, y, z: Math.max(0, z) }, ...(lone ? { tip: heading } : {}), t0: this.now, t1: this.now + fall + (lone ? TIP_MS : 120) });
+      const tips = lone && !flat;
+      this.setTransit(id, { from: { x, y, z: Math.max(0, z) }, ...(tips ? { tip: best.heading } : {}), t0: this.now, t1: this.now + fall + (tips ? TIP_MS : 120) });
     }
   }
 

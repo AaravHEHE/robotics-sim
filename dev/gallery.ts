@@ -1,5 +1,5 @@
 // Dev-only: one robot preset drawn large, from the box-robot builder plus its manipulators,
-// with every mechanism at a chosen fraction of its range. ?robot=<id>&t=<0..1>&view=<iso|front|side|top>
+// with every mechanism at a chosen fraction of its range. ?robot=<id>&t=<0..1>&view=<iso|front|side|top>&held=<upright|along|across>
 import * as THREE from 'three';
 import { buildBoxRobot } from '../src/app/robot-meshes.ts';
 import { ManipulatorVisuals } from '../src/app/manipulator-meshes.ts';
@@ -42,6 +42,13 @@ const value = (m: MechanismSpec): number => {
   if (m.kind === 'claw') return t > 0.5 ? 1 : 0;
   return r ? r[0] + (r[1] - r[0]) * t : 0;
 };
+// ?held=upright|along|across: the claw holding a red/yellow Pin that way
+const held = q.get('held');
+const claw = profile.mechanisms.find((m) => m.kind === 'claw');
+if (held && claw) {
+  const pin = { kind: 'pin', id: 'p', colors: ['red', 'yellow'] };
+  vis.setHeld({ held: { [claw.name]: [pin] }, grip: { [claw.name]: 3.25 }, flipped: {}, sideways: held === 'upright' ? {} : { [claw.name]: held }, transit: {}, toggles: [], lying: [], floor: [], goals: {}, loaders: {} } as never);
+}
 vis.update(value);
 // a box showing the 18 in start size
 const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(18, 18, 18)), new THREE.LineBasicMaterial({ color: 0x4f8cff }));

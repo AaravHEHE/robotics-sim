@@ -129,7 +129,11 @@ Cup + Pin and stacks it on, then presses the Red 1 Toggle. 45.
   to its claw (or chamber) when the claw is down and open at the hand-off. The claw sits inside the robot and does not
   reach the floor, a Loader or a Goal itself (`src/games/override/manipulators.ts`, `grab`).
 - **A robot without an intake** clamps its claw around what is in front of it: a standing stack, a lying Pin, a loaded
-  stack in a Loader's opening, or the pieces placed on a Goal.
+  stack in a Loader's opening, or the pieces placed on a Goal. A lying Pin it holds on its side, the way it lay (along the
+  robot or across it); held that way it can't be set on a Goal. The 6-bar's wrist stands one held along the robot back
+  up: tip the claw 90° forward and the Pin stands on its back end (−90° stands it on the other, upside down).
+- **Lift bars and links are solid** against Goal bodies, Loaders and walls: a lift lowered or swung into one stalls there,
+  and the robot can't drive its bars through one.
 
 ## 60 s Skills autons
 
