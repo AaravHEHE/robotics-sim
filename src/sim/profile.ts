@@ -81,7 +81,7 @@ export interface RobotRect {
   length: number;
 }
 
-export type LiftType = 'arm' | 'fourbar' | 'sixbar' | 'dr4b' | 'cascade' | 'piston' | 'chainbar';
+export type LiftType = 'arm' | 'fourbar' | 'sixbar' | 'dr4b' | 'dr6b' | 'cascade' | 'continuous' | 'piston' | 'chainbar';
 
 /** A lift. Its end effector sits at `home` when the lift's output is 0. */
 export interface LiftSpec extends MechanismDrive {
@@ -410,7 +410,7 @@ const DEVICE_TYPES: string[] = ['motor', 'imu', 'rotation', 'distance', 'optical
 const isCartridge = (c: unknown): c is Cartridge => typeof c === 'string' && Object.hasOwn(CARTRIDGE_RPM, c);
 
 const KINDS = ['roller', 'arm', 'flywheel', 'piston', 'lift', 'claw', 'intake', 'staging', 'wrist', 'toggleTool'];
-const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'piston', 'chainbar'];
+const LIFTS: LiftType[] = ['arm', 'fourbar', 'sixbar', 'dr4b', 'dr6b', 'cascade', 'continuous', 'piston', 'chainbar'];
 const isPoint = (p: RobotPoint | undefined) => !!p && isNum(p.y, -40, 40) && isNum(p.z, -5, 80) && (p.x === undefined || isNum(p.x, -40, 40));
 const isRect = (r: RobotRect | undefined) => !!r && isNum(r.x, -40, 40) && isNum(r.y, -40, 40) && isNum(r.width, 0.1, 40) && isNum(r.length, 0.1, 40);
 
@@ -460,7 +460,7 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
         if (!LIFTS.includes(m.lift)) e.push(`Lift ${m.name}: lift must be one of ${LIFTS.join(', ')}.`);
         drive(m, m.lift === 'piston' ? 'adi' : 'motors');
         if (!isPoint(m.home)) e.push(`Lift ${m.name}: home {y, z} is required (inches).`);
-        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'chainbar'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
+        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'dr6b', 'chainbar'].includes(m.lift) && !isNum(m.length, 0.5, 60)) e.push(`Lift ${m.name}: length (bar length, in) is required.`);
         if (m.base !== undefined) {
           ref(m, m.base, ['lift'], 'base');
           if (m.base === m.name) e.push(`Lift ${m.name}: base can't be itself.`);
@@ -468,8 +468,8 @@ function validateMechanisms(mechs: MechanismSpec[]): string[] {
           const b = names.get(m.base);
           if (b && b.kind === 'lift' && b.base) e.push(`Lift ${m.name}: base ${m.base} rides on another lift itself (one level of mounting only).`);
         }
-        if (m.lift === 'cascade' && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
-        if (m.lift === 'cascade' && m.stages !== undefined && !(Number.isInteger(m.stages) && m.stages >= 1 && m.stages <= 8)) e.push(`Lift ${m.name}: stages must be a whole number 1-8.`);
+        if ((m.lift === 'cascade' || m.lift === 'continuous') && !isNum(m.spoolDiameter, 0.1, 10)) e.push(`Lift ${m.name}: spoolDiameter is required.`);
+        if ((m.lift === 'cascade' || m.lift === 'continuous') && m.stages !== undefined && !(Number.isInteger(m.stages) && m.stages >= 1 && m.stages <= 8)) e.push(`Lift ${m.name}: stages must be a whole number 1-8.`);
         if (m.startAngle !== undefined && !isNum(m.startAngle, -180, 180)) e.push(`Lift ${m.name}: startAngle must be -180 to 180 degrees.`);
         if (m.lift === 'piston' && !isNum(m.travel, 0.1, 60)) e.push(`Lift ${m.name}: travel is required.`);
         if (m.facing !== undefined && m.facing !== 'front' && m.facing !== 'rear') e.push(`Lift ${m.name}: facing must be front or rear.`);

@@ -420,11 +420,11 @@ export class ManipulatorVisuals {
       this.chainBar(m, root, bx);
       return;
     }
-    if (m.lift === 'dr4b') {
+    if (m.lift === 'dr4b' || m.lift === 'dr6b') {
       this.dr4b(m, root, pv!, bx);
       return;
     }
-    if (m.lift === 'cascade') {
+    if (m.lift === 'cascade' || m.lift === 'continuous') {
       this.cascade(m, root);
       return;
     }
@@ -548,47 +548,81 @@ export class ManipulatorVisuals {
     const gears = [-1, 1].map((s, i) => (i < motors ? this.towerMotor(s, p0.y, p0.z, m.ratio ?? 1) : null));
     for (const [i, s] of [-1, 1].entries()) this.pivotBearing(s, p0.y, p0.z, gears[i] ? 0.03 : 0.23);
     const sides = [-1, 1];
-    const lower = sides.map((s, i) =>
-      makeLink(root, s, L, (kit) => {
-        if (!gears[i]) return;
-        kit.part(`gear-${gears[i]}`, R(0, 0, -0.1), RZ, RX);
-        for (const x of [-0.75, 0.75]) kit.screw(R(x, 0, WALL), RZ.clone().negate(), WALL + 0.2, null, 0.05);
-      }),
+    // link sets from the fixed stage down to the carriage: two for a DR4B, three for a DR6B
+    // (each set alternates outside / inside the one before, crossing at the elbows)
+    const sets = m.lift === 'dr6b' ? 3 : 2;
+    const links = Array.from({ length: sets }, (_, k) =>
+      sides.map((s, i) =>
+        makeLink(root, s, L, (kit, len) => {
+          if (k === 0) {
+            if (!gears[i]) return;
+            kit.part(`gear-${gears[i]}`, R(0, 0, -0.1), RZ, RX);
+            for (const x of [-0.75, 0.75]) kit.screw(R(x, 0, WALL), RZ.clone().negate(), WALL + 0.2, null, 0.05);
+            return;
+          }
+          // the elbow joint: the bar before just outside this one, a spacer between their webs'
+          // planes, a screw through both and a nylock nut inside this one
+          kit.spacers(R(0, 0, 0.5), RZ, 0.25);
+          kit.screw(R(0, 0, 0.75 + WALL), RZ.clone().negate(), 0.75 + WALL, 'nut-nylock');
+          // crossed rubber bands from the elbow up the bar
+          kit.part('rubber-band-64', R(len * 0.3, 0, 0.55), RZ, RX);
+        }),
+      ),
     );
-    const upper = sides.map((s) =>
-      makeLink(root, s, L, (kit, len) => {
-        // the elbow joint: the lower bar just outside this one, a spacer between their webs'
-        // planes, a screw through both and a nylock nut inside this one
-        kit.spacers(R(0, 0, 0.5), RZ, 0.25);
-        kit.screw(R(0, 0, 0.75 + WALL), RZ.clone().negate(), 0.75 + WALL, 'nut-nylock');
-        // crossed rubber bands from the elbow up the bar
-        kit.part('rubber-band-64', R(len * 0.3, 0, 0.55), RZ, RX);
-      }),
-    );
+    // a DR6B's middle stage: a crossbar joining the two sides at the second elbow
+    const middle = sets === 3 ? new THREE.Group() : null;
+    if (middle) {
+      middle.userData.moving = true;
+      middle.userData.rigid = true;
+      root.add(middle);
+      const mk = new Kit(robotFrame(middle));
+      mk.part('c-channel-1x2x1', R(0, 0, 0), RX, RY, { length: holes(2 * bx + 1.5) });
+      for (const s of sides) mk.screw(R(s * (bx + 0.5), 0, 0), RX.clone().multiplyScalar(-s), 2 * WALL, 'nut-nylock');
+    }
     // the carriage: a crossbar across under the pivots, and arms out to the claw
     const carriage = new THREE.Group();
     carriage.userData.moving = true;
     carriage.userData.rigid = true;
-    carriage.userData.straight = m.name; // the carriage only goes up and down (tested)
+    // a DR4B's carriage only goes up and down (tested); a DR6B's moves out and back as it rises
+    if (m.lift === 'dr4b') carriage.userData.straight = m.name;
     root.add(carriage);
     const k = new Kit(robotFrame(carriage));
-    const reach = m.home.y - p0.y; // from the carriage out to the claw
+    // A DR4B's carriage hangs under the fixed stage, its arms reaching out to the claw. A DR6B's
+    // last links end out over the claw already: its crossbar sits 5" in from the claw (behind the claw and
+    // the stack it holds), its arms running out from there to the joint.
+    const dr6b = m.lift === 'dr6b';
+    const cross = dr6b ? inward * 5 : 0;
+    const armEnd = dr6b ? 0 : m.home.y - p0.y;
     for (const s of sides) {
-      // each arm: a C-channel from the upper bar's joint out to over the claw
-      k.part('c-channel-1x2x1', R(s * (bx - 0.25), reach / 2, -0.5), RY, RZ, { length: holes(Math.abs(reach) + 1) });
-      k.screw(R(s * (bx + WALL), 0, -0.25), RX.clone().multiplyScalar(-s), 2 * WALL, 'nut-nylock');
+      // each arm: a C-channel from the crossbar out to over the claw
+      k.part('c-channel-1x2x1', R(s * (bx - 0.25), (cross + armEnd) / 2, -0.5), RY, RZ, { length: holes(Math.abs(armEnd - cross) + 1) });
+      if (dr6b) {
+        // the last link runs outside the one before: spacers out to it, and a screw through all
+        k.spacers(R(s * (bx + WALL), 0, -0.25), RX.clone().multiplyScalar(s), 0.75 - WALL);
+        k.screw(R(s * (bx + 0.75 + WALL), 0, -0.25), RX.clone().multiplyScalar(-s), 0.75 + 2 * WALL, 'nut-nylock');
+      } else k.screw(R(s * (bx + WALL), 0, -0.25), RX.clone().multiplyScalar(-s), 2 * WALL, 'nut-nylock');
     }
-    k.part('c-channel-1x2x1', R(0, 0, -1.25), RX, RY, { length: holes(2 * bx) });
-    for (const s of sides) k.part('l-bracket', R(s * (bx - 0.5), 0, -0.85), RY, RX.clone().multiplyScalar(-s), { length: 2 });
+    k.part('c-channel-1x2x1', R(0, cross, -1.25), RX, RY, { length: holes(2 * bx) });
+    for (const s of sides) k.part('l-bracket', R(s * (bx - 0.5), cross, -0.85), RY, RX.clone().multiplyScalar(-s), { length: 2 });
     this.updates.push((v) => {
       const a = a0 + v(m) * DEG;
-      const elbow = { y: p0.y + inward * L * Math.cos(a), z: p0.z + L * Math.sin(a) };
-      const top = { y: p0.y, z: p0.z + 2 * L * Math.sin(a) };
+      // joint k: k bar lengths down (or up) from the fixed stage, zig-zagging in and out
+      // (a DR6B's zig-zags outward, so its fixed stage stands inside the drive base)
+      const zig = sets === 3 ? -inward : inward;
+      const joint = (k: number) => ({ y: p0.y + (k % 2 ? zig * L * Math.cos(a) : 0), z: p0.z + k * L * Math.sin(a) });
       sides.forEach((s, i) => {
-        // the lower bars outside the upper ones: they cross at the elbow
-        lower[i].set(toThree(R(s * (bx + 0.25 + 0.5), p0.y, p0.z)), toThree(R(s * (bx + 0.75), elbow.y, elbow.z)));
-        upper[i].set(toThree(R(s * bx, elbow.y, elbow.z)), toThree(R(s * bx, top.y, top.z)));
+        for (let k = 0; k < sets; k++) {
+          const x = s * (k % 2 ? bx : bx + 0.75);
+          const j0 = joint(k);
+          const j1 = joint(k + 1);
+          links[k][i].set(toThree(R(x, j0.y, j0.z)), toThree(R(x, j1.y, j1.z)));
+        }
       });
+      if (middle) {
+        const j = joint(2);
+        middle.position.copy(toThree(R(0, j.y, j.z)));
+      }
+      const top = joint(sets);
       carriage.position.copy(toThree(R(0, top.y, top.z)));
     });
   }
@@ -678,16 +712,23 @@ export class ManipulatorVisuals {
       root.add(st.mesh);
     }
     const h0 = m.home.z;
+    // how high stage k (0 fixed .. n-1 the carriage) is for a carriage rise: a cascade's stages
+    // all move at once, each its share; a continuous lift's carriage rises first, picking up
+    // the stages one after another as it reaches the top of each
+    const full = m.range ? liftEffector(m, m.range[1]).z - h0 : 0;
+    const T = full / (n - 1);
+    const at = (rise: number, k: number) =>
+      m.lift === 'continuous' ? Math.max(0, Math.min(k * T, rise - (n - 1 - k) * T)) : (rise * k) / (n - 1);
     this.updates.push((v) => {
       const rise = liftEffector(m, v(m)).z - h0;
-      stages.forEach((g, i) => g.position.set(0, (rise * (i + 1)) / (n - 1), 0));
+      stages.forEach((g, i) => g.position.set(0, at(rise, i + 1), 0));
       sides.forEach((s, si) => {
-        const tops = xs.map((_, k) => deckTop + len * 0.5 - 0.6 + (rise * k) / (n - 1));
+        const tops = xs.map((_, k) => deckTop + len * 0.5 - 0.6 + at(rise, k));
         pulleys[si].forEach((g, k) => g.position.copy(toThree(R(0, y0, tops[k]))));
         // spool up to the first pulley, then each pulley down to the next stage's bottom
         strings[si][0].set(toThree(R(s * (xs[0] - 0.5), sy, sz + 0.6)), toThree(R(s * (xs[0] - 0.5), y0 - 0.75, tops[0])));
         for (let k = 1; k < n; k++) {
-          const bottom = deckTop + 0.4 + (rise * k) / (n - 1);
+          const bottom = deckTop + 0.4 + at(rise, k);
           strings[si][k].set(toThree(R(s * (xs[k - 1] + 0.5), y0 - 0.75, tops[k - 1])), toThree(R(s * (xs[k - 1] + 0.5), y0 - 0.55, bottom)));
         }
       });

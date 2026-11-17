@@ -55,6 +55,8 @@ const DEFAULT_CAPACITY: Capacity = { pins: 1, cups: 1 };
 const GRAB_MS = 180;
 /** Gravity (in/s^2): dropped pieces fall this fast. */
 const GRAVITY = 386;
+/** How long a lone Pin takes to tip over onto its side once it has landed (ms). */
+const TIP_MS = 320;
 /** How long an intake takes to pull a piece in when it keeps it (no `into`) (ms). */
 const CAPTURE_MS = 250;
 
@@ -953,7 +955,12 @@ export class Manipulators {
         ? // the bottom half lands behind, the top half ahead (robot heading)
           this.ops.addLying(pieces[0].colors, px, py, heading)
         : this.ops.addFloor(pieces, px, py);
-    if (z > 0.25) this.setTransit(id, { from: { x: px, y: py, z }, t0: this.now, t1: this.now + 1000 * Math.sqrt((2 * z) / GRAVITY) });
+    // it falls from where it was let go (sliding aside to where it comes to rest), and a lone Pin
+    // then tips over onto its side
+    const fall = z > 0.25 ? 1000 * Math.sqrt((2 * z) / GRAVITY) : 0;
+    if (fall > 0 || lone || dhypot(px - x, py - y) > 0.25) {
+      this.setTransit(id, { from: { x, y, z: Math.max(0, z) }, ...(lone ? { tip: heading } : {}), t0: this.now, t1: this.now + fall + (lone ? TIP_MS : 120) });
+    }
   }
 
   /** Record a piece in motion for the viewer, forgetting ones that arrived a while ago. */

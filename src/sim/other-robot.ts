@@ -2,7 +2,7 @@
 // the robot you are simulating (it has mass and moment of inertia, slides against the tiles and
 // spins when hit off-center), or follow a scripted path at a set speed (and be slowed or
 // shoved off it by a hard enough push). Defined in a field's `objects` list with a `robot`
-// entry. It does not touch scoring objects: pieces pass under it.
+// entry. Scoring objects it runs into are pushed aside (it is a solid box in the floor physics).
 
 import { dcosDeg, dhypot, dsinDeg, datan2, RAD, wrap180 } from './dmath.ts';
 import type { FieldObject, Vec2 } from './field.ts';

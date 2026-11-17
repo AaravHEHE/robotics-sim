@@ -7,7 +7,7 @@ import { esc } from '../html.ts';
 /** Fields that pick from a fixed list. */
 const CHOICES: Record<string, string[]> = {
   cartridge: ['red', 'green', 'blue'],
-  lift: ['arm', 'fourbar', 'sixbar', 'dr4b', 'cascade', 'chainbar', 'piston'],
+  lift: ['arm', 'fourbar', 'sixbar', 'dr4b', 'dr6b', 'cascade', 'continuous', 'chainbar', 'piston'],
   grip: ['piston', 'motor', 'roller'],
   tool: ['bumper', 'plate', 'roller', 'jammer'],
   facing: ['front', 'rear'],

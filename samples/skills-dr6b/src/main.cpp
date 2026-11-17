@@ -39,10 +39,13 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors
 
 constexpr double R1_X = -47.09, R1_Y = -23.55;  // red Goal R1
 
-// DR6B heights (bar degrees; the chamber is 11" behind the robot center). The bar angle that puts
-// the bottom of what the chamber holds `bottom` inches up: two 12" links starting 45 degrees down;
-// with the lift down a held Pin's bottom is at the floor.
+// DR6B heights (bar degrees). The bar angle that puts the bottom of what the chamber holds `bottom`
+// inches up: three 8" link sets starting 45 degrees down; with the lift down a held Pin's bottom is
+// at the floor.
 double barFor(double bottom) { return std::asin(bottom / 24 - 0.70711) * 180 / M_PI + 45; }
+// How far behind the robot center the chamber is at a bar angle: 11" with the lift down; the link
+// sets zig-zag out from the fixed stage, so it moves out as the bars level (up to 2.3") and back.
+double reachAt(double bar) { return 11 + 8 * (std::cos((bar - 45) * M_PI / 180) - 0.70711); }
 void liftTo(double barDegrees) { lift.move_absolute(barDegrees * 7, 100); }
 // Each carrying the bottom just over what is already there: 3.5" a Pin over an empty Goal (Goal top
 // 3.25"), 7.3" a stack over 1 Pin (Pin top 6.8"), 14.3" over 2 Pins (stack top 13.9").
@@ -53,13 +56,15 @@ constexpr double NR1_X = -47.09, NR1_Y = 23.55;  // neutral Goal N_R1
 
 // Turn the back of the robot to (x, y) and back up until the chamber is over it. The DR6B
 // must be up first: a stack still rising would hit the Goal or the Pins on it from the side.
-void backInto(double x, double y) {
+// `atBar`: the bar angle to line the chamber up for (where it will let go), if not where it is now.
+void backInto(double x, double y, double atBar = -1) {
   chassis.turnToPoint(x, y, 800, {.forwards = false});
   chassis.waitUntilDone();
   for (int t = 0; t < 1000 && std::fabs(lift.get_position(0) - lift.get_target_position(0)) > 7; t += 10) pros::delay(10);
   const lemlib::Pose p = chassis.getPose();
   const double dx = x - p.x, dy = y - p.y, d = std::hypot(dx, dy);
-  chassis.moveToPoint(x - dx / d * 11, y - dy / d * 11, 1500, {.forwards = false});
+  const double reach = reachAt(atBar >= 0 ? atBar : lift.get_target_position(0) / 7);
+  chassis.moveToPoint(x - dx / d * reach, y - dy / d * reach, 1500, {.forwards = false});
   chassis.waitUntilDone();
 }
 
@@ -128,7 +133,8 @@ void intakeLying(double rx, double ry, double heading, double runIn = 6) {
 // Back the chamber over (x, y) at bar `over`, lower it to `down` (if given) and let go.
 void dropOn(double x, double y, double over, double down = -1) {
   liftTo(over);
-  backInto(x, y);
+  // lined up for where it lets go: lowering it moves the chamber out a little
+  backInto(x, y, down >= 0 ? down : over);
   if (down >= 0) {
     liftTo(down);
     for (int t = 0; t < 600 && std::fabs(lift.get_position(0) - down * 7) > 7; t += 10) pros::delay(10);

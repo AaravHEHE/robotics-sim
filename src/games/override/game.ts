@@ -4,7 +4,7 @@
 import type { Alliance, FieldDef, Vec2 } from '../../sim/field.ts';
 import { octagon, type Obstacle, type World } from '../../sim/world.ts';
 import { datan2, dhypot } from '../../sim/dmath.ts';
-import { CUP, nestRest, PIN, stackTop, type Piece, type PinColor } from './elements.ts';
+import { CUP, layoutStack, nestRest, PIN, stackTop, type Piece, type PinColor } from './elements.ts';
 import { footprintRadius, goalShape, phasing } from './overlaps.ts';
 import { Manipulators, type GameOps } from './manipulators.ts';
 import { FloorPhysics, initPhysics, PHYSICS_DT_MS, type Carried } from './physics.ts';
@@ -208,6 +208,7 @@ export class OverrideGame implements GameOps {
     while (this.physicsClock >= PHYSICS_DT_MS) {
       this.physicsClock -= PHYSICS_DT_MS;
       this.physics.setRobot({ x: this.world.pose.x, y: this.world.pose.y, heading: this.world.pose.theta });
+      if (this.world.others.length) this.physics.setOthers(this.world.others.map((o) => ({ id: o.id, x: o.x, y: o.y, heading: o.theta, width: o.width, length: o.length })));
       this.physics.setCarried(this.carried());
       this.physics.step();
       this.syncFromPhysics();
@@ -372,6 +373,7 @@ export class OverrideGame implements GameOps {
     // each piece lies beyond the last, by its own length (a Pin is 6.5", a Cup's rim is 3.2")
     let along = 1.5;
     let prevHalf = 0;
+    const heights = layoutStack(s.pieces, 0, false).map((slot) => Math.max(0, slot.bottom));
     s.pieces.forEach((p, i) => {
       const half = (p.kind === 'pin' ? PIN.length : CUP.rimDiameter) / 2;
       along += i ? prevHalf + half + 0.2 : half;
@@ -380,6 +382,10 @@ export class OverrideGame implements GameOps {
       const y = s.y + uy * along;
       const id = p.kind === 'pin' ? this.addLying(p.colors, x, y, heading) : this.addFloor([p], x, y);
       if (old) this.opponentSide.add(id);
+      // for the viewer: each piece goes over from where it stood in the stack, a Pin tipping
+      // onto its side
+      const fall = heights[i] > 0 ? 1000 * Math.sqrt((2 * heights[i]) / 386) : 0;
+      this.state.transit[id] = { from: { x: s.x, y: s.y, z: heights[i] }, ...(p.kind === 'pin' ? { tip: heading } : {}), t0: this.clock, t1: this.clock + fall + (p.kind === 'pin' ? 320 : 150) };
     });
     this.notes.push(`At ${(this.clock / 1000).toFixed(2)} s, a stack was hit high up while moving and tipped over.`);
     this.dirty = true;

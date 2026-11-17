@@ -24,7 +24,7 @@ describe('lifts move the way their type does', () => {
     it(`${id}: cascades and double reverse 4-bars go straight up and down, in the simulator and as drawn`, async () => {
       const p = await robot(id);
       for (const m of p.mechanisms.filter((x): x is LiftSpec => x.kind === 'lift' && !x.base)) {
-        const straight = m.lift === 'cascade' || m.lift === 'dr4b' || m.lift === 'piston';
+        const straight = ['cascade', 'continuous', 'dr4b', 'piston'].includes(m.lift);
         // the simulator: the end effector's y (and x) never change
         const e0 = liftEffector(m, at(m, 0));
         let rise = 0;
@@ -45,7 +45,7 @@ describe('lifts move the way their type does', () => {
         group.traverse((o) => {
           if (o.userData.straight === m.name) marked.push(o);
         });
-        if (m.lift === 'cascade' || m.lift === 'dr4b') expect(marked.length, `${id} ${m.name} has parts marked straight`).toBeGreaterThan(0);
+        if (['cascade', 'continuous', 'dr4b'].includes(m.lift)) expect(marked.length, `${id} ${m.name} has parts marked straight`).toBeGreaterThan(0);
         const centre = (o: THREE.Object3D) => {
           o.updateMatrixWorld(true);
           return new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());

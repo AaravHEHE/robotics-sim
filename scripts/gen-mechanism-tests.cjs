@@ -452,6 +452,36 @@ void mechanismTest() {
   },
 };
 
+// The DR6B: the DR4B's test on the DR6B robot (same ports and gearing, three link sets).
+robots['test-dr6b'] = {
+  ...robots['test-dr4b'],
+  robot: 'override-dr6b',
+  name: 'Override: DR6B + intake chamber',
+  intro: ': the GPS and chamber sensor are read, the DR6B lifts the Preload to three heights, the intake spins both ways, and the clamp lets go of the Preload',
+  devices: robots['test-dr4b'].devices.replace('// DR4B, 12:84', '// DR6B, 12:84'),
+  mech: robots['test-dr4b'].mech.replace("liftTest('DR4B", "liftTest('DR6B").replace('-- DR4B (12:84) --', '-- DR6B (12:84) --'),
+};
+// The continuous lift: the cascade's test, its two motors on the 1.83" spool directly.
+robots['test-continuous'] = {
+  ...robots['test-cascade'],
+  robot: 'override-continuous',
+  name: 'Override: Continuous lift + chain-bar claw + intake',
+  intro: ': the continuous lift to three heights (the carriage first, then each stage in turn), the chain bar over the top and back, the claw drops the Preload and the intake brings it back up into it',
+  devices: robots['test-cascade'].devices.replace('// 1:3 to the spool', '// continuous lift, 1:1 on the spool'),
+  mech: robots['test-cascade'].mech.replace(
+    `  printf("-- cascade (1:3 to a 1.375\\" spool, 3 stages) --\\n");
+  for (double spool : {300.0, 700.0, 1100.0, 0.0}) {
+    cascade.move_absolute(spool * 3, 600);
+    checkNear("spool to %g deg", spool, settle(cascade, spool * 3, 15) / 3, 5);
+  }`,
+    `  printf("-- continuous lift (1:1 on a 1.83\\" spool, 4 stages in turn) --\\n");
+  for (double spool : {900.0, 2100.0, 3300.0, 0.0}) {
+    cascade.move_absolute(spool, 600);
+    checkNear("spool to %g deg", spool, settle(cascade, spool, 15), 15);
+  }`,
+  ),
+};
+
 for (const [id, r] of Object.entries(robots)) {
   if (!fs.existsSync(path.join('data/robots', r.robot + '.json'))) continue; // a retired preset (tests/fixtures/robots)
   const dir = path.join('samples', id);

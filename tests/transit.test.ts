@@ -92,7 +92,7 @@ describe('transit records (simulator)', () => {
     expect(picked).not.toBeNull();
     const intake = r.mechanisms.find((m): m is IntakeSpec => m.kind === 'intake')!;
     expect(picked!.t1 - picked!.t0).toBe(intake.transferMs ?? 300);
-    // the Preload, let go 5" up away from any Goal, falls for sqrt(2 * 5 / 386) s
+    // the Preload, let go 5" up away from any Goal, falls for sqrt(2 * 5 / 386) s and tips over
     const drop = await robot('override-fourbar');
     const w2 = new World(drop, f, { x: -30, y: -50, theta: 90 });
     w2.adiOut.set('A', true);
@@ -105,6 +105,8 @@ describe('transit records (simulator)', () => {
     const fell = Object.entries(g2.state.transit).find(([k]) => g2.state.lying.some((l) => l.id === k))?.[1];
     expect(fell).toBeDefined();
     expect(fell!.from.z).toBeGreaterThan(3);
-    expect(fell!.t1 - fell!.t0).toBeCloseTo(1000 * Math.sqrt((2 * fell!.from.z) / 386), 6);
+    // a lone Pin: the fall, then it tips over onto its side (320 ms)
+    expect(fell!.tip).toBeDefined();
+    expect(fell!.t1 - fell!.t0).toBeCloseTo(1000 * Math.sqrt((2 * fell!.from.z) / 386) + 320, 6);
   });
 });

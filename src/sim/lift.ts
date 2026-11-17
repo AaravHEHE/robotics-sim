@@ -18,7 +18,11 @@ export interface Point3 {
  * - sixbar: two linked bars; twice the rise of a fourbar for the same angle, with the
  *   reach of one bar.
  * - dr4b: two stacked fourbars, cross-linked: twice the rise, the reach stays put.
- * - cascade: string-driven slides; rise = spool travel × stages.
+ * - dr6b: three stacked fourbars (a DR4B with a middle stage): three times the rise, and the
+ *   carriage ends a bar's reach out from the fixed stage (it moves out and back as it rises).
+ * - cascade: string-driven slides, each stage pulled by the one below; rise = spool travel × stages.
+ * - continuous: one cord runs up through every stage to the carriage, which rises first and
+ *   picks up the stages in turn (sequential); rise = spool travel.
  * - piston: rises `travel` when extended.
  */
 export function liftOffset(spec: LiftSpec, out: number): { dy: number; dz: number } {
@@ -34,8 +38,16 @@ export function liftOffset(spec: LiftSpec, out: number): { dy: number; dz: numbe
       return { dy: L * (dcosDeg(a) - dcosDeg(a0)), dz: 2 * L * (dsinDeg(a) - dsinDeg(a0)) };
     case 'dr4b':
       return { dy: 0, dz: 2 * L * (dsinDeg(a) - dsinDeg(a0)) };
+    case 'dr6b': {
+      // three link sets zig-zag out from the fixed stage: the carriage ends one bar's reach out
+      // from it, so it moves away from the robot's center as the bars level out (and back)
+      const out = (spec.facing === 'rear' ? -1 : 1) * (spec.home.y < 0 ? -1 : 1);
+      return { dy: out * L * (dcosDeg(a) - dcosDeg(a0)), dz: 3 * L * (dsinDeg(a) - dsinDeg(a0)) };
+    }
     case 'cascade':
       return { dy: 0, dz: (out / 360) * Math.PI * (spec.spoolDiameter ?? 0) * (spec.stages ?? 1) };
+    case 'continuous':
+      return { dy: 0, dz: (out / 360) * Math.PI * (spec.spoolDiameter ?? 0) };
     case 'piston':
       return { dy: 0, dz: (spec.travel ?? 0) * out };
   }

@@ -1,6 +1,6 @@
 #include "main.h"
 
-// Mechanism test for the "Override: Banshee (intake + arm + roller claw)" robot (plain PROS). Start: Red 2 (bottom wall, west).
+// Mechanism test for the "Override: 2-bar arm + wrist + roller claw (Banshee-style)" robot (plain PROS). Start: Red 2 (bottom wall, west).
 //
 // Run this first whenever you change the robot (ports, gearing, profile): it drives up the
 // lane to an open spot, turns a full circle in 90° steps, then works every mechanism through
@@ -147,7 +147,7 @@ void initialize() {
 }
 
 void autonomous() {
-  printf("Mechanism test: Override: Banshee (intake + arm + roller claw)\n");
+  printf("Mechanism test: Override: 2-bar arm + wrist + roller claw (Banshee-style)\n");
   driveTest();
   mechanismTest();
   driveBack();

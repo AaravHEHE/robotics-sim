@@ -17,7 +17,7 @@ const lifts = profile.mechanisms.filter((m) => m.kind === 'lift') as Array<Mecha
 for (const l of lifts) {
   // a lift without hard stops: a piston lift goes 0..1, a bar or cascade a sensible sweep
   if (!l.range) {
-    l.range = l.lift === 'piston' ? [0, 1] : l.lift === 'cascade' ? [0, 1000] : [0, 90];
+    l.range = l.lift === 'piston' ? [0, 1] : l.lift === 'cascade' || l.lift === 'continuous' ? [0, 1000] : [0, 90];
     console.log(`(${l.name} has no range: showing ${l.range[0]}..${l.range[1]})`);
   }
 }

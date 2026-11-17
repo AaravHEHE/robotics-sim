@@ -12,6 +12,7 @@ import type { Recording } from '../sim/recording.ts';
 import type { OverrideRecording } from '../games/override/game.ts';
 import { sampleAt } from '../games/override/replay.ts';
 import type { OverrideState } from '../games/override/state.ts';
+import { PIN } from '../games/override/elements.ts';
 import { ManipulatorVisuals } from './manipulator-meshes.ts';
 import { loadCadBody, type CadBody } from './parts/cad-body.ts';
 import { closedness } from './claw-meshes.ts';
@@ -28,6 +29,8 @@ export interface FieldPose {
 const DEG = Math.PI / 180;
 /** Gravity (in/s^2), for drawing falling pieces. */
 const GRAVITY_IN = 386;
+const PIN_COLLAR = PIN.collarDiameter;
+const PIN_LEN = PIN.length;
 
 /**
  * Remove a group's children and free their GPU resources (geometries, materials,
@@ -715,8 +718,33 @@ export class FieldViewer {
       }
       const node = this.pieceNodes.get(id);
       if (!node) continue;
-      const s = Math.max(0, (t - tr.t0) / 1000);
-      node.position.y = t < tr.t1 ? Math.max(0, tr.from.z - 0.5 * GRAVITY_IN * s * s) : 0;
+      const pin = this.lyingIds.has(id) ? (node.children[0] as THREE.Object3D | undefined) : undefined;
+      if (pin) {
+        pin.rotation.set(Math.PI / 2, 0, 0);
+        pin.position.set(0, PIN_COLLAR / 2, -PIN_LEN / 2);
+      }
+      if (t >= tr.t1 || t < tr.t0) {
+        node.position.y = 0;
+        continue;
+      }
+      // falling from where it was let go (it slides aside to where it rests as it falls)
+      const s = (t - tr.t0) / 1000;
+      const tf = tr.from.z > 0 ? Math.sqrt((2 * tr.from.z) / GRAVITY_IN) : 0;
+      const kf = tf > 0 ? Math.min(1, s / tf) : 1;
+      node.position.y = Math.max(0, tr.from.z - 0.5 * GRAVITY_IN * s * s);
+      const fx = tr.from.x - node.position.x;
+      const fz = -tr.from.y - node.position.z;
+      const slide = 1 - (tr.tip === undefined ? Math.min(1, (t - tr.t0) / Math.max(1, tr.t1 - tr.t0)) : kf);
+      node.position.x += fx * slide;
+      node.position.z += fz * slide;
+      if (pin && tr.tip !== undefined) {
+        // standing on its bottom end until it lands, then tipping over forward about it
+        const tipT = (tr.t1 - tr.t0) / 1000 - tf;
+        const k = s <= tf ? 0 : Math.min(1, (s - tf) / Math.max(0.001, tipT));
+        const a = (Math.PI / 2) * k * k;
+        pin.rotation.set(a, 0, 0);
+        pin.position.set(0, (PIN_COLLAR / 2) * Math.sin(a), -PIN_LEN / 2);
+      }
     }
   }
 

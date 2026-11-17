@@ -10,19 +10,14 @@ const presets = readdirSync('data/robots')
   .map((f) => JSON.parse(readFileSync(`data/robots/${f}`, 'utf8')) as RobotProfile);
 
 describe('profiles with a CAD build', () => {
-  const withCad = presets.filter((p) => p.cad);
-
-  it('some presets draw from a CAD, and every one is a valid profile naming a build the app has', () => {
-    expect(withCad.map((p) => p.id).sort()).toEqual(['override-cascade', 'override-continuous', 'override-dr4b', 'override-dr6b', 'override-fourbar', 'override-sixbar', 'override-twobar']);
-    expect(presets.find((p) => p.id === 'override-dr4b')!.cad!.claw).toBe('Chamber');
-    for (const p of withCad) {
-      expect(validateProfile(p)).toEqual([]);
-      expect(CAD_BUILD_NAMES).toContain(p.cad!.build);
-    }
+  it('no preset draws from a CAD build: they are drawn complete from their profile (drive, electronics, mechanisms)', () => {
+    expect(presets.filter((p) => p.cad).map((p) => p.id)).toEqual([]);
   });
 
-  it('rejects a CAD naming a lift the robot does not have, or no build', () => {
-    const p = withCad[0];
+  it('a profile may still name a CAD build the app has (it is valid), but not a lift or claw the robot lacks', () => {
+    const p = { ...presets.find((x) => x.id === 'override-dr4b')!, cad: { build: 'dr4b', lift: 'DR4B', claw: 'Chamber' } };
+    expect(validateProfile(p)).toEqual([]);
+    expect(CAD_BUILD_NAMES).toContain(p.cad.build);
     expect(validateProfile({ ...p, cad: { build: 'cascade', lift: 'Nope' } }).join(' ')).toMatch(/cad\.lift/);
     expect(validateProfile({ ...p, cad: { build: '' } }).join(' ')).toMatch(/cad\.build/);
     expect(validateProfile({ ...p, cad: { build: 'cascade', claw: 'Nope' } }).join(' ')).toMatch(/cad\.claw/);

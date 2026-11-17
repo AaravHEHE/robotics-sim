@@ -109,9 +109,11 @@ named lift each frame, mapping the lift's whole output range onto the build's wh
 
 - **Motion for the 6-bar.** Its mates (190, in the Team A document) leave 8 degrees of freedom at the CAD pose, so the
   document itself does not say how it moves; it stays a static pose.
-- Lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`) have no chassis, so no preset uses them as a robot's body; they
-  are in the app's build list for a profile that wants one. Whole-robot builds fit the presets only loosely (the CAD's
-  size and claw are not the profile's), so the profile's numbers were not changed.
+- **No preset uses a CAD build as its body any more.** The lift-only builds (`fourbar`, `sixbar`, `twobar`, `dr6b`)
+  have no chassis, Brain, battery or air system, the whole-robot builds fit the presets only loosely (the CAD's size and
+  claw are not the profile's), and a CAD body animates only one lift and one claw. The presets are drawn from their
+  profiles out of VEX parts instead (see [robots.md](robots.md)). The builds stay in the app's build list for a
+  profile that names one with `cad`.
 - Parts over 6000 triangles (a few large custom parts, like the 2.9 x 3.2 x 2.8 in block in the piston claw) are still
   drawn as boxes of their size.
 - The sim still has all its other presets, and no "only the seven lift types" cut has been made.

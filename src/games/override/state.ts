@@ -44,6 +44,8 @@ export interface Transit {
   to?: { x: number; y: number; z: number };
   /** It started out lying, pointing this way (degrees): it is turned upright on the way. */
   lying?: number;
+  /** A lone Pin let go standing: it lands upright, then tips over this way (degrees). */
+  tip?: number;
   t0: number;
   t1: number;
 }

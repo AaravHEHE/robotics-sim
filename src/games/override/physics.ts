@@ -299,6 +299,22 @@ export class FloorPhysics {
     this.setCarried([]);
   }
 
+  /** Other robots on the field (not driven by this program): solid boxes pieces are pushed by. */
+  private readonly otherBodies = new Map<string, RAPIER.RigidBody>();
+  setOthers(list: Array<BodyPose & { id: string; width: number; length: number }>): void {
+    for (const o of list) {
+      let b = this.otherBodies.get(o.id);
+      if (!b) {
+        b = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(o.x * M, o.y * M).setRotation(-o.heading * RAD));
+        this.world.createCollider(RAPIER.ColliderDesc.cuboid((o.width / 2) * M, (o.length / 2) * M), b);
+        this.otherBodies.set(o.id, b);
+        continue;
+      }
+      b.setNextKinematicTranslation({ x: o.x * M, y: o.y * M });
+      b.setNextKinematicRotation(-o.heading * RAD);
+    }
+  }
+
   setRobot(pose: BodyPose): void {
     this.robot.setNextKinematicTranslation({ x: pose.x * M, y: pose.y * M });
     this.robot.setNextKinematicRotation(-pose.heading * RAD);

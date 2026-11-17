@@ -90,7 +90,7 @@ export class SvgView {
       if (['arm', 'fourbar', 'sixbar', 'chainbar'].includes(l.lift) && l.length) {
         const piv = barPivot(l);
         el('line', { x1: piv.y, y1: -piv.z, x2: l.home.y, y2: -l.home.z, class: 'rl-bar' }, g);
-      } else if (l.lift === 'cascade' || l.lift === 'dr4b' || l.lift === 'piston') {
+      } else if (l.lift === 'cascade' || l.lift === 'continuous' || l.lift === 'dr4b' || l.lift === 'dr6b' || l.lift === 'piston') {
         el('line', { x1: l.home.y, y1: -l.home.z, x2: l.home.y, y2: 0, class: 'rl-bar' }, g);
       }
     }

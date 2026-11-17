@@ -154,6 +154,11 @@ export function liftPivot(p: RobotProfile, m: LiftSpec): { y: number; z: number 
   const out = m.facing === 'rear' ? -1 : 1;
   if (m.lift === 'arm' || m.lift === 'fourbar' || m.lift === 'chainbar') return { y: m.home.y - out * L * Math.cos(a0), z: m.home.z - L * Math.sin(a0) };
   if (m.lift === 'sixbar') return { y: m.home.y - out * L * Math.cos(a0), z: m.home.z - 2 * L * Math.sin(a0) };
+  if (m.lift === 'dr6b') {
+    // the fixed stage is one bar's reach in from the carriage (the links zig-zag out to it)
+    const outward = m.home.y < 0 ? -1 : 1;
+    return { y: m.home.y - outward * L * Math.cos(a0), z: m.home.z - 3 * L * Math.sin(a0) };
+  }
   if (m.lift === 'dr4b') {
     // its fixed stage hangs from the top of towers at the end of the drive base nearer its
     // carriage (just inside the end crossbar); the carriage comes up below it
@@ -166,7 +171,7 @@ export function liftPivot(p: RobotProfile, m: LiftSpec): { y: number; z: number 
 /** The air tank's crossbar: under a cascade's fixed stages, or clear of the lift towers. */
 function tankCrossbar(p: RobotProfile, mid: number, front2: number): number | null {
   const lifts = p.mechanisms.filter((m): m is LiftSpec => m.kind === 'lift');
-  const cascade = lifts.find((m) => m.lift === 'cascade' && !m.base);
+  const cascade = lifts.find((m) => (m.lift === 'cascade' || m.lift === 'continuous') && !m.base);
   if (cascade) return cascade.home.y;
   if (!p.devices.some((x) => x.type === 'adi_digital_out')) return null;
   const towers = lifts.map((m) => liftPivot(p, m)?.y).filter((y): y is number => y !== undefined);

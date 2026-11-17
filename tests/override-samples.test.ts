@@ -1,4 +1,5 @@
 // Golden scores of the Override sample autons: each runs exactly as the app opens it.
+import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +17,8 @@ const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?
   'override-cascade': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-dr4b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-sixbar': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
+  'override-continuous': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
+  'override-dr6b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   // 60 s Skills (the Midfield Goal's Pins count while the robot is parked beside it)
   'override-skills': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
@@ -61,6 +64,8 @@ const TESTS: Record<string, { checks: number; holder?: string; regrab?: boolean;
   'test-cascade': { checks: 17, holder: 'Claw', regrab: true },
   'test-sixbar': { checks: 15, holder: 'Claw', regrab: true, flips: true },
   'test-workhorse': { checks: 13, holder: 'Claw', regrab: true },
+  'test-continuous': { checks: 17, holder: 'Claw', regrab: true },
+  'test-dr6b': { checks: 19 },
 };
 
 describe('Override sample settings', () => {
@@ -75,10 +80,17 @@ describe('Override sample settings', () => {
 });
 
 describe('Override mechanism tests', () => {
-  it('every robot preset for Override has a mechanism test', () => {
+  it('every robot preset for Override has a mechanism test, a 15 s auton and a 60 s Skills run', () => {
     const tests = SAMPLES.filter((s) => s.kind === 'test');
     expect(tests.map((s) => s.id).sort()).toEqual(Object.keys(TESTS).sort());
     expect(new Set(tests.map((s) => s.robot)).size).toBe(tests.length);
+    const robots = readdirSync(path.join(repoRoot, 'data/robots')).filter((f) => f.startsWith('override-')).map((f) => f.replace(/\.json$/, ''));
+    for (const r of robots) {
+      const mine = SAMPLES.filter((s) => s.robot === r);
+      expect(mine.some((s) => s.kind === 'test'), `${r} has a mechanism test`).toBe(true);
+      expect(mine.some((s) => s.kind !== 'test' && (s.autonMs ?? 15000) < 60000), `${r} has a 15 s auton`).toBe(true);
+      expect(mine.some((s) => s.kind !== 'test' && (s.autonMs ?? 15000) >= 60000), `${r} has a Skills run`).toBe(true);
+    }
   });
 
   for (const [id, want] of Object.entries(TESTS)) {
@@ -99,6 +111,10 @@ describe('Override mechanism tests', () => {
         const dropped = snaps.flatMap((st) => st.lying).find((l) => l.id.startsWith('d'));
         expect(dropped).toBeDefined();
         expect(end.held[want.holder!].map((p) => p.id)).toEqual([dropped!.id]);
+        // it fell from where the claw let go of it, landing on its end and tipping over
+        const fall = snaps.map((st) => st.transit[dropped!.id]).find((tr) => tr);
+        expect(fall?.tip).toBeDefined();
+        expect(fall!.t1 - fall!.t0).toBeGreaterThan(300);
       }
       if (want.fromTray) {
         expect(snaps[0].held.Stage.map((p) => p.id)).toEqual(['preload']);

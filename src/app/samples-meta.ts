@@ -95,6 +95,25 @@ export const SAMPLES: SampleMeta[] = [
     startAt: { x: -57.6, y: -37, theta: 90 }, // the Preload in the rear claw must be inside the wall
     autonMs: 15000,
   },
+  {
+    id: 'override-continuous',
+    name: 'Override: Continuous lift + claw, two Goals (LemLib)',
+    description: 'LemLib. Drops the Preload into Goal R1 and stacks an intaken Cup + Pin on it, rams the Red 1 Toggle to red, then lifts a second intaken stack onto neutral Goal N_R1 with the continuous lift.',
+    robot: 'override-continuous',
+    field: 'override',
+    start: 'red1_s',
+    autonMs: 15000,
+  },
+  {
+    id: 'override-dr6b',
+    name: 'Override: DR6B out the back, 3-Pin stack (LemLib + GPS)',
+    description: 'LemLib, starting from a GPS reading. Backs the Preload into Goal R1, intakes two standing stacks over the robot into the DR6B chamber and backs each onto it (a 3-Pin stack), then hits the Red 1 Toggle at speed to turn it to red.',
+    robot: 'override-dr6b',
+    field: 'override',
+    start: 'red1_s',
+    startAt: { x: -57.6, y: -37, theta: 90 }, // the Preload in the rear chamber must be inside the wall
+    autonMs: 15000,
+  },
   // 60 s Autonomous Coding Skills, one per robot: Match Loads come in through the red Loaders
   {
     id: 'skills-twobar',
@@ -169,6 +188,12 @@ export const SAMPLES: SampleMeta[] = [
     autonMs: 20000,
     // the Preload in the rear claw must be inside the wall: 3" north of the preset
     startAt: { x: -37, y: -57.6, theta: 0 },
+  },
+  test('test-continuous', 'override-continuous', 'Continuous lift', 'moves the continuous lift to three heights (carriage first, then each stage), swings the chain bar over the top, drops the Preload and runs the intake to bring it back up into the claw'),
+  {
+    ...test('test-dr6b', 'override-dr6b', 'DR6B + intake chamber', 'reads the GPS and chamber sensor, lifts the Preload to three heights, spins the intake both ways and lets go of the Preload'),
+    autonMs: 20000,
+    startAt: { x: -37, y: -57.6, theta: 0 }, // the Preload in the rear chamber must be inside the wall
   },
   test('test-cascade', 'override-cascade', 'Cascade', 'moves the cascade to three heights, swings the chain bar over the top, drops the Preload and runs the intake to bring it back up into the claw'),
   test('test-sixbar', 'override-sixbar', '6-bar + wrist', 'moves the 6-bar to three heights, turns the Preload over with the wrist and back, and drops and re-grabs it'),

@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "override-sixbar",
   "name": "Override: 6-bar + wrist claw",
-  "description": "Six-bar robot, drawn from a public Team A six-bar CAD. A 6-bar (port 7, 1:5) with a pneumatic claw (ADI A) on a motorized wrist (port 8, 1:2) that turns the held stack end over end past 90 degrees. Starts holding the Preload yellow end down.",
+  "description": "Six-bar robot, built from VEX parts. A 6-bar (port 7, 1:5) with a pneumatic claw (ADI A) on a motorized wrist (port 8, 1:2) that turns the held stack end over end past 90 degrees. Starts holding the Preload yellow end down.",
   "size": {
     "width": 15,
     "length": 15,
@@ -92,10 +92,5 @@
         180
       ]
     }
-  ],
-  "cad": {
-    "build": "sixbar",
-    "lift": "Six-bar",
-    "claw": "Claw"
-  }
+  ]
 }

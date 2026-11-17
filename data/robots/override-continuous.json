@@ -1,12 +1,8 @@
 {
   "schema": 1,
   "id": "override-continuous",
-  "cad": {
-    "build": "continuous",
-    "lift": "Continuous"
-  },
   "name": "Override: Continuous lift + chain-bar claw + intake",
-  "description": "Continuous (sequential) lift robot, drawn from a public 20 in continuous-lift CAD: four stages, each pulled up in turn by one cord. Drive, chain bar, claw and intake as the cascade robot. Physics are the Claw Gate / Clawscade approximation (no reveal of the original was found). A fast 3-stage cascade (ports 7 and 8, blue, 1:3 onto a 1.375\" spool) carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
+  "description": "Continuous (sequential) lift robot built from VEX parts: one cord runs from the spool up through all four stages to the carriage, which rises first and picks up each stage in turn as it reaches the top of the one below. Two blue motors (ports 7 and 8) drive the 1.83\" spool directly (it lifts as fast as the cascade robot's, every motor degree the same height). It carries a banded chain bar (port 9, green, 1:3) whose pneumatic claw (ADI A) stays level as it swings. A funnel intake (port 10) brings pieces up into the claw when the chain bar is down in front. Passive front Toggle bumper. Starts holding the Preload.",
   "size": {
     "width": 15,
     "length": 15,
@@ -71,21 +67,21 @@
     {
       "kind": "lift",
       "name": "Continuous",
-      "lift": "cascade",
+      "lift": "continuous",
       "motors": [
         7,
         8
       ],
-      "ratio": 0.3333,
+      "ratio": 1,
       "range": [
         0,
-        1150
+        3450
       ],
       "home": {
         "y": 0,
         "z": 6
       },
-      "spoolDiameter": 1.375,
+      "spoolDiameter": 1.83315,
       "stages": 4
     },
     {

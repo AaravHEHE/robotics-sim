@@ -359,7 +359,7 @@ export class World {
         const m = this.motors.get(port);
         if (!m) continue;
         m.liftUp = Math.sign(mech.ratio ?? 1) || 1;
-        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'chainbar'].includes(mech.lift)) m.barLift = { startAngle: mech.startAngle ?? 0, ratio: mech.ratio ?? 1 };
+        if (['arm', 'fourbar', 'sixbar', 'dr4b', 'dr6b', 'chainbar'].includes(mech.lift)) m.barLift = { startAngle: mech.startAngle ?? 0, ratio: mech.ratio ?? 1 };
       }
     }
   }
@@ -531,6 +531,9 @@ export class World {
     const bx = this.pose.x;
     const by = this.pose.y;
     for (const o of this.others) o.step(dt, this.field.perimeter.inside / 2);
+    // turning a corner into a Goal, Loader or wedged piece: the frame can't swing through it, so
+    // the turn stops there (the wheels scrub) instead of the robot sliding round it
+    if (w !== 0) this.blockTurn(th0);
     this.resolveOtherObstacles();
     this.resolveObstacles();
     this.resolveWalls();
@@ -775,6 +778,34 @@ export class World {
         if (!moved) break;
       }
     }
+  }
+
+  /**
+   * Undo this step's turn when it drove the frame further into something fixed, and stop the
+   * wheels turning against it (they keep only their shared forward speed).
+   */
+  private blockTurn(th0: number): void {
+    const obstacles = this.pinnedObstacles.length ? [...this.obstacles, ...this.pinnedObstacles] : this.obstacles;
+    if (!obstacles.length) return;
+    const depthAt = (theta: number): number => {
+      const keep = this.pose.theta;
+      this.pose.theta = theta;
+      const fp = this.footprint();
+      this.pose.theta = keep;
+      let d = 0;
+      for (const ob of obstacles) {
+        const mtv = satMtv(fp, ob.poly);
+        if (mtv) d += dhypot(mtv[0], mtv[1]);
+      }
+      return d;
+    };
+    const now = depthAt(this.pose.theta);
+    if (now <= 0) return;
+    if (now <= depthAt(th0) + 1e-6) return;
+    this.pose.theta = th0;
+    const v = (this.vL + this.vR) / 2;
+    this.vL = v;
+    this.vR = v;
   }
 
   /** Push the robot out of static field elements (goals, loaders, field objects). */
