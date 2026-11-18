@@ -153,6 +153,7 @@ The octagon's corner radius is R81.9 (3.22″). Its flat-to-hole-center distance
   - A yellow Pin in the Midfield (center Goal) is Owned by the alliance with more Robots in the Midfield; a tie means it is not Owned.
 - **SC6:** a Robot counts as in the Midfield if any part of it is inside the Midfield volume.
 - **SC7 Autonomous Bonus:**
+  - It is part of the Alliance's score (the Scoring table above): the simulator's total is the Pin points plus the bonus (`OverrideResult.total`).
   - Evaluated immediately when autonomous ends.
   - Excludes Midfield-dependent scoring (Robots in the Midfield, and Midfield yellow ownership).
   - Any autonomous violation gives the bonus to the opponent.

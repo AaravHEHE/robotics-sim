@@ -41,5 +41,5 @@ if (g) {
   for (const [goal, ps] of Object.entries(s.goals)) if (ps.length) console.log(`  goal ${goal}: ${ps.map((p) => (p.kind === 'pin' ? p.colors.join('/') : 'cup-' + p.up)).join(' + ')}`);
   const r = g.result!;
   console.log(`  toggles: ${r.score.toggles.map((t) => `${t.zone}=${t.color}`).join(' ')}`);
-  console.log(`  SCORE red ${r.score.red} blue ${r.score.blue}  bonus ${JSON.stringify(r.autonomousBonus)} awp ${r.awp ? `${r.awp.scoredPins} pins/${r.awp.goalsWithTwo} goals std=${r.awp.standard}` : '-'} midfield ${r.inMidfield} perimeter ${r.touchingPerimeter}`);
+  console.log(`  SCORE red ${r.score.red} blue ${r.score.blue}  bonus ${JSON.stringify(r.autonomousBonus)}  TOTAL red ${r.total.red} blue ${r.total.blue} awp ${r.awp ? `${r.awp.scoredPins} pins/${r.awp.goalsWithTwo} goals std=${r.awp.standard}` : '-'} midfield ${r.inMidfield} perimeter ${r.touchingPerimeter}`);
 }

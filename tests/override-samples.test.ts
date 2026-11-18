@@ -21,13 +21,13 @@ const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?
   'override-dr6b': { red: 55, blue: 0, pins: 8, toggles: { red1: 'red' } },
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   // 60 s Skills (the Midfield Goal's Pins count while the robot is parked beside it)
-  'override-skills': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'override-skills': { red: 108, blue: 0, pins: 9, toggles: { red1: 'red' } },
   'skills-twobar': { red: 78, blue: 0, pins: 6, toggles: { red1: 'red' } },
   'skills-fourbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
   'skills-sixbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
-  'skills-cascade': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
-  'skills-continuous': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
-  'skills-dr6b': { red: 93, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-cascade': { red: 108, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-continuous': { red: 108, blue: 0, pins: 9, toggles: { red1: 'red' } },
+  'skills-dr6b': { red: 108, blue: 0, pins: 9, toggles: { red1: 'red' } },
 };
 
 describe('Override sample autons', () => {
@@ -44,6 +44,9 @@ describe('Override sample autons', () => {
       expect(rec.error).toBeNull();
       const r = rec.game!.result!;
       expect({ red: r.score.red, blue: r.score.blue }).toEqual({ red: want.red, blue: want.blue });
+      // what the score shows: those Pin points plus the Autonomous Bonus (12, SC7) for a head-to-head run
+      const bonus = (meta.autonMs ?? 15000) >= 60000 ? 0 : 12;
+      expect(rec.game!.result!.total).toEqual({ red: want.red + bonus, blue: want.blue });
       for (const [zone, color] of Object.entries(want.toggles ?? {})) expect(r.score.toggles.find((t) => t.zone === zone)?.color).toBe(color);
       expect(rec.game!.violations).toEqual([]);
       const s = rec.game!.snapshots.at(-1)!.state;

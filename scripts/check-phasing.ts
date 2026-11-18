@@ -53,7 +53,7 @@ for (const meta of SAMPLES) {
     byWhat.set(i.what, e);
   }
   if (byWhat.size || rec.error) failed++;
-  console.log(`${meta.id}: ${byWhat.size} problems${rec.error ? ' ERROR ' + rec.error : ''}  score ${JSON.stringify(rec.game?.result?.score.red)}`);
+  console.log(`${meta.id}: ${byWhat.size} problems${rec.error ? ' ERROR ' + rec.error : ''}  score ${JSON.stringify(rec.game?.result?.total.red)}`);
   for (const [what, e] of byWhat) console.log(`    t=${e.first}ms x${e.n} worst ${e.worst.toFixed(2)}in  ${what}`);
 }
 process.exitCode = failed ? 1 : 0;

@@ -18,9 +18,15 @@ import { ToggleSim } from './toggle.ts';
 /** End-of-run scoring: what the referee would record when the run stops. */
 export interface OverrideResult {
   t: number;
+  /** Points from Pins (SC3) and, outside the Autonomous Period, Robots in the Midfield. */
   score: ScoreBreakdown;
   /** Head-to-head only (SC7). */
   autonomousBonus: { red: number; blue: number } | null;
+  /**
+   * What each Alliance scores: the manual's whole Scoring table added up, that is `score` plus the
+   * Autonomous Bonus (12 points, or 6 each on a tie). Skills has no bonus: it equals `score`.
+   */
+  total: { red: number; blue: number };
   /** Head-to-head only (SC8), for the robot's alliance. */
   awp: AwpCheck | null;
   touchingPerimeter: boolean;
@@ -48,6 +54,8 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /** Slowest hit (in/s) that tips a stack over. */
 const TIP_SPEED = 6;
+/** SC1: the longest a Toggle still turning at the end of the Match is given to come to rest (ms). */
+const SETTLE_MS = 5000;
 
 export class OverrideGame implements GameOps {
   readonly field: FieldDef;
@@ -419,7 +427,22 @@ export class OverrideGame implements GameOps {
     this.rec.snapshots.push({ t, state: clone(this.state) });
   }
 
+  /**
+   * SC1: scores are taken once everything on the Field has come to rest, at most five seconds after
+   * the Match ends. A Toggle still turning when time runs out settles on a face first (a hit in
+   * the last second counts); the Robot and the Scoring Objects stay as they were at 0:00 (SC1c: no
+   * post-Match movement counts), so a Toggle the Robot is touching is still neutral (SC4b).
+   */
+  private settleToggles(): void {
+    const still = this.manipulators.contactShapes().map((s) => ({ ...s, velocity: [0, 0] as Vec2 }));
+    for (let ms = 0; ms < SETTLE_MS; ms++) {
+      this.toggles.step(1, this.state.toggles, still);
+      if (this.state.toggles.every((t) => Math.abs(t.omega ?? 0) < 0.5 && Math.abs(t.angle - 120 * Math.round(t.angle / 120)) < 0.01)) break;
+    }
+  }
+
   finish(): OverrideRecording {
+    this.settleToggles();
     this.rec.result = this.score();
     this.physics.free();
     return this.rec;
@@ -450,10 +473,12 @@ export function scoreState(
     robotsInMidfield: { red: mid && alliance === 'red' ? 1 : 0, blue: mid && alliance === 'blue' ? 1 : 0 },
   });
   const perimeter = touchingPerimeter(field, footprint, parts);
+  const bonus = mode === 'h2h' ? autonomousBonus(s, { red: alliance === 'red' && violation, blue: alliance === 'blue' && violation }) : null;
   return {
     t,
     score: s,
-    autonomousBonus: mode === 'h2h' ? autonomousBonus(s, { red: alliance === 'red' && violation, blue: alliance === 'blue' && violation }) : null,
+    autonomousBonus: bonus,
+    total: { red: s.red + (bonus?.red ?? 0), blue: s.blue + (bonus?.blue ?? 0) },
     awp: mode === 'h2h' ? awp(field, s, alliance, perimeter, violation) : null,
     touchingPerimeter: perimeter,
     inMidfield: mid,

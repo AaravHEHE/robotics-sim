@@ -242,6 +242,52 @@ describe('Override rule monitors', () => {
     expect(rec.result!.awp!.standard).toBe(false);
   });
 
+  it("the total is the manual's whole Scoring table: Pin points plus the Autonomous Bonus (SC7), none in Skills", async () => {
+    const f = await field();
+    const st = stateWith(f, { R1: [pin('red', 'yellow')] }); // red half 5, yellow half unowned (neutral Toggle)
+    const at = boxAt(-40, -40); // on red's side, outside the Midfield
+    const win = scoreState(f, 'h2h', 'red', st, at, false, 0);
+    expect(win.score).toMatchObject({ red: 5, blue: 0 });
+    expect(win.total).toEqual({ red: 5 + 12, blue: 0 });
+    // nothing scored by either Alliance: a tie, 6 each
+    expect(scoreState(f, 'h2h', 'red', stateWith(f, {}), at, false, 0).total).toEqual({ red: 6, blue: 6 });
+    // an autonomous violation hands the 12 to the opponent
+    expect(scoreState(f, 'h2h', 'red', st, at, true, 0).total).toEqual({ red: 5, blue: 12 });
+    // Skills has no Autonomous Bonus, and counts the Robot in the Midfield (8)
+    const sk = scoreState(f, 'skills', 'red', st, boxAt(0, 0), false, 0);
+    expect(sk.autonomousBonus).toBeNull();
+    expect(sk.total).toEqual({ red: 5 + 8, blue: 0 });
+  });
+
+  it('SC1: a Toggle still turning when time runs out settles on its face before it is scored', async () => {
+    const f = await field();
+    const r = await robot('tank-6m-450');
+    const world = new World(r, f, { x: -40, y: -40, theta: 0 }); // nowhere near a Toggle
+    const game = await OverrideGame.create(f, 'h2h', world);
+    const t = game.state.toggles.find((x) => x.id === 'T_red1')!;
+    t.angle = -100; // rolling toward the red face (-120) at the end of the Match, not yet seated
+    t.omega = -150;
+    expect(setColor(f.toggles!.find((x) => x.id === 'T_red1')!, t.angle, false)).toBe('yellow'); // mid-roll: neutral right now
+    const rec = game.finish();
+    expect(rec.result!.score.toggles.find((x) => x.zone === 'red1')!.color).toBe('red');
+  });
+
+  it('SC4b: a Toggle the Robot is still pressed against at the end stays neutral, however far it got', async () => {
+    const f = await field();
+    const r = await robot('tank-6m-450');
+    r.size.height = 14; // tall enough to reach the Toggle
+    const world = new World(r, f, { x: -50, y: 0, theta: 270 });
+    const game = await OverrideGame.create(f, 'h2h', world);
+    for (const p of [...r.drivetrain.left, ...r.drivetrain.right]) world.motor(p).cmd = 60 * Math.sign(p);
+    for (let t = 1; t <= 1500; t++) {
+      world.step(1);
+      game.step(1);
+    }
+    // (the same run as above, but the Robot is still against the Toggle when time runs out)
+    const rec = game.finish();
+    expect(rec.result!.score.toggles.find((x) => x.id === 'T_red1')!.color).toBe('yellow');
+  });
+
   it('scoreState: Midfield parking counts in Skills, not in head-to-head autonomous', async () => {
     const f = await field();
     const st = stateWith(f, {});

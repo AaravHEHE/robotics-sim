@@ -37,10 +37,11 @@ export function renderHud(hud: HTMLElement, g: OverrideRecording | null, r: Over
   hud.hidden = !g || !r;
   if (!g || !r) return;
   if (g.mode === 'skills') {
-    hud.replaceChildren(el('span', 'sc team', `Skills ${r.score.red}`));
+    hud.replaceChildren(el('span', 'sc team', `Skills ${r.total.red}`));
     return;
   }
-  hud.replaceChildren(el('span', 'sc red', String(r.score.red)), el('span', 'sc blue', String(r.score.blue)));
+  // each Alliance's whole score: Pins plus the Autonomous Bonus (SC7)
+  hud.replaceChildren(el('span', 'sc red', String(r.total.red)), el('span', 'sc blue', String(r.total.blue)));
 }
 
 export function renderScorePanel(panel: HTMLElement, g: OverrideRecording | null, r: OverrideResult | null, atEnd: boolean) {
@@ -51,8 +52,8 @@ export function renderScorePanel(panel: HTMLElement, g: OverrideRecording | null
   const out: HTMLElement[] = [];
   const s = r.score;
   const head = el('div', 'score-head');
-  if (g.mode === 'skills') head.append(el('span', 'sc team', `Skills ${s.red}`));
-  else head.append(el('span', 'sc red', `Red ${s.red}`), el('span', 'sc blue', `Blue ${s.blue}`));
+  if (g.mode === 'skills') head.append(el('span', 'sc team', `Skills ${r.total.red}`));
+  else head.append(el('span', 'sc red', `Red ${r.total.red}`), el('span', 'sc blue', `Blue ${r.total.blue}`));
   head.append(el('span', 'score-note', atEnd ? 'Final (at auto-stop)' : 'If the run ended now'));
   out.push(head);
 
@@ -60,7 +61,9 @@ export function renderScorePanel(panel: HTMLElement, g: OverrideRecording | null
     out.push(el('p', 'score-note', `Your robot plays for ${g.alliance}. Autonomous scoring excludes the Midfield (SC7a).`));
     const ab = r.autonomousBonus!;
     const bonus = ab.red === ab.blue ? (ab.red ? 'tie: 6 each' : 'none (both violated)') : `${ab.red > ab.blue ? 'red' : 'blue'} +12`;
-    out.push(row('Autonomous Bonus', bonus));
+    // where the total comes from, as in the manual's Scoring table
+    out.push(row('Pins (5 per red/blue half, 10 per owned yellow half)', `red ${s.red} · blue ${s.blue}`));
+    out.push(row('Autonomous Bonus (added to the total above)', bonus));
     const a = r.awp!;
     const list = el('ul', 'awp');
     const item = (ok: boolean, text: string) => {
@@ -73,7 +76,8 @@ export function renderScorePanel(panel: HTMLElement, g: OverrideRecording | null
     item(!a.violation, a.violation ? 'An autonomous rule was broken (see Notes)' : 'No autonomous violations');
     out.push(row('Autonomous Win Point', a.standard ? (a.worlds ? 'yes (also Worlds criteria)' : 'yes (standard events)') : 'no'), list);
   } else {
-    out.push(row('Robot in Midfield', r.inMidfield ? '+8' : 'no'));
+    out.push(row('Pins (5 per red/blue half, 10 per owned yellow half)', String(s.red - s.midfield.points.red)));
+    out.push(row('Robot in Midfield (8)', r.inMidfield ? '+8' : 'no'));
   }
 
   const tg = el('div', 'toggles');
