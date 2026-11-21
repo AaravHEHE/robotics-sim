@@ -14,9 +14,10 @@
 //  2. A loaded stack (red/yellow Pin) from the south red Loader, straight up the intake into the
 //     chamber, backed onto Goal R2: its red half scores in Red 2.
 //  3. A lone red/yellow Pin off the floor onto neutral Goal N_R1 (both halves score).
-//  4. More Match Loads onto the center Goal C, backed onto it one at a time, then a lone Pin off the
-//     floor on top of them.
-//  5. Finish beside C, in the Midfield: everything on C scores.
+//  4. More Match Loads onto the center Goal C, backed onto it one at a time.
+//  5. The Red 2 Toggle (bottom wall) rammed to red: the yellow half on R2 is Owned too.
+//  6. A lone Pin off the floor on top of C, and finish beside it, in the Midfield: everything on C
+//     scores.
 //
 // setPose() puts LemLib's odometry in field coordinates (inches, origin at the center,
 // +y toward the top wall, headings clockwise from +y).
@@ -247,6 +248,20 @@ void autonomous() {
     if (n == 0) dropOn(0, 0, barFor(C_TOP + 0.4));
     else dropOn(0, 0, barFor(C_TOP + 7.15 * n + 1.0), barFor(C_TOP + 7.15 * n - 2.5));
   }
+
+  // 6b. The Red 2 Toggle (bottom wall, x = 0) rammed to red, so the yellow halves in Red 2 are Owned.
+  //     Down the lane x = -12 (west of the Cup at (0, -23.5), clear of R2), then 24" of run-up: the
+  //     passive toggler turns it two faces when it hits at speed.
+  pullAway(4);
+  liftTo(0);
+  approach(-12, -36, 0);
+  approach(0, -38, 0);
+  chassis.turnToHeading(180, 800);
+  chassis.waitUntilDone();
+  ramToggle();
+  // back up the same lane to the Midfield
+  approach(-12, -40, 0);
+  approach(-12, -12, 0);
 
   // 7. A lone red/yellow Pin on top of C: the west Pin of the cross at (23.5, -23.5), taken from the
   //    north-west. Then it stays beside C, in the Midfield.

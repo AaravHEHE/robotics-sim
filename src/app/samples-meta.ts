@@ -146,7 +146,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'skills-cascade',
     name: 'Override Skills: Cascade (LemLib)',
-    description: 'LemLib, 60 s Autonomous Coding Skills. A 3-Pin stack on Goal R1 and the Red 1 Toggle, a lone red/yellow Pin off the floor onto neutral Goal N_R1, Match Loads through the intake from the south red Loader (the red one onto Goal R2, three on the center Goal), a lone Pin on top of them, parked in the Midfield.',
+    description: 'LemLib, 60 s Autonomous Coding Skills. A 3-Pin stack on Goal R1 and the Red 1 Toggle, a lone red/yellow Pin off the floor onto neutral Goal N_R1, Match Loads through the intake from the south red Loader (the red one onto Goal R2, three on the center Goal), the Red 2 Toggle, a lone Pin on top of them, parked in the Midfield.',
     robot: 'override-cascade',
     field: 'override',
     start: 'red1_s',
@@ -155,7 +155,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'skills-continuous',
     name: 'Override Skills: Continuous lift (LemLib)',
-    description: 'LemLib, 60 s Autonomous Coding Skills. The cascade route on the four-stage continuous lift: a 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads onto Goal R2 and the center Goal with a lone Pin on top, parked in the Midfield.',
+    description: 'LemLib, 60 s Autonomous Coding Skills. The cascade route on the four-stage continuous lift: a 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads onto Goal R2 and the center Goal, the Red 2 Toggle, a lone Pin on top, parked in the Midfield.',
     robot: 'override-continuous',
     field: 'override',
     start: 'red1_s',
@@ -164,7 +164,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'skills-dr6b',
     name: 'Override Skills: DR6B (LemLib + GPS)',
-    description: 'LemLib, 60 s Autonomous Coding Skills, starting from a GPS reading. A 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads up the intake into the chamber (the red one onto Goal R2, three on the center Goal) with a lone Pin on top, parked in the Midfield.',
+    description: 'LemLib, 60 s Autonomous Coding Skills, starting from a GPS reading. A 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads up the intake into the chamber (the red one onto Goal R2, three on the center Goal), the Red 2 Toggle, a lone Pin on top, parked in the Midfield.',
     robot: 'override-dr6b',
     field: 'override',
     start: 'red1_s',
@@ -174,7 +174,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'override-skills',
     name: 'Override Skills: DR4B (LemLib + GPS)',
-    description: 'LemLib, 60 s Autonomous Coding Skills, starting from a GPS reading. A 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads up the intake into the chamber (the red one onto Goal R2, three on the center Goal) with a lone Pin on top, parked in the Midfield.',
+    description: 'LemLib, 60 s Autonomous Coding Skills, starting from a GPS reading. A 3-Pin stack on Goal R1, the Red 1 Toggle, a lone Pin on neutral Goal N_R1, Match Loads up the intake into the chamber (the red one onto Goal R2, three on the center Goal), the Red 2 Toggle, a lone Pin on top, parked in the Midfield.',
     robot: 'override-dr4b',
     field: 'override',
     start: 'red1_s',

@@ -52,7 +52,7 @@ start it 3" off the wall (−57.6, −37): at the preset spot the Preload in the
 stacks and backs each onto it (a 3-Pin stack), then hits the Red 1 Toggle at speed. 55, AWP.
 **Skills** (`override-skills`, 60 s): the same 3-Pin stack and Toggle, then a loaded stack from the
 south red Loader onto R2 (a short intake burst takes exactly one), a lone Pin onto N_R1, loads and a
-lone Pin onto the center Goal, and a Midfield park. 108 points.
+lone Pin onto the center Goal, the Red 2 Toggle rammed to red, and a Midfield park. 118 points.
 
 ## Cascade + chain-bar claw (Claw Gate physics): `override-cascade`
 
@@ -154,10 +154,10 @@ the center Goal both halves while the robot is parked beside it.
 
 | Sample | Robot | Score | What it does |
 |---|---|---|---|
-| `override-skills` | DR4B | 108 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, the red load on R2, 3 loads on the center Goal with a lone Pin on top, parked |
-| `skills-dr6b` | DR6B | 108 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
-| `skills-cascade` | Cascade | 108 | the same plan through the intake (the chain bar up at the Loader, down to hand each load to the claw) |
-| `skills-continuous` | Continuous | 108 | the cascade route with the four-stage lift (3/4 of the spool angles) |
+| `override-skills` | DR4B | 118 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, the red load on R2, 3 loads on the center Goal, the Red 2 Toggle rammed to red, a lone Pin on top, parked |
+| `skills-dr6b` | DR6B | 118 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
+| `skills-cascade` | Cascade | 118 | the same plan through the intake (the chain bar up at the Loader, down to hand each load to the claw) |
+| `skills-continuous` | Continuous | 118 | the cascade route with the four-stage lift (3/4 of the spool angles) |
 | `skills-twobar` | 2-bar | 78 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, a load on R2, a lone Pin on the center Goal, parked |
 | `skills-fourbar` | 4-bar | 78 | 2-Pin stack on R1, Red 1 Toggle, a load on R2 with the yellow Pin from the Cup at (-23.5, -23.5) on top, Red 2 Toggle, the yellow Pin from the Cup at (23.5, 23.5) on the center Goal, parked |
 | `skills-sixbar` | 6-bar | 78 | the same plan with the front claw and wrist |
