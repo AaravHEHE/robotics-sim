@@ -22,7 +22,7 @@ const GOLDEN: Record<string, { red: number; blue: number; pins: number; toggles?
   'override-workhorse-toggle': { red: 45, blue: 0, pins: 7, toggles: { red1: 'red' } },
   // 60 s Skills (the Midfield Goal's Pins count while the robot is parked beside it)
   'override-skills': { red: 118, blue: 0, pins: 9, toggles: { red1: 'red', red2: 'red' } },
-  'skills-twobar': { red: 78, blue: 0, pins: 6, toggles: { red1: 'red' } },
+  'skills-twobar': { red: 88, blue: 0, pins: 6, toggles: { red1: 'red', red2: 'red' } },
   'skills-fourbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
   'skills-sixbar': { red: 78, blue: 0, pins: 5, toggles: { red1: 'red', red2: 'red' } },
   'skills-cascade': { red: 118, blue: 0, pins: 9, toggles: { red1: 'red', red2: 'red' } },

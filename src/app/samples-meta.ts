@@ -118,7 +118,7 @@ export const SAMPLES: SampleMeta[] = [
   {
     id: 'skills-twobar',
     name: 'Override Skills: 2-bar (LemLib)',
-    description: 'LemLib, 60 s Autonomous Coding Skills. A 3-Pin stack on Goal R1 and the Red 1 Toggle to red, a lone red/yellow Pin off the floor onto neutral Goal N_R1, a Match Load through the intake onto Goal R2, and a lone red/yellow Pin onto the center Goal, parked in the Midfield beside it.',
+    description: 'LemLib, 60 s Autonomous Coding Skills. A 3-Pin stack on Goal R1 and the Red 1 Toggle to red, a lone red/yellow Pin off the floor onto neutral Goal N_R1, a Match Load through the intake onto Goal R2, the Red 2 Toggle rammed to red, and a lone red/yellow Pin onto the center Goal, parked in the Midfield beside it.',
     robot: 'override-twobar',
     field: 'override',
     start: 'red1_s',

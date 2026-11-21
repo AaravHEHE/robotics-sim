@@ -21,6 +21,7 @@
 //  5. A lone red/yellow Pin off the floor (the cross at (-47, 47)) onto the empty neutral Goal N_R1:
 //     alone, both its halves score.
 //  6. A Match Load from the south red Loader, through the intake, onto red Goal R2 (its red half).
+//  6b. The Red 2 Toggle (bottom wall) rammed to red: the yellow half on R2 is Owned too.
 //  7. A lone red/yellow Pin off the floor (the cross at (23.5, -23.5)) onto the empty center Goal,
 //     and the robot stays beside it, in the Midfield: both its halves score.
 //
@@ -204,13 +205,30 @@ void autonomous() {
   chassis.waitUntilDone();
   rollOut(400);
 
+  // 6b. The Red 2 Toggle (bottom wall, x = 0) rammed to red, so the yellow half on R2 is Owned too.
+  //     Back off west, round the Cup at (0, -23.5) to (-12, -36) and east to (0, -38), face south
+  //     and drive the Toggle at full speed (two faces: yellow -> red).
+  backOff(5);
+  armTo(FOLDED);
+  approach(-40, -36, 0);
+  approach(-12, -36, 0);
+  approach(0, -38, 0);
+  chassis.turnToHeading(180, 700);
+  chassis.waitUntilDone();
+  leftMotors.move(127);
+  rightMotors.move(127);
+  pros::delay(700);
+  leftMotors.move(-60);
+  rightMotors.move(-60);
+  pros::delay(250);
+  leftMotors.brake();
+  rightMotors.brake();
+  approach(-12, -40, 0);
+  approach(-12, -12, 0);
+
   // 7. The west Pin of the cross at (23.5, -23.5) (red/yellow), taken from the north-west, onto the
   //    empty center Goal (8.77" tall: the arm at 55.5, the Pin's bottom 9.1" up, the claw 10.98"
   //    ahead). It stays there, in the Midfield.
-  backOff(5);
-  // round R2 and the Cup at (0, -23.5): back west, up past R2, then east just south of C
-  approach(-40, -36, 0);
-  approach(-14, -34, 0);
   approach(-8, -12, 0);
   intakeLying(10.07, -17.17, 135);
   backOff(3);

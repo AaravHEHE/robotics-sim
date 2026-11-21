@@ -158,7 +158,7 @@ the center Goal both halves while the robot is parked beside it.
 | `skills-dr6b` | DR6B | 118 | the same route on 12 in links (`barFor()` gives the bar angle for each height) |
 | `skills-cascade` | Cascade | 118 | the same plan through the intake (the chain bar up at the Loader, down to hand each load to the claw) |
 | `skills-continuous` | Continuous | 118 | the cascade route with the four-stage lift (3/4 of the spool angles) |
-| `skills-twobar` | 2-bar | 78 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, a load on R2, a lone Pin on the center Goal, parked |
+| `skills-twobar` | 2-bar | 88 | 3-Pin stack on R1, Red 1 Toggle, a lone Pin on N_R1, a load on R2, the Red 2 Toggle rammed to red, a lone Pin on the center Goal, parked |
 | `skills-fourbar` | 4-bar | 78 | 2-Pin stack on R1, Red 1 Toggle, a load on R2 with the yellow Pin from the Cup at (-23.5, -23.5) on top, Red 2 Toggle, the yellow Pin from the Cup at (23.5, 23.5) on the center Goal, parked |
 | `skills-sixbar` | 6-bar | 78 | the same plan with the front claw and wrist |
 
