@@ -21,7 +21,8 @@
    "1wfxoyl15yr",
    "930kjyrxt9",
    "cc11zgua73",
-   "myb92jjkbj"
+   "myb92jjkbj",
+   "t3vkpq2244"
   ]
  },
  "override-twobar": {
@@ -46,18 +47,21 @@
  },
  "skills-cascade": {
   "src/main.cpp": [
+   "12sd5o90oq2",
    "1z3mp9rzs1c"
   ]
  },
  "skills-continuous": {
   "src/main.cpp": [
+   "280xllx4hqo",
    "n6jyvd0fhk"
   ]
  },
  "skills-dr6b": {
   "src/main.cpp": [
    "17qpw9uy2yn",
-   "2f5490nrg3w"
+   "2f5490nrg3w",
+   "aco7r6pv7k"
   ]
  },
  "skills-fourbar": {
@@ -81,7 +85,8 @@
    "9k0nrwqdqf"
   ],
   "src/main.cpp": [
-   "11vnb1bjsqa"
+   "11vnb1bjsqa",
+   "h7cygu2zod"
   ]
  },
  "test-cascade": {
